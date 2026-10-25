@@ -1,0 +1,16 @@
+/build*/
+/work/
+/release/
+/third_party/asiosdk/
+*.user
+.vs/
+__pycache__/
+DJAP.ini
+# words that must never be published (tools/publish.ps1); local only
+/tools/publish-blocklist.txt
+DJAP.ini.tmp
+AudioProcessor.ini
+AudioProcessor.ini.tmp
+.claude/settings.local.json
+desktop.ini
+/MP3s/

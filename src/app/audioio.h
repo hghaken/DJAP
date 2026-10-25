@@ -1,0 +1,175 @@
+// The GUI's audio side: owns the engine (both decks), keeps each deck's configuration and publishes it for the
+// sample rate in use, drains the decks' meter rings into loudness meters (EBU M / S / I / LRA, true peak, gain of
+// each stage), and - for tests without a device - runs a WAV file through the engine in real time with the output
+// thrown away (--simulate; never makes a sound). The ASIO device is opened, started and stopped from the Audio
+// window (or at program start when it was running when the program closed); driver reset requests restart it.
+// With ASIO, a deck's input may come from a WASAPI / DirectSound / MME device instead (drift-corrected).
+#pragma once
+
+#if AP_HAVE_ASIO
+#include "asiohost.h"
+#endif
+#include "analysis.h"
+#include "engine.h"
+#include "loudness.h"
+#include "params.h"
+#include "settings.h"
+#include "sysaudio.h"
+
+#include <atomic>
+#include <filesystem>
+#include <string>
+#include <thread>
+#include <vector>
+
+namespace ap {
+
+#if !AP_HAVE_ASIO
+struct AsioChannels { // (asiohost.h when the ASIO SDK is there)
+    int inputA = 1, inputB = 3, outputA = 1, outputB = 3;
+};
+#endif
+
+// Inputs of another API for decks that play through ASIO (docs/design.md section 6.1).
+struct SysInputs {
+    AudioApi api = AudioApi::Wasapi;
+    std::string device[2]; // capture device of each deck; empty = the deck's ASIO input pair
+    bool exclusive = false; // WASAPI exclusive
+    unsigned periodFrames = 0; // 0 = the API's low-latency default
+    bool any() const { return !device[0].empty() || !device[1].empty(); }
+};
+// The settings' choice (AsioInputs, AsioInputDeviceA / B, Exclusive); no devices when the inputs are ASIO pairs.
+// With one channel (Decks=1) deck B is never part of a route.
+SysInputs sysInputsFrom(const Settings& s);
+AsioChannels asioChannelsFrom(const Settings& s);   // deck B's pairs 0 (unused) with one channel
+void sysRoutesFrom(const Settings& s, SysRoute routes[2]); // WASAPI / DirectSound / MME devices of each deck
+
+struct DeckMeters {
+    bool live = false;                    // records arrived during the last 0.5 s
+    double inM = kFloorDb, inI = kFloorDb; // input loudness (LUFS)
+    double outM = kFloorDb, outS = kFloorDb, outI = kFloorDb, outLra = 0.0;
+    double outMaxM = kFloorDb;
+    double tpNow[2] = {kFloorDb, kFloorDb}; // output true peak, held (dBTP)
+    double inPeak[2] = {kFloorDb, kFloorDb}; // input sample peak, held the same way (dBFS)
+    double tpMax = kFloorDb;              // output true peak since the last reset
+    double levellerDb = 0, compressorDb = 0, deEsserDb = 0, clipperDb = 0, limiterDb = 0;
+    double densityDb[kMaxBands] = {};
+    int bands = 0;
+    uint8_t flags = 0;                    // MeterFlag bits of the newest record
+    double seconds = 0;                   // measured since the last reset
+    double compressorIn = kFloorDb;       // compressor detector level (same scale as its threshold)
+    double chain[kChainTaps] = {};        // mean L^2 + R^2 per frame at each point of the chain, over about 0.4 s
+    uint16_t active = 0;                  // MeterRecord::active of the newest record
+};
+
+// What the graphs show (analysis.h): spectra and stereo statistics of a deck's input and output, and the last 60 s
+// of loudness and gains, a point every 0.1 s.
+struct DeckAnalysis {
+    static constexpr int kHistory = 600;
+    struct Point {
+        float inM = static_cast<float>(kFloorDb), outM = static_cast<float>(kFloorDb); // LUFS
+        float leveller = 0, compressor = 0, density = 0;                                 // dB (compressor <= 0)
+        bool live = false;
+    };
+    SpectrumAnalyzer specIn, specOut;
+    StereoAnalyzer stereoIn, stereoOut;
+    std::vector<Point> history = std::vector<Point>(kHistory); // ring
+    int historyPos = 0;
+    // the history oldest first
+    const Point& at(int i) const { return history[static_cast<size_t>((historyPos + i) % kHistory)]; }
+};
+
+class AudioIO {
+public:
+    AudioIO();
+    ~AudioIO();
+
+    // The configuration of a deck (GUI thread). Published at once when the engine runs, else when it starts.
+    void setDeck(int d, const PresetValues& values, const DeckControl& control);
+    // A volume after deck d's chain and a factor on its input (DeckProcessor::setVolume); any thread, glides.
+    void setVolume(int d, double output, double input) { engine_.deck(d).setVolume(output, input); }
+    double sampleRate() const { return engine_.sampleRate(); }
+    AudioEngine& engine() { return engine_; }
+
+    // GUI timer (20 Hz): drains the meter rings.
+    void poll();
+    const DeckMeters& meters(int d) const { return meters_[d]; }
+    const DeckAnalysis& analysis(int d) const { return analysis_[d]; }
+    void resetMeters(int d);
+
+    // Test aid without a device: plays `file` (2 channels = deck A, 4 = A + B) through the engine in real time,
+    // in a loop, output discarded.
+    bool simulate(const std::filesystem::path& file, std::string& error);
+    void stopSimulation();
+    bool simulating() const { return simRunning_.load(); }
+    const std::filesystem::path& simulationFile() const { return simFile_; }
+
+    // ASIO device (GUI thread). Opening loads the driver: other programs may lose the interface.
+    bool openDriver(const std::string& driver, void* window, std::string& error);
+    void closeDriver();
+    // Starts the open driver. A deck with a device in `inputs` takes its input from that device of another API
+    // (a capture stream, read with drift correction) instead of its ASIO input pair; its output stays ASIO.
+    bool startDevice(double sampleRate, long bufferSize, const AsioChannels& channels, const SysInputs& inputs,
+                     std::string& error);
+    void stopDevice();
+    bool driverOpen() const;
+    bool deviceRunning() const; // ASIO or another API
+    bool audioActive() const { return simulating() || deviceRunning(); }
+    // Deck d runs with an ASIO output and an input of another API (while the device runs).
+    bool asyncInput(int d) const { return deviceRunning() && engine_.asyncInput(d) != nullptr; }
+    AsyncInputState asyncState(int d) const { return async_[d].state(); }
+
+    // WASAPI / DirectSound / MME (GUI thread): one duplex stream per deck that has devices. Ends a simulation and
+    // closes an open ASIO driver first.
+    bool startSystem(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames, bool exclusive,
+                     std::string& error);
+    bool systemRunning() const { return sys_.running() && !sys_.capturing(); }
+    const SysAudio& sys() const { return sys_; }
+    // Health of what runs (ASIO: the engine's counters; other APIs: both decks' streams).
+    EngineHealth health() const { return systemRunning() ? sys_.health() : engine_.health(); }
+    void resetHealth();
+    // An automatic restart (after a driver reset request) that failed; empty when all is well.
+    const std::string& deviceError() const { return deviceError_; }
+#if AP_HAVE_ASIO
+    const AsioHost& host() const { return host_; }
+    void controlPanel() { host_.controlPanel(); }
+#endif
+
+private:
+    void publish(int d);
+    // Before a running stream stops or starts again: the decks fade out (no click) and the silence reaches the device.
+    void fadeOutDecks();
+    void simLoop();
+
+    AudioEngine engine_;
+    PresetValues values_[2] = {};
+    DeckControl control_[2];
+    bool haveDeck_[2] = {false, false};
+    LoudnessMeter in_[2], out_[2];
+    DeckMeters meters_[2];
+    double quietFor_[2] = {1e9, 1e9};
+    void drainTaps(int d);
+    DeckAnalysis analysis_[2];
+    double analysisRate_ = 0;
+    int historyTick_ = 0;
+
+    std::thread sim_;
+    std::atomic<bool> simRunning_{false}, simStop_{false};
+    std::filesystem::path simFile_;
+    std::vector<float> simData_; // interleaved
+    int simChannels_ = 0;
+
+    SysAudio sys_;
+    AsyncInput async_[2]; // decks with an input of another API
+#if AP_HAVE_ASIO
+    AsioHost host_;
+#endif
+    void* window_ = nullptr;
+    std::string driver_, deviceError_;
+    double rate_ = 0;
+    long buffer_ = 0;
+    AsioChannels channels_;
+    SysInputs inputs_;
+};
+
+} // namespace ap

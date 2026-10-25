@@ -1,0 +1,463 @@
+#include "settings.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <map>
+#include <sstream>
+
+namespace ap {
+
+namespace {
+
+std::string trim(const std::string& s) {
+    size_t a = 0, b = s.size();
+    while (a < b && (s[a] == ' ' || s[a] == '\t' || s[a] == '\r')) ++a;
+    while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\r')) --b;
+    return s.substr(a, b - a);
+}
+
+std::string number(double v, int decimals) {
+    char buf[64];
+    std::snprintf(buf, sizeof buf, "%.*f", decimals, v);
+    return buf;
+}
+
+// Shortest form with at most three decimals ("5", "0.5", "-1.25").
+std::string compact(double v) {
+    std::string s = number(v, 3);
+    while (!s.empty() && s.back() == '0') s.pop_back();
+    if (!s.empty() && s.back() == '.') s.pop_back();
+    return s == "-0" ? "0" : s;
+}
+
+bool parseDouble(const std::string& s, double& out) {
+    try {
+        size_t used = 0;
+        out = std::stod(s, &used);
+        return used > 0;
+    } catch (...) {
+        return false;
+    }
+}
+
+int toInt(const std::string& s, int fallback) {
+    double d;
+    return parseDouble(s, d) ? static_cast<int>(std::lround(d)) : fallback;
+}
+
+const char* const kPresetPrefix = "Preset ";
+const char* const kColourPrefix = "Colour ";
+
+bool validName(const std::string& name, std::string& error) {
+    if (trim(name).empty()) {
+        error = "A preset needs a name.";
+        return false;
+    }
+    if (name != trim(name) || name.find_first_of("[]=;\r\n") != std::string::npos) {
+        error = "A preset name may not contain [ ] = ; or start / end with a space.";
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+Settings::Settings() {
+    for (int i = 0; i < kShippedPresetCount; ++i) {
+        Preset p;
+        p.name = shippedPresetName(i);
+        p.values = shippedPresetValues(i);
+        p.shipped = true;
+        presets.push_back(p);
+    }
+    for (int i = 0; i < kShippedColourCount; ++i) {
+        Preset p;
+        p.name = shippedColourName(i);
+        p.values = shippedColourValues(i);
+        p.shipped = true;
+        colours.push_back(p);
+    }
+    sortPresets();
+}
+
+// The list from the quietest to the loudest output (target + output gain; DAB+ -23 .. Very Loud -10), own presets
+// among the shipped ones; equal loudness keeps its order. Not re-sorted while a value is edited: a list that moves
+// under the cursor would change what a list index means.
+void Settings::sortPresets() {
+    std::stable_sort(presets.begin(), presets.end(), [](const Preset& a, const Preset& b) {
+        return a.values[pTarget] + a.values[pOutputGain] < b.values[pTarget] + b.values[pOutputGain];
+    });
+}
+
+bool Settings::audioConfigured() const {
+    if (api == "ASIO") return !driver.empty();
+    for (int d = 0; d < 2; ++d)
+        if (!inDevice[d].empty() || !outDevice[d].empty()) return true;
+    return false;
+}
+
+Preset* Settings::find(const std::string& name, PresetKind k) {
+    for (Preset& p : list(k))
+        if (p.name == name) return &p;
+    return nullptr;
+}
+
+const Preset* Settings::find(const std::string& name, PresetKind k) const {
+    for (const Preset& p : list(k))
+        if (p.name == name) return &p;
+    return nullptr;
+}
+
+PresetValues Settings::valuesOf(const std::string& name) const {
+    const Preset* p = find(name);
+    return p ? p->values : shippedPresetValues(shippedPresetIndex("Medium"));
+}
+
+PresetValues Settings::colourValuesOf(const std::string& name) const {
+    const Preset* p = find(name, PresetKind::Colour);
+    return p ? p->values : shippedColourValues(shippedColourIndex("Neutral"));
+}
+
+PresetValues Settings::shippedValues(const std::string& name, PresetKind k) {
+    if (k == PresetKind::Colour) {
+        const int i = shippedColourIndex(name);
+        return i >= 0 ? shippedColourValues(i) : defaultValues();
+    }
+    const int i = shippedPresetIndex(name);
+    return i >= 0 ? shippedPresetValues(i) : defaultValues();
+}
+
+bool Settings::saveAs(const std::string& name, const PresetValues& values, std::string& error, PresetKind k) {
+    if (!validName(name, error)) return false;
+    if (Preset* p = find(name, k)) {
+        if (p->shipped) {
+            error = "\"" + name + "\" is a shipped preset; choose another name.";
+            return false;
+        }
+        p->values = values;
+        normaliseValues(p->values); // as for a new preset
+        return true;
+    }
+    Preset p;
+    p.name = name;
+    p.values = values;
+    normaliseValues(p.values);
+    list(k).push_back(p);
+    if (k == PresetKind::Dynamics) sortPresets(); // in its place by loudness
+    return true;
+}
+
+bool Settings::rename(const std::string& from, const std::string& to, std::string& error, PresetKind k) {
+    Preset* p = find(from, k);
+    if (!p) {
+        error = "There is no preset \"" + from + "\".";
+        return false;
+    }
+    if (p->shipped) {
+        error = "Shipped presets cannot be renamed.";
+        return false;
+    }
+    if (!validName(to, error)) return false;
+    if (from == to) return true;
+    if (find(to, k)) {
+        error = "A preset \"" + to + "\" already exists.";
+        return false;
+    }
+    p->name = to;
+    for (DeckSettings& d : deck) {
+        std::string& used = k == PresetKind::Colour ? d.colour : d.preset;
+        if (used == from) used = to;
+    }
+    return true;
+}
+
+bool Settings::remove(const std::string& name, std::string& error, PresetKind k) {
+    std::vector<Preset>& l = list(k);
+    for (size_t i = 0; i < l.size(); ++i) {
+        if (l[i].name != name) continue;
+        if (l[i].shipped) {
+            error = "Shipped presets cannot be deleted (they can be reset).";
+            return false;
+        }
+        l.erase(l.begin() + static_cast<long long>(i));
+        for (DeckSettings& d : deck) {
+            std::string& used = k == PresetKind::Colour ? d.colour : d.preset;
+            if (used == name) used = k == PresetKind::Colour ? "Neutral" : "Medium";
+        }
+        return true;
+    }
+    error = "There is no preset \"" + name + "\".";
+    return false;
+}
+
+double Settings::resetValueOf(const std::string& presetName, int param) {
+    return shippedValues(presetName, kindOf(param))[static_cast<size_t>(param)];
+}
+
+void Settings::resetPreset(const std::string& name, PresetKind k) {
+    Preset* p = find(name, k);
+    if (!p) return;
+    p->values = shippedValues(name, k);
+}
+
+void Settings::resetValue(const std::string& name, int param) {
+    if (param < 0 || param >= kParamCount) return;
+    Preset* p = find(name, kindOf(param));
+    if (!p) return;
+    p->values[static_cast<size_t>(param)] = resetValueOf(name, param);
+    if (param == pDensBands) loadDefaultSplits(p->values, static_cast<int>(p->values[pDensBands]));
+    normaliseValues(p->values);
+}
+
+std::string Settings::toText() const {
+    std::ostringstream o;
+    o << "; DJAP settings (UTF-8). Saved by the program after every change; edit by hand only while the\n"
+         "; program is closed. Unknown keys are ignored and dropped on the next save.\n\n";
+    o << "[Audio]\n";
+    o << "; Processing channels: 2 = two decks (DJ: deck A and deck B), 1 = one channel (deck A only)\nDecks="
+      << decks << "\n";
+    o << "; Audio API: ASIO, WASAPI, DirectSound or MME\nApi=" << api << "\n";
+    o << "; ASIO driver name (as listed in the Audio window)\nDriver=" << driver << "\n";
+    o << "; WASAPI / DirectSound / MME: input and output device of each deck (empty = the deck does not run)\n";
+    o << "InputDeviceA=" << inDevice[0] << "\nOutputDeviceA=" << outDevice[0] << "\nInputDeviceB=" << inDevice[1]
+      << "\nOutputDeviceB=" << outDevice[1] << "\n";
+    o << "; WASAPI exclusive mode (1 = lower latency, the devices are taken from other programs)\nExclusive="
+      << (exclusive ? 1 : 0) << "\n";
+    o << "; Sample rate in Hz: 44100, 48000, 88200 or 96000\nSampleRate=" << sampleRate << "\n";
+    o << "; First channel (1-based) of the input / output pair of each deck\n";
+    o << "InputA=" << inputA << "\nInputB=" << inputB << "\nOutputA=" << outputA << "\nOutputB=" << outputB << "\n";
+    o << "; ASIO: where the decks' inputs come from - ASIO (the input pairs above), or WASAPI, DirectSound or MME (a\n"
+         "; device of that API per deck, drift-corrected; adds a buffer of about 10-20 ms)\nAsioInputs="
+      << asioInputs << "\n";
+    o << "; ... the input device of each deck then (empty = the deck's ASIO input pair)\n";
+    o << "AsioInputDeviceA=" << asioInputDevice[0] << "\nAsioInputDeviceB=" << asioInputDevice[1] << "\n";
+    o << "; Limiter look-ahead in ms (0..5), the same for both decks; the only delay the processing adds\n";
+    o << "LookAheadMs=" << compact(lookAheadMs) << "\n";
+    o << "; Driver buffer size in frames (0 = the driver's preferred size)\nBufferSize=" << bufferSize << "\n";
+    o << "; Start the audio when the program starts (1 = it was started last and not stopped since)\nStartAudio="
+      << (startAudio ? 1 : 0) << "\n";
+    o << "; The outputs follow the volume and mute of Windows' default playback device (the volume keys), with one\n"
+         "; channel and with two decks (1 = on)\nFollowWindowsVolumeOneChannel="
+      << (followVolume[0] ? 1 : 0) << "\nFollowWindowsVolumeTwoDecks=" << (followVolume[1] ? 1 : 0) << "\n\n";
+    o << "[Decks]\n; Preset and processing switch (1 = on, 0 = bypass) of each deck\n";
+    o << "PresetA=" << deck[0].preset << "\nProcessingA=" << (deck[0].processing ? 1 : 0) << "\n";
+    o << "PresetB=" << deck[1].preset << "\nProcessingB=" << (deck[1].processing ? 1 : 0) << "\n";
+    o << "; Colour preset of each deck (tone, auto tone, sub bass, loudness)\nColourA=" << deck[0].colour
+      << "\nColourB=" << deck[1].colour << "\n";
+    o << "; 1 = both decks use the same preset (deck B follows deck A)\nLinkPresets=" << (linkPresets ? 1 : 0)
+      << "\n\n";
+    o << "[Window]\nX=" << windowX << "\nY=" << windowY << "\n";
+    o << "; 1 = the hint that the program keeps running in the notification area was shown\nTrayHintShown="
+      << (trayHintShown ? 1 : 0) << "\n";
+
+    for (const Preset& p : presets) {
+        const int shipped = shippedPresetIndex(p.name);
+        PresetValues base = shipped >= 0 ? shippedPresetValues(shipped) : PresetValues{};
+        const double shippedBands = base[pDensBands];
+        if (shipped >= 0 && p.values[pDensBands] != shippedBands) {
+            // the same base as fromText(): a changed band count brings its own default splits, so a split equal to
+            // the shipped value but not to the new count's default is written too
+            base[pDensBands] = p.values[pDensBands];
+            loadDefaultSplits(base, static_cast<int>(base[pDensBands]));
+        }
+        o << "\n[" << kPresetPrefix << p.name << "]\n";
+        if (shipped >= 0) o << "; Shipped preset: only values that differ from the shipped ones are listed\n";
+        for (int i = 0; i < kFirstColourParam; ++i) {
+            const ParamInfo& info = paramInfo(i);
+            const double v = p.values[static_cast<size_t>(i)];
+            const double ref = i == pDensBands ? shippedBands : base[static_cast<size_t>(i)];
+            if (shipped >= 0 && std::fabs(v - ref) < 1e-9) continue;
+            if (i >= pDensSplit1 && i <= pDensSplit6 && i - pDensSplit1 + 1 >= static_cast<int>(p.values[pDensBands]) &&
+                shipped < 0)
+                continue; // unused split
+            o << "; " << info.stage << " - " << info.name << ": " << info.help;
+            if (info.isSwitch)
+                o << " (1 = on, 0 = off";
+            else
+                o << " (" << info.unit << (info.unit[0] ? ", " : "") << number(info.min, info.decimals) << ".."
+                  << number(info.max, info.decimals);
+            o << ", reset value " << number(resetValueOf(p.name, i), info.decimals) << ")\n";
+            o << info.key << "=" << compact(v) << "\n";
+        }
+    }
+    for (const Preset& p : colours) {
+        const bool shipped = shippedColourIndex(p.name) >= 0;
+        const PresetValues base = shippedValues(p.name, PresetKind::Colour);
+        o << "\n[" << kColourPrefix << p.name << "]\n";
+        if (shipped) o << "; Shipped colour: only values that differ from the shipped ones are listed\n";
+        for (int i = kFirstColourParam; i < kParamCount; ++i) {
+            const ParamInfo& info = paramInfo(i);
+            const double v = p.values[static_cast<size_t>(i)];
+            if (shipped && std::fabs(v - base[static_cast<size_t>(i)]) < 1e-9) continue;
+            o << "; " << info.stage << " - " << info.name << ": " << info.help << " (" << info.unit
+              << (info.unit[0] ? ", " : "") << number(info.min, info.decimals) << ".." << number(info.max, info.decimals)
+              << ", reset value " << number(base[static_cast<size_t>(i)], info.decimals) << ")\n";
+            o << info.key << "=" << compact(v) << "\n";
+        }
+    }
+    return o.str();
+}
+
+void Settings::fromText(const std::string& text) {
+    *this = Settings();
+    std::map<std::string, std::map<std::string, std::string>> sections;
+    std::vector<std::string> order;
+    std::istringstream in(text);
+    std::string line, section;
+    bool first = true;
+    while (std::getline(in, line)) {
+        if (first && line.size() >= 3 && static_cast<unsigned char>(line[0]) == 0xEF) line = line.substr(3); // BOM
+        first = false;
+        line = trim(line);
+        if (line.empty() || line[0] == ';' || line[0] == '#') continue;
+        if (line.front() == '[' && line.back() == ']') {
+            section = trim(line.substr(1, line.size() - 2));
+            if (!sections.count(section)) order.push_back(section);
+            sections[section];
+            continue;
+        }
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        sections[section][trim(line.substr(0, eq))] = trim(line.substr(eq + 1));
+    }
+    auto get = [&](const char* s, const char* k) -> const std::string* {
+        auto a = sections.find(s);
+        if (a == sections.end()) return nullptr;
+        auto b = a->second.find(k);
+        return b == a->second.end() ? nullptr : &b->second;
+    };
+    if (auto v = get("Audio", "Api"))
+        if (*v == "ASIO" || *v == "WASAPI" || *v == "DirectSound" || *v == "MME") api = *v;
+    if (auto v = get("Audio", "Decks")) decks = toInt(*v, 2) == 1 ? 1 : 2;
+    if (auto v = get("Audio", "Driver")) driver = *v;
+    if (auto v = get("Audio", "InputDeviceA")) inDevice[0] = *v;
+    if (auto v = get("Audio", "OutputDeviceA")) outDevice[0] = *v;
+    if (auto v = get("Audio", "InputDeviceB")) inDevice[1] = *v;
+    if (auto v = get("Audio", "OutputDeviceB")) outDevice[1] = *v;
+    if (auto v = get("Audio", "Exclusive")) exclusive = toInt(*v, 0) != 0;
+    if (auto v = get("Audio", "AsioInputs"))
+        if (*v == "ASIO" || *v == "WASAPI" || *v == "DirectSound" || *v == "MME") asioInputs = *v;
+    if (auto v = get("Audio", "AsioInputDeviceA")) asioInputDevice[0] = *v;
+    if (auto v = get("Audio", "AsioInputDeviceB")) asioInputDevice[1] = *v;
+    if (auto v = get("Audio", "SampleRate")) sampleRate = toInt(*v, sampleRate);
+    if (sampleRate != 44100 && sampleRate != 48000 && sampleRate != 88200 && sampleRate != 96000) sampleRate = 48000;
+    if (auto v = get("Audio", "InputA")) inputA = std::max(1, toInt(*v, inputA));
+    if (auto v = get("Audio", "InputB")) inputB = std::max(1, toInt(*v, inputB));
+    if (auto v = get("Audio", "OutputA")) outputA = std::max(1, toInt(*v, outputA));
+    if (auto v = get("Audio", "OutputB")) outputB = std::max(1, toInt(*v, outputB));
+    if (auto v = get("Audio", "LookAheadMs")) {
+        double d;
+        if (parseDouble(*v, d)) lookAheadMs = std::min(5.0, std::max(0.0, d));
+    }
+    if (auto v = get("Audio", "BufferSize")) bufferSize = std::min(8192, std::max(0, toInt(*v, 0)));
+    if (auto v = get("Audio", "StartAudio")) startAudio = toInt(*v, 0) != 0;
+    if (auto v = get("Audio", "FollowWindowsVolumeOneChannel")) followVolume[0] = toInt(*v, 1) != 0;
+    if (auto v = get("Audio", "FollowWindowsVolumeTwoDecks")) followVolume[1] = toInt(*v, 0) != 0;
+    if (auto v = get("Window", "X")) windowX = toInt(*v, -1);
+    if (auto v = get("Window", "Y")) windowY = toInt(*v, -1);
+    if (auto v = get("Window", "TrayHintShown")) trayHintShown = toInt(*v, 0) != 0;
+
+    const std::string prefix = kPresetPrefix;
+    for (const std::string& s : order) {
+        if (s.compare(0, prefix.size(), prefix) != 0) continue;
+        const std::string name = s.substr(prefix.size());
+        std::string error;
+        if (!validName(name, error)) continue;
+        const int shipped = shippedPresetIndex(name);
+        PresetValues values = shipped >= 0 ? shippedPresetValues(shipped) : defaultValues();
+        const auto& keys = sections[s];
+        auto bandsIt = keys.find(paramInfo(pDensBands).key);
+        if (bandsIt != keys.end()) { // a changed band count brings its own default splits
+            double d;
+            if (parseDouble(bandsIt->second, d)) {
+                values[pDensBands] = std::round(d);
+                normaliseValues(values);
+                loadDefaultSplits(values, static_cast<int>(values[pDensBands]));
+            }
+        }
+        for (int i = 0; i < kFirstColourParam; ++i) {
+            auto it = keys.find(paramInfo(i).key);
+            double d;
+            if (it != keys.end() && parseDouble(it->second, d)) values[static_cast<size_t>(i)] = d;
+        }
+        normaliseValues(values);
+        if (Preset* p = find(name)) {
+            p->values = values;
+        } else {
+            Preset p2;
+            p2.name = name;
+            p2.values = values;
+            presets.push_back(p2);
+        }
+    }
+    sortPresets();
+    const std::string colourPrefix = kColourPrefix;
+    for (const std::string& s : order) {
+        if (s.compare(0, colourPrefix.size(), colourPrefix) != 0) continue;
+        const std::string name = s.substr(colourPrefix.size());
+        std::string error;
+        if (!validName(name, error)) continue;
+        PresetValues values = shippedValues(name, PresetKind::Colour);
+        const auto& keys = sections[s];
+        for (int i = kFirstColourParam; i < kParamCount; ++i) {
+            auto it = keys.find(paramInfo(i).key);
+            double d;
+            if (it != keys.end() && parseDouble(it->second, d)) values[static_cast<size_t>(i)] = d;
+        }
+        normaliseValues(values);
+        if (Preset* p = find(name, PresetKind::Colour)) {
+            p->values = values;
+        } else {
+            Preset p2;
+            p2.name = name;
+            p2.values = values;
+            colours.push_back(p2);
+        }
+    }
+    for (int d = 0; d < 2; ++d) {
+        const char* pk = d == 0 ? "PresetA" : "PresetB";
+        const char* ok = d == 0 ? "ProcessingA" : "ProcessingB";
+        if (auto v = get("Decks", pk))
+            if (find(*v)) deck[d].preset = *v;
+        if (auto v = get("Decks", ok)) deck[d].processing = toInt(*v, 1) != 0;
+        if (auto v = get("Decks", d == 0 ? "ColourA" : "ColourB"))
+            if (find(*v, PresetKind::Colour)) deck[d].colour = *v;
+    }
+    if (auto v = get("Decks", "LinkPresets")) linkPresets = toInt(*v, 0) != 0;
+    if (linkPresets) { // a hand edit cannot leave them apart
+        deck[1].preset = deck[0].preset;
+        deck[1].colour = deck[0].colour;
+    }
+}
+
+bool Settings::load(const std::filesystem::path& file) {
+    std::ifstream in(file, std::ios::binary);
+    if (!in) return false;
+    std::stringstream ss;
+    ss << in.rdbuf();
+    fromText(ss.str());
+    return true;
+}
+
+bool Settings::save(const std::filesystem::path& file) const {
+    std::filesystem::path tmp = file;
+    tmp += ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out) return false;
+        const std::string text = toText();
+        out.write(text.data(), static_cast<std::streamsize>(text.size()));
+        if (!out) return false;
+    }
+    std::error_code ec;
+    std::filesystem::rename(tmp, file, ec);
+    if (ec) {
+        std::filesystem::remove(tmp, ec);
+        return false;
+    }
+    return true;
+}
+
+} // namespace ap
