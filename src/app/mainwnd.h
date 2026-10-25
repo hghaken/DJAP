@@ -15,6 +15,7 @@
 #include "theme.h"
 #include "tooltips.h"
 #include "tray.h"
+#include "updater.h"
 #include "winvolume.h"
 
 #include <windows.h>
@@ -70,6 +71,9 @@ private:
     void fromTray();     // show it again in front
     void trayMenu(int x, int y);
     void windowMenu(int x, int y); // right-click: Setup, Exit
+    void checkForUpdate();          // asks GitHub (the daily check, or Check now)
+    void installUpdate();           // Install update: download, check, start the setup, end the program
+    void updateEvent(WPARAM what);  // a check (0) or a download (1) of the updater ended
     void save();
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
 
@@ -98,6 +102,9 @@ private:
     bool quitting_ = false; // Exit chosen (or Windows ends the session): WM_CLOSE really closes
     bool testRun_ = false;
     int startTries_ = 0; // attempts of startSavedAudio() so far
+    Updater updater_;
+    ULONGLONG nextCheck_ = 0;   // GetTickCount64() of the next daily update check
+    std::string notified_;      // the version the notification-area message was shown for
 };
 
 } // namespace ap

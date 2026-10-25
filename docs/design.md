@@ -535,6 +535,25 @@ switches the rate only when another one is chosen. Compact (client, 2026-10-25: 
 rows 6 px apart, each text block as high as its lines (driver info 2, state 3 with one channel or 5 with two decks,
 health 3, note 2) and the window as high as its content, so it is lower with one channel than with two decks.
 
+Updates (client, 2026-10-25: "check daily, report, install after one click - not while audio runs - and an off
+switch in Setup"; `src/core/release.*`, `src/app/updater.*`): with `[Updates] CheckUpdates=1` (default; Setup ->
+Updates) the program asks GitHub's API for the latest release of the public repository 15 s after the start and then
+once a day (also Setup -> Check now). A newer version (`compareVersions`, numeric parts) is reported once per version
+by a balloon at the notification-area icon, in the status bar and in Setup; nothing is downloaded before the user
+clicks Install update, which is greyed while the audio runs (and refused with a message if it was started meanwhile).
+The setup asset `DJAP-Setup-<version>.exe` is downloaded into `%TEMP%\DJAP-update` and checked against the SHA-256
+GitHub publishes for it (the asset's `digest`, else a `<setup>.sha256` asset); without a checksum, or when it does
+not match, nothing is installed. Then the program starts the setup with `/SILENT /SUPPRESSMSGBOXES /NORESTART
+/UPDATE=1 /DIR=<its folder> /LOG=%TEMP%\DJAP-update\setup.log` (`/CURRENTUSER` when not under Program Files; Windows
+asks for permission for Program Files) and ends with the usual fade-out. In update mode the setup waits up to 30 s for
+the program's mutex to go, keeps the Run value and skips the Media Feature Pack, and starts DJAP again as the original
+user. Only https from github.com, api.github.com and *.githubusercontent.com is fetched; a test ini may set `[Updates]
+Url=http://127.0.0.1:<port>/...`, and that host (only 127.0.0.1 / localhost) is then allowed too, and the restarted
+program gets the test ini back (`/RESTARTINI`). The next check removes old setups from the folder (the log stays).
+A release is made by `tools/publish.ps1 -Release` (the setup built from the published commit and its `.sha256`). The
+setup carries no `.pdb` files (they hold build paths; `make_installer.ps1` keeps them in `release\DJAP-<version>-symbols`)
+and the programs are linked with `/PDBALTPATH:%_PDB%` (no build path in the exe).
+
 Presets are stored in `DJAP.ini` next to the exe (fallback `%APPDATA%\DJAP\`; at the first start of DJAP the settings file of versions up to 0.1.57 is copied there once and the old file stays), one section per
 preset (`[Preset X]`) and per colour (`[Colour X]`), readable and editable by hand, saved at once after every change.
 

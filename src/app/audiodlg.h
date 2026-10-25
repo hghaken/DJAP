@@ -12,6 +12,7 @@
 #include "settings.h"
 #include "theme.h"
 #include "tooltips.h"
+#include "updater.h"
 
 #include <windows.h>
 
@@ -33,6 +34,12 @@ public:
     void setTestRun(bool testRun) { testRun_ = testRun; }
     // The About button (the About window belongs to the main window).
     void onAbout(std::function<void(HWND owner)> f) { onAbout_ = std::move(f); }
+    // Updates: the main window's updater (its state is shown here) and what Check now / Install update do.
+    void setUpdater(const Updater* updater, std::function<void()> checkNow, std::function<void()> install) {
+        updater_ = updater;
+        checkNowDo_ = std::move(checkNow);
+        installDo_ = std::move(install);
+    }
 
 private:
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -54,13 +61,16 @@ private:
     AudioIO& audio_;
     Changed onChange_;
     HWND hwnd_ = nullptr, owner_ = nullptr;
-    HWND labels_[12] = {};
+    HWND labels_[13] = {};
     HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
     HWND driver_ = nullptr, open_ = nullptr, close_ = nullptr, panel_ = nullptr, info_ = nullptr;
     HWND inA_ = nullptr, outA_ = nullptr, inB_ = nullptr, outB_ = nullptr, rate_ = nullptr, buffer_ = nullptr;
     HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, health_ = nullptr, resetHealth_ = nullptr,
          note_ = nullptr;
     HWND look_ = nullptr, startup_ = nullptr, about_ = nullptr; // look-ahead, start with Windows, About
+    HWND checkUpdates_ = nullptr, checkNow_ = nullptr, install_ = nullptr, updateInfo_ = nullptr; // updates
+    const Updater* updater_ = nullptr;
+    std::function<void()> checkNowDo_, installDo_;
     bool testRun_ = false;
     std::function<void(HWND)> onAbout_;
     HFONT font_ = nullptr;

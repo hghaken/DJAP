@@ -250,7 +250,10 @@ std::string Settings::toText() const {
       << "\n\n";
     o << "[Window]\nX=" << windowX << "\nY=" << windowY << "\n";
     o << "; 1 = the hint that the program keeps running in the notification area was shown\nTrayHintShown="
-      << (trayHintShown ? 1 : 0) << "\n";
+      << (trayHintShown ? 1 : 0) << "\n\n";
+    o << "[Updates]\n; 1 = ask GitHub once a day for a newer version (installed only after a click)\nCheckUpdates="
+      << (checkUpdates ? 1 : 0) << "\n";
+    if (!updateUrl.empty()) o << "; where to ask instead of the public repository (tests)\nUrl=" << updateUrl << "\n";
 
     for (const Preset& p : presets) {
         const int shipped = shippedPresetIndex(p.name);
@@ -358,6 +361,8 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Window", "X")) windowX = toInt(*v, -1);
     if (auto v = get("Window", "Y")) windowY = toInt(*v, -1);
     if (auto v = get("Window", "TrayHintShown")) trayHintShown = toInt(*v, 0) != 0;
+    if (auto v = get("Updates", "CheckUpdates")) checkUpdates = toInt(*v, 1) != 0;
+    if (auto v = get("Updates", "Url")) updateUrl = *v;
 
     const std::string prefix = kPresetPrefix;
     for (const std::string& s : order) {

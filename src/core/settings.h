@@ -53,6 +53,8 @@ public:
     bool linkPresets = false;    // deck B always uses deck A's preset (choosing one on either deck sets both)
     int windowX = -1, windowY = -1;
     bool trayHintShown = false;  // the "still running in the notification area" balloon was shown once
+    bool checkUpdates = true;    // ask GitHub once a day for a newer version (Setup window)
+    std::string updateUrl;       // where to ask instead of the public repository (tests); empty = GitHub
     // An audio device was chosen in the Audio window (an ASIO driver, or a device of another API for a deck);
     // false at the first start: the program then opens the Audio window.
     bool audioConfigured() const;

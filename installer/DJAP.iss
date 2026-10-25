@@ -103,9 +103,8 @@ Name: "startup"; Description: "{cm:StartupTask}"; GroupDescription: "{cm:Startup
 ; never the developer's DJAP.ini from the build folder: settings live in %APPDATA%\DJAP
 Source: "{#BuildDir}\DJAP.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\DJAPCmd.exe"; DestDir: "{app}"; Flags: ignoreversion
-; symbols for --diag crash reports
-Source: "{#BuildDir}\DJAP.pdb"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\DJAPCmd.pdb"; DestDir: "{app}"; Flags: ignoreversion
+; no .pdb symbol files: the setup is public and they hold the build machine's paths; make_installer.ps1 keeps them
+; next to the setup in release\ for --diag reports
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD_PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -114,6 +113,9 @@ Source: "..\THIRD_PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
 ; the shortcuts of the program's old name
 Type: files; Name: "{autoprograms}\AudioProcessor.lnk"
 Type: files; Name: "{autodesktop}\AudioProcessor.lnk"
+; symbol files of an older installation: they would not match the new programs
+Type: files; Name: "{app}\DJAP.pdb"
+Type: files; Name: "{app}\DJAPCmd.pdb"
 
 [Icons]
 Name: "{autoprograms}\DJAP"; Filename: "{app}\DJAP.exe"
@@ -121,6 +123,8 @@ Name: "{autodesktop}\DJAP"; Filename: "{app}\DJAP.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\DJAP.exe"; Description: "{cm:LaunchProgram,DJAP}"; Flags: nowait postinstall skipifsilent
+; an update started by the program itself (/UPDATE=1, silent): the program comes back after it, as the user
+Filename: "{app}\DJAP.exe"; Parameters: "{code:RestartParams}"; Flags: nowait runasoriginaluser; Check: IsUpdateRun
 Filename: "{#VacPage}"; Description: "{cm:OpenVacPage}"; Flags: shellexec nowait postinstall skipifsilent; Check: not VacFound
 
 [Code]
@@ -245,10 +249,32 @@ begin
     end;
 end;
 
+// Started by the program's Install update (DJAP passes /UPDATE=1 with /SILENT).
+function IsUpdateRun: Boolean;
+begin
+  Result := ExpandConstant('{param:UPDATE|0}') = '1';
+end;
+
+// The program's options after an update: a test run (--ini <file>) passes its settings file as /RESTARTINI=<file>.
+function RestartParams(Param: String): String;
+begin
+  Result := ExpandConstant('{param:RESTARTINI|}');
+  if Result <> '' then Result := '--ini "' + Result + '"';
+end;
+
 function InitializeSetup: Boolean;
 var
   Missing: String;
+  I: Integer;
 begin
+  // an update from the program: it ends right after starting this setup - wait for it (at most 30 s)
+  if IsUpdateRun then begin
+    for I := 1 to 60 do begin
+      if not CheckForMutexes('{#AppMutexes}') then Break;
+      Sleep(500);
+    end;
+    Log(Format('Update run: the program has ended: %d', [Ord(not CheckForMutexes('{#AppMutexes}'))]));
+  end;
   Missing := MissingDlls(CoreDlls);
   if Missing <> '' then begin
     SuppressibleMsgBox(FmtMessage(CustomMessage('CoreMissing'), [Missing]), mbCriticalError, MB_OK, IDOK);
@@ -285,7 +311,7 @@ end;
 
 function AddMedia: Boolean;
 begin
-  Result := not MediaPresent and IsAdminInstallMode and MediaPage.Values[0];
+  Result := not MediaPresent and IsAdminInstallMode and MediaPage.Values[0] and not IsUpdateRun;
 end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo,
@@ -383,6 +409,8 @@ end;
 // Unticked, only an entry of this installation is removed. In an admin install HKCU is the installing user's.
 procedure SetStartWithWindows;
 begin
+  // an update from the program keeps what the user set there (the task list is the first installation's)
+  if IsUpdateRun then Exit;
   if WizardIsTaskSelected('startup') then begin
     if not RegWriteStringValue(HKCU, RunKey, '{#RunValue}', '"' + ExpandConstant('{app}\DJAP.exe') + '" --autostart') then
       Log('Start with Windows: the Run value could not be written');

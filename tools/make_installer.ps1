@@ -29,3 +29,9 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) { throw "ISCC failed ($LASTEXITCODE)" }
 $setup = Join-Path $root "release\DJAP-Setup-$version.exe"
 Write-Host ("{0} ({1:N1} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))
+# the symbol files stay here, not in the (public) setup: they hold the build machine's paths; --diag reports of this
+# version are read with them
+$symbols = Join-Path $root "release\DJAP-$version-symbols"
+New-Item -ItemType Directory -Force $symbols | Out-Null
+Copy-Item "$root\build\DJAP.pdb", "$root\build\DJAPCmd.pdb", "$root\build\DJAP.exe", "$root\build\DJAPCmd.exe" $symbols
+Write-Host "symbols: $symbols"

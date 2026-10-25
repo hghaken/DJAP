@@ -2,6 +2,7 @@
 
 #include "appstate.h"
 #include "meterview.h"
+#include "placement.h"
 #include "resource.h"
 #include "stages.h"
 #include "version.h"
@@ -122,6 +123,8 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     if (FAILED(LoadIconMetric(instance, MAKEINTRESOURCEW(IDI_APP), LIM_SMALL, &iconSmall_))) iconSmall_ = nullptr;
     tray_.add(hwnd_, iconSmall_ ? iconSmall_ : wc.hIconSm, L"DJAP");
     updateTrayTip();
+    nextCheck_ = GetTickCount64() + 15000; // the first update check a little after the start
+    audioWindow_.setUpdater(&updater_, [this] { checkForUpdate(); }, [this] { installUpdate(); });
     return true;
 }
 
@@ -190,6 +193,10 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         fromTray();
         return 0;
     }
+    if (msg == Updater::message() && msg != 0) {
+        updateEvent(wp);
+        return 0;
+    }
     LRESULT themed = 0;
     if (metal_.handle(hwnd_, msg, wp, lp, themed)) return themed; // brushed aluminium, 3D buttons
     switch (msg) {
@@ -207,6 +214,9 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         case NIN_SELECT:
         case NIN_KEYSELECT:
             fromTray();
+            break;
+        case NIN_BALLOONUSERCLICK: // the message about a new version: Setup, where Install update is
+            if (updater_.state() == Updater::State::Available) audioWindow_.show(hwnd_);
             break;
         case WM_CONTEXTMENU:
             trayMenu(GET_X_LPARAM(wp), GET_Y_LPARAM(wp));
@@ -248,6 +258,10 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             if (ticks_++ % 10 == 0) {
                 updateStatus();
                 audioWindow_.refresh();
+                // the daily update check (a test run asks only a test server of its own settings)
+                if (settings_.checkUpdates && GetTickCount64() >= nextCheck_ && !updater_.busy() &&
+                    (!testRun_ || !settings_.updateUrl.empty()))
+                    checkForUpdate();
             }
         }
         return 0;
@@ -707,6 +721,8 @@ void MainWindow::updateStatus() {
     }
     if (!audio_.deviceError().empty()) left += L"   |   " + fromUtf8(audio_.deviceError());
     if (!message_.empty()) left += L"   |   " + fromUtf8(message_);
+    if (updater_.state() == Updater::State::Available)
+        left += L"   |   DJAP " + fromUtf8(updater_.release().version) + L" is available (right-click: Setup)";
     if (!saveError_.empty()) left += L"   |   " + fromUtf8(saveError_);
     SendMessageW(status_, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(left.c_str()));
     wchar_t right[160], volume[48] = L"";
@@ -753,6 +769,48 @@ void MainWindow::fromTray() {
     ShowWindow(hwnd_, IsIconic(hwnd_) ? SW_RESTORE : SW_SHOW);
     ShowOwnedPopups(hwnd_, TRUE);
     SetForegroundWindow(hwnd_);
+}
+
+void MainWindow::checkForUpdate() {
+    nextCheck_ = GetTickCount64() + 24ull * 3600 * 1000; // once a day
+    updater_.check(hwnd_, settings_.updateUrl, AP_VERSION_STRING);
+    audioWindow_.refresh();
+}
+
+void MainWindow::installUpdate() {
+    // never while audio runs: the update stops the program (the Setup window's button is greyed then too)
+    if (audio_.deviceRunning() || audio_.simulating()) {
+        placement::messageBox(audioWindow_.hwnd() ? audioWindow_.hwnd() : hwnd_,
+                              L"Stop the audio first: the update closes DJAP for a few seconds.", L"Update",
+                              MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    updater_.download(hwnd_);
+}
+
+void MainWindow::updateEvent(WPARAM what) {
+    audioWindow_.refresh();
+    updateStatus();
+    if (what == 0 && updater_.state() == Updater::State::Available) { // once per new version
+        const std::string v = updater_.release().version;
+        if (v != notified_) {
+            notified_ = v;
+            tray_.balloon(L"DJAP " + fromUtf8(v) + L" is available",
+                          L"Click here (or right-click the window: Setup) to install it. Nothing is installed "
+                          L"until you click Install update.");
+        }
+    }
+    if (what == 1 && updater_.state() == Updater::State::Ready) {
+        if (audio_.deviceRunning()) return; // started in the meantime: not now (the button stays)
+        std::string err;
+        if (updater_.launch(testRun_ ? ini_ : std::filesystem::path(), err)) { // the setup waits for this program to end, installs, starts it again
+            quitting_ = true;
+            DestroyWindow(hwnd_);
+            return;
+        }
+        placement::messageBox(audioWindow_.hwnd() ? audioWindow_.hwnd() : hwnd_, fromUtf8(err).c_str(), L"Update",
+                              MB_OK | MB_ICONWARNING);
+    }
 }
 
 // The main window's right-click menu (client, 2026-10-25: no menu bar; "Exit and Setup").

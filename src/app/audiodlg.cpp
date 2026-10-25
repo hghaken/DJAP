@@ -1,6 +1,7 @@
 #include "audiodlg.h"
 
 #include "appstate.h"
+#include "version.h"
 #include "placement.h"
 #include "resource.h"
 
@@ -18,7 +19,8 @@ namespace {
 
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
-          idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idAbout };
+          idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idAbout,
+          idCheckUpdates, idCheckNow, idInstall };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 const double kLooks[] = {0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0}; // limiter look-ahead choices (ms; 1.5 the default)
@@ -154,10 +156,10 @@ void AudioWindow::createControls() {
         return CreateWindowExW(0, cls, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 10, 10, hwnd_,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
     };
-    const wchar_t* labels[12] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
+    const wchar_t* labels[13] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
                                  L"Sample rate", L"Buffer size",  L"Health",        L"Audio API",    L"Deck inputs",
-                                 L"Processing",  L"Look-ahead"};
-    for (int i = 0; i < 12; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
+                                 L"Processing",  L"Look-ahead",   L"Updates"};
+    for (int i = 0; i < 13; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
     const DWORD combo = CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP;
     decks_ = make(WC_COMBOBOXW, L"", combo, idDecks);
     api_ = make(WC_COMBOBOXW, L"", combo, idApi);
@@ -189,13 +191,19 @@ void AudioWindow::createControls() {
                                L"session)",
                     BS_AUTOCHECKBOX | WS_TABSTOP, idStartup);
     about_ = make(L"BUTTON", L"About DJAP...", BS_OWNERDRAW | WS_TABSTOP, idAbout);
+    checkUpdates_ = make(L"BUTTON", L"Check GitHub for a new version once a day (installed only when you click Install "
+                                    L"update)",
+                         BS_AUTOCHECKBOX | WS_TABSTOP, idCheckUpdates);
+    checkNow_ = make(L"BUTTON", L"Check now", BS_OWNERDRAW | WS_TABSTOP, idCheckNow);
+    install_ = make(L"BUTTON", L"Install update", BS_OWNERDRAW | WS_TABSTOP, idInstall);
+    updateInfo_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY | SS_ENDELLIPSIS, 0);
     note_ = make(L"STATIC",
                  L"Opening a driver or an exclusive device takes it from other programs: DJ software on the same "
                  L"interface may lose its audio. Test first with outputs nobody hears - routing may still send them "
                  L"to speakers.",
                  SS_LEFT, 0);
 
-    for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_, about_}) theme::makeButton(b);
+    for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_, about_, checkNow_, install_}) theme::makeButton(b);
     for (HWND c : {decks_, api_, inputs_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and preset (two "
@@ -263,6 +271,16 @@ void AudioWindow::createControls() {
                         L"the audio of the last session (it retries for 2 minutes while the devices come up). "
                         L"Saved in Windows' list of startup programs, not in the settings file.");
     tips_.add(about_, L"Version, the settings file in use and the licences.");
+    tips_.add(checkUpdates_, L"On: once a day (and a little after the program starts) DJAP asks GitHub whether a newer "
+                             L"version has been published, and tells you (a message at the icon in the notification "
+                             L"area, and here). Nothing is downloaded or installed until you click Install update. "
+                             L"Only the program's public GitHub page is asked; it learns no more than any web page.");
+    tips_.add(checkNow_, L"Asks GitHub now whether a newer version is there.");
+    tips_.add(install_, L"Downloads the new version's setup from GitHub, checks it against the checksum GitHub "
+                        L"publishes for it (a setup that does not match is never run), closes DJAP and installs it; "
+                        L"DJAP then starts again with your settings. Windows may ask for permission. Not while the "
+                        L"audio runs: stop it first (the update interrupts the sound for a few seconds).");
+    tips_.add(updateInfo_, L"This version, and what the last check of GitHub found.");
 }
 
 void AudioWindow::setFonts() {
@@ -273,7 +291,8 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, state_, health_, resetHealth_, note_, look_, startup_, about_})
+                   start_, stop_, state_, health_, resetHealth_, note_, look_, startup_, about_, checkUpdates_,
+                   checkNow_, install_, updateInfo_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -341,6 +360,14 @@ void AudioWindow::layout() {
     y += h + g;
     MoveWindow(startup_, m + labelW + g, y, W - labelW - g, h, TRUE);
     y += h + g;
+    // updates: the switch, then Check now / Install update and what the last check found
+    MoveWindow(labels_[12], m, y, labelW, h, TRUE);
+    MoveWindow(checkUpdates_, m + labelW + g, y, W - labelW - g, h, TRUE);
+    y += h + g;
+    MoveWindow(checkNow_, m + labelW + g, y, bw, h, TRUE);
+    MoveWindow(install_, m + labelW + bw + 2 * g, y, bw, h, TRUE);
+    MoveWindow(updateInfo_, m + labelW + 2 * bw + 4 * g, y, W - labelW - 2 * bw - 4 * g, h, TRUE);
+    y += h + 2 * g;
     SetWindowTextW(labels_[9], two ? L"Deck inputs" : L"Input from");
     SetWindowTextW(labels_[1], two ? L"Deck A input" : L"Input");
     SetWindowTextW(labels_[2], two ? L"Deck A output" : L"Output");
@@ -380,6 +407,7 @@ void AudioWindow::fillAll() {
     }
     SendMessageW(startup_, BM_SETCHECK, !testRun_ && startsWithWindows() ? BST_CHECKED : BST_UNCHECKED, 0);
     EnableWindow(startup_, !testRun_);
+    SendMessageW(checkUpdates_, BM_SETCHECK, settings_.checkUpdates ? BST_CHECKED : BST_UNCHECKED, 0);
     // two decks or one channel
     SendMessageW(decks_, CB_RESETCONTENT, 0, 0);
     addItem(decks_, L"Two decks (DJ: deck A and deck B, each its own input, output and preset)", 2);
@@ -656,6 +684,22 @@ void AudioWindow::command(int id, int code) {
         if (onAbout_) onAbout_(hwnd_);
         return;
     }
+    if (id == idCheckUpdates && code == BN_CLICKED) {
+        settings_.checkUpdates = SendMessageW(checkUpdates_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        onChange_();
+        refresh();
+        return;
+    }
+    if (id == idCheckNow && code == BN_CLICKED) {
+        if (checkNowDo_) checkNowDo_();
+        refresh();
+        return;
+    }
+    if (id == idInstall && code == BN_CLICKED) {
+        if (installDo_) installDo_();
+        refresh();
+        return;
+    }
     if (id == idApi && code == CBN_SELCHANGE && !filling_) {
         readChoices(); // the old API's choices first, while the lists still hold them
         const LRESULT a = SendMessageW(api_, CB_GETCURSEL, 0, 0);
@@ -750,6 +794,39 @@ void AudioWindow::command(int id, int code) {
 void AudioWindow::refresh() {
     if (!hwnd_) return;
     const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
+    // updates: this version and what the last check found; install only while no audio runs
+    if (updater_) {
+        const Updater::State st = updater_->state();
+        const std::wstring me = fromUtf8(AP_VERSION_STRING), next = fromUtf8(updater_->release().version);
+        const std::wstring when = updater_->checkedAt().empty() ? L"" : L", checked at " + fromUtf8(updater_->checkedAt());
+        std::wstring text;
+        switch (st) {
+        case Updater::State::Checking: text = L"DJAP " + me + L" - asking GitHub..."; break;
+        case Updater::State::UpToDate:
+            text = L"DJAP " + me + L" is up to date" + when +
+                   (updater_->error().empty() ? L"" : L" (" + fromUtf8(updater_->error()) + L")");
+            break;
+        case Updater::State::Available:
+            text = L"DJAP " + next + L" is available (this is " + me + L")" +
+                   (running ? L" - stop the audio to install it" : L"");
+            break;
+        case Updater::State::Downloading:
+            text = L"Downloading DJAP " + next + L": " + std::to_wstring(updater_->percent()) + L" %";
+            break;
+        case Updater::State::Ready: text = L"Starting the setup of DJAP " + next + L"..."; break;
+        case Updater::State::Failed: text = L"Update: " + fromUtf8(updater_->error()); break;
+        default:
+            text = L"DJAP " + me + (settings_.checkUpdates ? L" - GitHub is asked once a day" : L" - the daily check is off");
+            break;
+        }
+        wchar_t old[512] = {};
+        GetWindowTextW(updateInfo_, old, 512);
+        if (text != old) SetWindowTextW(updateInfo_, text.c_str());
+        const bool newer = !next.empty() && compareVersions(updater_->release().version, AP_VERSION_STRING) > 0;
+        EnableWindow(checkNow_, !updater_->busy() && st != Updater::State::Ready);
+        EnableWindow(install_, newer && !running && !audio_.simulating() &&
+                                   (st == Updater::State::Available || st == Updater::State::Failed));
+    }
     EnableWindow(close_, asio() && open);
     EnableWindow(panel_, asio() && open);
     EnableWindow(stop_, running);

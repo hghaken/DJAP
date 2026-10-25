@@ -47,6 +47,7 @@ add_library(apcore STATIC
     src/core/limiter.cpp
     src/core/params.cpp
     src/core/deck.cpp
+    src/core/release.cpp
     src/core/settings.cpp
     src/core/wavfile.cpp
     src/core/render.cpp
@@ -115,16 +116,20 @@ add_executable(DJAP WIN32
     src/app/winvolume.cpp
     src/app/theme.cpp
     src/app/placement.cpp
+    src/app/updater.cpp
     src/app/app.rc
     src/app/app.manifest)
 ap_own(DJAP)
-target_link_libraries(DJAP PRIVATE apapp comctl32 gdi32 gdiplus user32 uxtheme dbghelp)
+target_link_libraries(DJAP PRIVATE apapp comctl32 gdi32 gdiplus user32 uxtheme dbghelp winhttp)
+# the .exe names its symbol file without the build folder (the setup is public; the .pdb stays local)
+target_link_options(DJAP PRIVATE /PDBALTPATH:%_PDB%)
 endif()
 
 # ---- Command line (console program: renders, measurements, device list; never opens a driver) ----
 add_executable(DJAPCmd src/app/cli.cpp)
 ap_own(DJAPCmd)
 target_link_libraries(DJAPCmd PRIVATE apapp)
+target_link_options(DJAPCmd PRIVATE /PDBALTPATH:%_PDB%)
 endif()
 
 # ---- Unit tests ----
