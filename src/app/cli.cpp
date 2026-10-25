@@ -238,7 +238,7 @@ int devices() {
     } else {
         std::printf("ASIO drivers (%zu):\n", list.size());
         for (const AsioDriverEntry& d : list) std::printf("  %s %s\n", padded(d.name, 40).c_str(), toUtf8(d.path).c_str());
-        std::printf("  (channels and sample rates: in the Audio window, which opens the driver)\n");
+        std::printf("  (channels and sample rates: in DJAP's Setup window, which opens the driver)\n");
     }
 #else
     std::printf("Built without the ASIO SDK: no ASIO driver list.\n");

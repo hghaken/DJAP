@@ -108,6 +108,9 @@ Source: "{#BuildDir}\DJAPCmd.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD_PARTY.md"; DestDir: "{app}"; Flags: ignoreversion
+; the manuals (tools\make_manuals.py)
+Source: "..\docs\DJAP-Manual.pdf"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\docs\DJAP-Technical-Manual.pdf"; DestDir: "{app}"; Flags: ignoreversion
 
 [InstallDelete]
 ; the shortcuts of the program's old name
@@ -119,6 +122,8 @@ Type: files; Name: "{app}\DJAPCmd.pdb"
 
 [Icons]
 Name: "{autoprograms}\DJAP"; Filename: "{app}\DJAP.exe"
+Name: "{autoprograms}\DJAP manual"; Filename: "{app}\DJAP-Manual.pdf"
+Name: "{autoprograms}\DJAP technical manual"; Filename: "{app}\DJAP-Technical-Manual.pdf"
 Name: "{autodesktop}\DJAP"; Filename: "{app}\DJAP.exe"; Tasks: desktopicon
 
 [Run]

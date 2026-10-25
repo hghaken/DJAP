@@ -243,8 +243,8 @@ void AudioWindow::createControls() {
     tips_.add(buffer_, L"Frames per period. Smaller = lower latency, but more risk of dropouts when the PC is busy "
                        L"(watch Health: late periods are dropouts). ASIO: the driver's preferred size or a size it "
                        L"allows. Other APIs: the period asked of Windows.");
-    tips_.add(link_, L"On: deck B always uses deck A's preset - choosing a preset on either deck sets both. "
-                     L"Processing / bypass and Freeze leveller stay per deck.");
+    tips_.add(link_, L"On: deck B always uses deck A's preset and colour - the main window then shows one set of "
+                     L"controls (deck A's), and its Bypass counts for both decks.");
     tips_.add(follow_, L"On: the volume and mute of Windows' default playback device - what the keyboard's volume "
                        L"keys and the taskbar change - turn the outputs down after the processing (never up: the "
                        L"ceiling holds). The meters show the processing before this volume. When the default playback "

@@ -5,6 +5,16 @@ B - come in on an ASIO interface, each runs its own processing chain with its ow
 its own output pair. For other Windows users: one channel, one stereo processor (Audio window, "Processing"). The
 same code renders WAV files offline. Licence: GPL-3.0.
 
+## Manuals
+
+- [User manual](docs/manual.md) ([PDF](docs/DJAP-Manual.pdf)) - installing, connecting, every window, control and
+  setting, presets and colours, the command line, troubleshooting.
+- [Technical manual](docs/technical.md) ([PDF](docs/DJAP-Technical-Manual.pdf)) - how each part of the audio
+  processing works, with formulas, measurements, tests and the sources (standards and papers) with links.
+
+The setup installs both PDFs with Start menu entries. `python -I tools\make_manuals.py` rebuilds the PDFs from the
+Markdown (markdown-it-py and Chrome or Edge).
+
 ## What it does
 
 Per deck, in this order (`docs/design.md` sections 2-4):
@@ -118,10 +128,12 @@ which renders synthetic songs through every preset and checks the results with a
 - `src/app/` - GUI, command line, ASIO host
 - `tests/` - unit tests
 - `tools/` - test and setup scripts (`run_tests.ps1`, `render_check.ps1`, `get_asiosdk.ps1`, `music_survey.ps1`,
-  `music_listen.ps1`, `make_installer.ps1`, `make_icon.py`)
+  `music_listen.ps1`, `make_installer.ps1`, `make_icon.py`, `make_manuals.py`)
 - `installer/` - the setup program's script (`DJAP.iss`) and header images
 - `assets/` - the program icon (`DJAP.ico`, `icon-256.png`) and the wide logo of the About window (`logo.png`),
   drawn by `tools/make_icon.py`
 - `docs/design.md` - the design: every parameter with its unit, range, default and reason
+- `docs/manual.md`, `docs/technical.md` - the user and technical manuals (and their PDFs); `docs/images/` - the
+  manual's screenshots
 
 ASIO is a trademark and software of Steinberg Media Technologies GmbH.

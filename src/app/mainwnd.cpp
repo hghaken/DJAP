@@ -355,13 +355,13 @@ void MainWindow::createControls() {
     tips_.create(hwnd_);
     for (int d = 0; d < 2; ++d) {
         Strip& s = strips_[d];
-        tips_.add(s.route, L"Where this deck's audio comes from and where it goes. Change it in Audio \x2192 Audio "
-                           L"device. With linked presets (Audio window) deck A's controls count for both decks.");
+        tips_.add(s.route, L"Where this deck's audio comes from and where it goes. Change it in Setup (right-click "
+                           L"the window). With linked presets (Setup) deck A's controls count for both decks.");
         tips_.add(s.preset,
                   L"The preset this deck uses: the target loudness and every stage's values. Shipped: Gentle -18, "
                   L"Light -16, Medium -14, Loud -12, Very Loud -10 LUFS; FM Station -13 (dense, the sound of FM radio), DAB+ "
                   L"-23 (EBU R 128, wide dynamics), Web Stream -16 (-2 dBTP for MP3 / AAC); your own presets follow. A new choice is "
-                  L"heard at once, without a click. With linked presets (Audio window) both decks change.");
+                  L"heard at once, without a click. With linked presets (Setup) both decks change.");
         tips_.add(s.processing,
                   L"Bypass (lit): the input goes out unchanged (bit-exact), delayed by the same limiter look-ahead, "
                   L"so switching never shifts the sound in time.\nNot lit: the deck runs through its chain. Saved "
@@ -715,9 +715,9 @@ void MainWindow::updateStatus() {
         }
 #endif
     } else if (audio_.driverOpen()) {
-        left = L"ASIO driver open, audio stopped (Audio \x2192 Audio device)";
+        left = L"ASIO driver open, audio stopped (right-click: Setup)";
     } else {
-        left = L"No audio device running (Audio \x2192 Audio device)";
+        left = L"No audio device running (right-click: Setup)";
     }
     if (!audio_.deviceError().empty()) left += L"   |   " + fromUtf8(audio_.deviceError());
     if (!message_.empty()) left += L"   |   " + fromUtf8(message_);

@@ -219,7 +219,7 @@ std::string Settings::toText() const {
     o << "; Processing channels: 2 = two decks (DJ: deck A and deck B), 1 = one channel (deck A only)\nDecks="
       << decks << "\n";
     o << "; Audio API: ASIO, WASAPI, DirectSound or MME\nApi=" << api << "\n";
-    o << "; ASIO driver name (as listed in the Audio window)\nDriver=" << driver << "\n";
+    o << "; ASIO driver name (as listed in the Setup window)\nDriver=" << driver << "\n";
     o << "; WASAPI / DirectSound / MME: input and output device of each deck (empty = the deck does not run)\n";
     o << "InputDeviceA=" << inDevice[0] << "\nOutputDeviceA=" << outDevice[0] << "\nInputDeviceB=" << inDevice[1]
       << "\nOutputDeviceB=" << outDevice[1] << "\n";
