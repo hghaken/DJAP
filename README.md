@@ -116,7 +116,6 @@ which renders synthetic songs through every preset and checks the results with a
 - `installer/` - the setup program's script (`DJAP.iss`) and header images
 - `assets/` - the program icon (`DJAP.ico`, `icon-256.png`) and the wide logo of the About window (`logo.png`),
   drawn by `tools/make_icon.py`
-- `docs/design.md` - the design: every parameter with its unit, range, default and reason; `docs/handover.md` - the
-  state of the work
+- `docs/design.md` - the design: every parameter with its unit, range, default and reason
 
 ASIO is a trademark and software of Steinberg Media Technologies GmbH.
