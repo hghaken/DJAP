@@ -52,12 +52,13 @@ colours are managed like loudness presets.
 ## Programs
 
 - `DJAP.exe` - the GUI: two deck strips (loudness preset and colour - one choice when both decks share them -, processing /
-  bypass, sliders for bass level, bass enhancer, bass width and bass frequency, meters for input and output
-  loudness, true peak, the gain of every stage and the spectrum of input and output), an analysis window
-  (compressor curve, loudness and gain over the last minute, goniometer, correlation and stereo width), a loudness
-  window with the stage switches and every parameter, a colour window,
-  tooltips on every control, and the
-  Audio window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
+  bypass, meters for input and output loudness, true peak, the gain of every stage and the spectrum of input and
+  output), a spectrum window (a click on a deck's spectrum: the colour as an EQ curve with points to drag, the
+  density bands with their gains, the loudness preset and colour lists and the four bass sliders - bass level,
+  enhancer, width and frequency), an analysis window (compressor curve, loudness and gain over the last minute,
+  goniometer, correlation and stereo width), a loudness window with the stage switches and every parameter, a
+  colour window, tooltips on every control (they can be switched off), windows that open where they were left, and
+  the Setup window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
   decks the same loudness preset, start / stop, latency, real-time health). With ASIO a deck's input may also come from a
   WASAPI, DirectSound or MME device (for example a player sending into a virtual cable): the two clocks' drift is
@@ -65,7 +66,7 @@ colours are managed like loudness presets.
   with the measured drift. The outputs can follow the Windows volume and mute (the keyboard's volume keys; on by
   default with one channel), applied after the processing.
   The program lives in the notification area (system tray): closing or minimising the window hides it there while
-  the audio goes on; a click on the icon brings it back, its menu has Shutdown. At the first start the Audio window
+  the audio goes on; a click on the icon brings it back, its menu has Shutdown. At the first start the Setup window
   opens, to choose the audio device. A second start shows the running program.
   Settings are kept in `DJAP.ini` next to the program (or in `%APPDATA%\DJAP\`); at the first start the settings of an earlier version (up to 0.1.57) are copied there, the old file stays.
   Test options: `--ini <file>`, `--simulate <file.wav>` (runs a file through both decks without sound),
@@ -124,7 +125,7 @@ before the first run.
 
 Updates: once a day DJAP asks GitHub whether a newer release of this repository exists and tells you (a message at
 the notification-area icon, and in Setup -> Updates; switch it off there). Nothing is downloaded until you click
-Install update. The setup is then downloaded, checked against the SHA-256 checksum GitHub publishes for it,
+Install update (while the audio runs it asks first). The setup is then downloaded, checked against the SHA-256 checksum GitHub publishes for it,
 installed silently into the same folder, and DJAP starts again with your settings; audio that ran before the update
 starts again by itself.
 
@@ -143,11 +144,12 @@ which renders synthetic songs through every loudness preset and checks the resul
 
 ## Layout
 
-- `src/core/` - the DSP core (no Windows code; the base for a later VST3 plug-in)
+- `src/core/` - the DSP core (no Windows code; shared by the program, the command line and the plug-in)
 - `src/app/` - GUI, command line, ASIO host
+- `src/plugin/` - the plug-in for DJ software
 - `tests/` - unit tests
-- `tools/` - test and setup scripts (`run_tests.ps1`, `render_check.ps1`, `get_asiosdk.ps1`, `music_survey.ps1`,
-  `music_listen.ps1`, `make_installer.ps1`, `make_icon.py`, `make_manuals.py`)
+- `tools/` - test and setup scripts (`run_tests.ps1`, `render_check.ps1`, `get_asiosdk.ps1`, `get_vst3sdk.ps1`,
+  `music_survey.ps1`, `music_listen.ps1`, `make_installer.ps1`, `make_icon.py`, `make_manuals.py`, `publish.ps1`)
 - `installer/` - the setup program's script (`DJAP.iss`) and header images
 - `assets/` - the program icon (`DJAP.ico`, `icon-256.png`) and the wide logo of the About window (`logo.png`),
   drawn by `tools/make_icon.py`

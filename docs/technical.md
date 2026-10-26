@@ -3,8 +3,8 @@
 This manual describes how each part of DJAP's audio processing works: the signal flow, the filters and detectors,
 the formulas, the reasons behind the design, and how it was verified. It is written for audio engineers, developers
 and curious users. How to use the program is in the user manual (`DJAP-Manual.pdf`, or `docs/manual.md`); the
-specification with every decision is `docs/design.md`; the code is in `src/core/` (the DSP, no Windows code) and
-`src/app/` (the program) - all on <https://github.com/hghaken/DJAP>.
+specification with every decision is `docs/design.md`; the code is in `src/core/` (the DSP, no Windows code),
+`src/app/` (the program) and `src/plugin/` (the plug-in for DJ software, chapter 18) - all on <https://github.com/hghaken/DJAP>.
 
 Numbers in square brackets, such as [1], refer to the sources in chapter 21, with links. All code was written for
 DJAP; no code or parameter values were taken from other products.
@@ -310,7 +310,7 @@ classic octave-divider principle of analogue sub-harmonic synthesisers.
 ### 5.4 Contour
 
 At a low listening volume the ear is less sensitive to low and high frequencies (the equal-loudness contours of ISO
-226 [17]). The loudness amount adds a low shelf at 100 Hz (up to +9 dB) and a high shelf at 10 kHz (up to +4 dB),
+226 [17]). The contour's amount adds a low shelf at 100 Hz (up to +9 dB) and a high shelf at 10 kHz (up to +4 dB),
 measured +8.9 dB at 30 Hz and +3.9 dB at 16 kHz at 100 %.
 
 ## 6. Compressor
@@ -532,7 +532,7 @@ bypass crossfade never jumps. Full bypass is the input, bit for bit.
 
 - Every live start fades the deck's output in over 5 ms, so a stream started in the middle of music does not begin
   with a step (a hard click). Offline renders and tests start bit-exact without a fade.
-- Before a running stream stops - Stop, a new device, Exit, Windows or a setup closing the program - each deck fades
+- Before a running stream stops - Stop, a new device, Shutdown, Windows or a setup closing the program - each deck fades
   to silence over 10 ms (raised cosine) and stays silent; the program waits until every running deck reports silence
   (at most 300 ms), then 50 ms more so the silence passes the device's buffers.
 

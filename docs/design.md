@@ -8,12 +8,15 @@ Names (client, 2026-10-26: "change the name Preset into Loudness", everywhere): 
 call the dynamics preset the **loudness preset** (its list "Loudness", its window the loudness window) and the colour's
 loudness contour **Contour**. This document keeps "preset" for the loudness preset. Ini sections and keys (`[Preset X]`,
 `PresetA`, the colour key `Loudness`), the parameter keys (and so the plug-in's parameter ids) and DJAPCmd's options
-(`--a <preset>`, `--presets`) stay as they were.
+(`--a <preset>`, `--presets`) stay as they were. The window called "Audio window" here is the **Setup window** in the
+program (its right-click menu: Setup / Shutdown). Numbers such as "10.3" or "principle 9" in the Reason columns refer
+to the sections of the `audio-processing` handbook (the design basis below, not part of this repository); the
+technical manual cites the public sources.
 
 DJAP is a standalone Windows audio processor for DJs: two independent stereo channels (deck A and deck B)
 come in on an ASIO interface (4 inputs), each runs its own dynamics chain, and goes out on 4 outputs. The same DSP
-code renders WAV files offline (for tests and checks) and is kept free of Windows / GUI code so it can later be
-wrapped as a VST3 plug-in for DJ software. Licence GPL-3.0; all code written fresh. Design basis: the
+code renders WAV files offline (for tests and checks) and is kept free of Windows / GUI code; it also runs as the
+plug-in for DJ software (section 10, since 2026-10-26). Licence GPL-3.0; all code written fresh. Design basis: the
 `audio-processing` skill's handbook (sections 3-5, 9-12, 16, Appendix B) and the standards / papers it cites.
 
 ## 1. Requirements
@@ -25,7 +28,7 @@ wrapped as a VST3 plug-in for DJ software. Licence GPL-3.0; all code written fre
 | R3 | Low latency: only the limiter's look-ahead adds delay; no other look-ahead, no extra buffering | client (hard) |
 | R4 | Both decks always have the same latency (they are mixed after the processor) | handbook 10.11 |
 | R5 | Win32 GUI + command line | client |
-| R6 | DSP core host-independent (later VST3: the format the client's DJ software loads, confirmed 2026-10-25) | client |
+| R6 | DSP core host-independent (the plug-in format the client's DJ software loads, confirmed 2026-10-25; built 2026-10-26, section 10) | client |
 | R7 | 44.1 / 48 / 88.2 / 96 kHz; coefficients computed for the actual rate | own |
 | R8 | Real-time safe: no allocation, lock, I/O or exception on the audio thread; NaN contained; FTZ/DAZ restored | handbook 11 |
 | R9 | Builds without warnings (MSVC /W4, C++17); unit tests with known answers | client |
@@ -40,7 +43,7 @@ deck input (stereo, pre-fader preferred - see 7)
                                      leveller keeps the loudness on target and only the balance changes
  -> compressor                       wide-band, feed-forward, soft knee, threshold relative to the target
  -> density (1-7 bands up/down)      LR4 cascade with phase-aligning all-passes (flat sum); band count per preset
- -> bass enhancer -> exciter -> de-esser   optional colour, each off by default in "Light"
+ -> bass enhancer -> exciter -> de-esser   optional, per preset (Gentle: none; Light: the de-esser; table 3.1)
  -> stereo width (M/S, bass in mono option)
  -> [leveller detector]              measures here: compressor and density work included (handbook 9.2, fault 7);
                                     the leveller's own gain is divided out per control block, so the 3 s average
@@ -82,22 +85,22 @@ analysis.
 | | fast up | dB/s | 4 x speed up to 3, or 2 x speed if more | fixed | when the gain is > 4 dB under what the 3 s level needs and the music is not falling (a quiet verse after a loud chorus), until within 1 dB; the counterpart of fast down. Gentle and DAB+ 2, Light / Medium / Web Stream / Loud 3, FM Station 4 dB/s (3 for all brought quiet song endings up too eagerly in Gentle and DAB+) |
 | | catch-up | switch | on | - | after >= 2 s of silence (deck stopped) the gain moves at 20 dB/s to the level of the 0.4 s detector; it goes on while that level rose > 1 dB in the last second (a track fading in), at most 15 s, then the 3 s detector starts from the level reached (measured: 12 s fade-in from -50 dB to -7 LUFS ended 5.1 LU too loud without, 0.04 LU with) |
 | | freeze | switch | off | - | **DJ**: holds the gain while the DJ works with EQ kills / filters. In the DSP core (`DeckControl::freeze`, for a later plug-in); the program has no button for it since 2026-10-25 (client: the F button "is not needed") |
-| Compressor | threshold | LU re T | +6 | -10..+15 | 10.3 / 9.7 |
+| Compressor | threshold | LU re T | +2 | -10..+15 | 10.3 / 9.7 |
 | | ratio / knee | - / dB | 2.0 / 6 | 1..8 / 0..12 | 10.3 |
 | | attack / release | ms | 10 / 200 | 1..100 / 20..1000 | 10.3, measured step response |
 | | side-chain HPF | Hz | 80 | off, 40..200 | bass does not trigger it |
 | | make-up | dB | auto | auto, 0..12 | target passes unchanged |
 | Density | bands | count | 5 | 1..7 | 1 = wide-band (no split); more bands = each band moves more on its own, less pumping, more CPU |
-| | amount | % | 35 | 0..100 | ratio 1:1..4:1 (10.4) |
+| | amount | % | 40 | 0..100 | ratio 1:1..4:1 (10.4) |
 | | down above / lift below / max lift | dB | 3 / 6 / 6 | 0..12 / 0..20 / 0..12 | 10.4 |
 | | attack / release | ms | 20 / 300 | 1..200 / 20..2000 | 10.4 |
 | | band gain (one per band, up to 7) | dB | 0 | -12..+12 | multiband tone control at amount 0 (client, 2026-10-26: was -6..+6) |
 | | splits (bands - 1 of them) | Hz | per band count, table 3.2 | 20..16000, rising, >= 1.25x apart | 10.4, extended to 7 bands |
 | Bass enhancer | frequency / amount | Hz / % | 100 / 30 | 60..160 / 0..100 | 10.6 (Larsen & Aarts) |
-| Exciter | frequency / amount | Hz / % | 3500 / 20 | 1500..8000 / 0..100 | 10.7 |
+| Exciter | frequency / amount | Hz / % | 3500 / 15 | 1500..8000 / 0..100 | 10.7 |
 | De-esser | frequency / threshold / max | Hz / LU re T / dB | 5500 / -10 / 6 | 3000..10000 / -30..0 / 0..12 | 10.8 |
 | Stereo width | width / bass width / bass split | % / % / Hz | 100 / 100 / 150 | 0..200 / 0..100 / 40..400 | 10.5 |
-| Soft clipper | drive | dB | 3 | 0..9 | 10.9 |
+| Soft clipper | drive | dB | 2 | 0..9 | 10.9 |
 | Limiter | ceiling | dBTP | -1.0 | -6..0 | R 128 / AES |
 | | release | ms | 80 | 10..500 | 10.10 |
 | | look-ahead | ms | 1.5 | 0..5 | the only latency; one value for both decks (R4) |
@@ -190,8 +193,9 @@ Client, 2026-10-25: besides the loudness (the preset) a deck gets a **colour**: 
 holds only the tone of the music - a fixed EQ, an automatic tone correction per song, a sub-bass generator and a
 loudness contour. Each deck chooses a preset and a colour; linked decks share both. The colour parameters live in the
 same value table as the preset's (index >= `kFirstColourParam`); the ini stores them in `[Colour X]` sections and the
-preset sections no longer carry them. The main window's bass level slider is the colour's Bass; its bass frequency
-slider sets the colour's bass corner and the preset's enhancer frequency and bass split. (The earlier preset value
+preset sections no longer carry them. The bass level slider (spectrum window and plug-in; on the main window's strips
+until 2026-10-26) is the colour's Bass; the bass frequency slider sets the colour's bass corner and the preset's
+enhancer frequency and bass split. (The earlier preset value
 `BassLevel` is dropped: its job is the colour's Bass now.)
 
 | Stage | Parameter | Unit | Default | Range | Reason |
@@ -204,7 +208,7 @@ slider sets the colour's bass corner and the preset's enhancer frequency and bas
 | | maximum | dB | 6 | 0..9 | largest correction per band; the treble gets half, since the top of an old recording is often its hiss |
 | | time | s | 10 | 2..60 | averaging time of the measurement; 1.5 s during the first 6 s of music, so a new song is corrected soon |
 | Sub bass | amount / frequency | % / Hz | 0 / 80 | 0..100 / 40..120 | adds an octave below the bass a recording does not have (60s / 70s records were cut without it) |
-| Loudness | amount | % | 0 | 0..100 | equal-loudness contour for quiet listening: low shelf 100 Hz up to +9 dB, high shelf 10 kHz up to +4 dB |
+| Contour | amount | % | 0 | 0..100 | equal-loudness contour for quiet listening: low shelf 100 Hz up to +9 dB, high shelf 10 kHz up to +4 dB |
 
 **Filters.** Every section is a trapezoidal state-variable filter (Simper) designed at the control rate (16 samples)
 and ramped linearly per sample from the old to the new coefficients, so a moving gain or frequency does not zipper
@@ -241,6 +245,8 @@ colour. Cost: every colour stage on adds about 0.7 % of a core per deck (`deck_t
 The handbook records that a 4x / 16-tap detector let full-band noise through by ~1.4 dB (fault 25). Plan: 8x
 oversampling at 44.1 / 48 kHz (4x at 88.2 / 96), windowed-sinc prototype of odd length centred on a tap, starting
 with 32 taps per phase (16 frames of detector delay, 0.36 ms) and going to 48 if the full-band noise test fails.
+Built: 96 taps per phase with a Kaiser window (beta 5), plus a 0.1 dB margin at 1.5 ms look-ahead - 32 taps let
+full-band noise 1.07 dB over the ceiling; true-peak mode needs a look-ahead of at least 48 frames.
 The limiter uses the true peak when the look-ahead covers the detector delay, else the sample peak; window
 `W = look - D + 1` for a detector of delay D (generalising 10.10). Stated guarantee: sample peak always <= ceiling;
 true peak <= ceiling + 0.1 dB for any input when look-ahead >= detector delay.
@@ -375,9 +381,10 @@ needed"): LED bars In L / R (sample peak, dBFS, after the preset's input gain - 
 value, unlit ones dark in their zone's colour (input: amber from -6, red from -1 dBFS; output: amber in the last
 3 dB under the ceiling, red over it) and a peak-hold LED for 1.5 s; across each pair the momentary loudness (white)
 and the target (yellow); one axis -40..+3 with a dB scale on the left and a LUFS scale on the right; the gain of each stage (a click on a row opens the preset window on that stage's tab, a click on the In bars the General tab, on the Out bars the Limiter tab - client 2026-10-25; leveller up / down over
-its range, compressor / de-esser / clipper / limiter reduction 0..12 dB, density per band +-12 dB) and the
+its range, compressor / de-esser / clipper / limiter reduction 0..12 dB; the density row was removed 2026-10-26 - the density
+bands are lines in the spectrum) and the
 spectrum; the two lines of numbers (M, S, I, LRA, max true peak, state) were removed at the client's request
-(2026-10-25) to give the spectrum room. Menu: Audio device (the Audio window, next step), limiter look-ahead (both decks), About.
+(2026-10-25) to give the spectrum room. No menu bar (2026-10-25): a right-click opens Setup / Shutdown.
 Status bar: audio state and the latency the processing adds. Per-monitor DPI aware. Every change is heard and
 saved at once.
 
@@ -556,7 +563,8 @@ by the inverse (at most +40 dB), so the processing sees the music's own level an
 that handles the volume in its driver is not compensated (the program cannot know what that driver does). The
 status bar shows "Windows volume N %" or "muted".
 
-Audio APIs (client, 2026-10-25): one API for the whole program - ASIO, WASAPI (shared, or exclusive with a switch),
+Audio APIs (client, 2026-10-25): one API for the whole program (except deck inputs of another API with ASIO
+output, 6.1) - ASIO, WASAPI (shared, or exclusive with a switch),
 DirectSound or MME. ASIO: one driver, a channel pair per deck input and output, one synchronous buffer switch for
 both decks (below). The other APIs (through miniaudio, `src/app/sysaudio.*`): each deck runs from its own input
 device to its own output device (Windows shows most interfaces as stereo devices per pair) as one duplex stream

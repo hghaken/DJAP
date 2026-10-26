@@ -284,7 +284,8 @@ the processing adds.
 ### 4.5 Linked presets
 
 With "Deck A and deck B use the same loudness preset and colour" on (Setup window), the main window shows one set of controls - deck A's
-loudness preset, colour, sliders, Edit buttons and Bypass - and they count for both decks. Deck B's strip shows only its route
+loudness preset, colour, Edit buttons and Bypass - and they count for both decks (the spectrum window's bass sliders
+too). Deck B's strip shows only its route
 and its meters.
 
 ## 5. The Setup window
@@ -306,7 +307,7 @@ the audio again (a short fade-out and fade-in).
 | **Deck A / B input**, **output** | ASIO: a channel pair per deck, with the driver's channel names once it is open. Other APIs: an input and an output device per deck; *(none)* = the deck does not run. A saved device that is not connected shows "(not found)". |
 | **Sample rate** | 44.1, 48, 88.2 or 96 kHz. ASIO uses this rate if the driver accepts it, else the interface's own rate. Other APIs convert when a device runs at another rate. |
 | **Buffer size** | ASIO: the driver's preferred size, or a size it allows. Other APIs: the period asked of Windows. Smaller = less latency, more risk of dropouts (watch Health). |
-| **Look-ahead** | The limiter's look-ahead, 0 to 5 ms (default 1.5 ms), the same for both decks. Longer handles peaks more gently. True-peak limiting needs at least 1.0 ms; at 0 ms the limiter works on the sample peak and adds no delay. Changed at once with a short fade. |
+| **Look-ahead** | The limiter's look-ahead, 0 to 5 ms (default 1.5 ms), the same for both decks. Longer handles peaks more gently. True-peak limiting needs at least 48 samples (1.0 ms at 48 kHz, 1.1 ms at 44.1 kHz); below that, and at 0 ms, the limiter works on the sample peak and adds no delay. Changed at once with a short fade. |
 
 ### 5.2 Options
 
@@ -807,7 +808,8 @@ old file stays.
 | **The sound pumps or breathes** | Lower the density amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
 | **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Fast down" (Leveller tab) brings it down within about a second. Raise it if needed. |
 | **Quiet passages come up too much** | A quiet part that stays is levelled after a few seconds. To keep more of the difference, lower the leveller range or its speed. |
-| **A soft verse after a loud chorus stays too soft** | The leveller waits until the music has stopped falling (about 2-4 s) and then comes up faster than its normal speed ("fast up": 2-4 dB/s, depending on the loudness preset). A larger range lets it come up further. |
+| **A soft verse after a loud chorus stays too soft** | The leveller waits until the music has stopped falling (about 2-4 s) and then, when it is more than 4 dB too soft, comes up faster than its normal speed ("fast up": 2-4 dB/s,
+depending on the loudness preset) until it is within 1 dB. A larger range lets it come up further. |
 | **Everything sounds too dull / too sharp** | Try another colour (Bright, Warm), or lower the exciter / de-esser. |
 | **Limiter works hard all the time** | Lower the input gain, the clipper drive or the target, or use a quieter loudness preset. |
 | **DJAP does not start with Windows** | Check the option in the Setup window and Windows' startup apps list. |

@@ -72,6 +72,8 @@
 
 - Pillow (Python imaging library) runs `tools/make_icon.py`, which draws the icon and the logo; the logo's text is
   set in Windows' Segoe UI. Only the resulting pictures are part of the program.
+- markdown-it-py (MIT licence) runs `tools/make_manuals.py`, which turns the Markdown manuals into HTML; headless
+  Chrome or Edge on the building PC prints them as PDF. Only the resulting PDFs are part of the setup.
 - `audiotool.py` from the developer's audio-processing skill (numpy), used by `tools\render_check.ps1` as an
   independent loudness and true-peak meter. It is not distributed with DJAP.
 
