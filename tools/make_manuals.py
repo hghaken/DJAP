@@ -1,8 +1,12 @@
 # Builds the PDF versions of the manuals: docs/manual.md -> docs/DJAP-Manual.pdf and docs/technical.md ->
 # docs/DJAP-Technical-Manual.pdf. Markdown -> HTML (markdown-it-py, with GitHub-style heading anchors so the contents
 # links work) -> PDF with headless Chrome or Edge (a throwaway profile; the user's own browser profile is not used).
-# Each PDF starts with a cover page: the logo (assets/logo.png), the title and what the manual covers.
-# Usage: python -I tools\make_manuals.py [version]   (the version, if given, is printed on the cover)
+# Each PDF starts with a cover page: the logo (assets/logo.png), the title and what the manual covers. Every other
+# page has a header with a small logo and a footer with the PDF's date and version on the left and the page number
+# on the right (client, 2026-10-26) - CSS page-margin boxes, which Chrome / Edge print since version 131.
+# Usage: python -I tools\make_manuals.py [version]   (default: the version of the commit the PDFs go into - this
+# commit's count + 1, as the PDFs are committed right after they are made; see publish.ps1 for the version rule)
+import datetime
 import html
 import os
 import re
@@ -22,12 +26,19 @@ MANUALS = [("manual.md", "DJAP-Manual.pdf", "DJAP user manual",
             "How the audio processing works: every stage, its formulas, measurements and sources")]
 
 CSS = """
-@page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+@page { size: A4; margin: 20mm 15mm 17mm 15mm;
+        @top-left { content: ""; width: 38mm; background: url("%LOGO%") no-repeat left bottom / 38mm 9.5mm;
+                    margin-bottom: 3mm; }
+        @bottom-left { content: "%FOOTER%"; vertical-align: top; padding-top: 3mm;
+                       font-family: "Segoe UI", Arial, sans-serif; font-size: 7.5pt; color: #5b6366; }
+        @bottom-right { content: counter(page); vertical-align: top; padding-top: 3mm;
+                        font-family: "Segoe UI", Arial, sans-serif; font-size: 7.5pt; color: #5b6366; } }
+@page :first { @top-left { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
 body { font-family: "Segoe UI", Arial, sans-serif; font-size: 9.6pt; line-height: 1.42; color: #1d1f21; }
 h1 { font-size: 21pt; color: #12594f; border-bottom: 2px solid #1a8a7a; padding-bottom: 4px; margin-top: 0; }
 h2 { font-size: 14pt; color: #12594f; border-bottom: 1px solid #c8d6d3; padding-bottom: 2px; margin-top: 22px;
      break-after: avoid; }
-h2:not(:first-of-type) { break-before: page; }
+h2:not(:first-of-type) { break-before: page; margin-top: 0; }
 h3 { font-size: 11pt; color: #1d1f21; margin-top: 14px; break-after: avoid; }
 p, li { orphans: 3; widows: 3; }
 a { color: #0f6e62; text-decoration: none; word-break: break-word; }
@@ -57,6 +68,18 @@ def slug(text):
     return s.replace(" ", "-")
 
 
+def default_version():
+    """The version of the commit the PDFs go into: VERSION and the commit count + 1 (publish.ps1's rule)."""
+    try:
+        with open(os.path.join(ROOT, "VERSION"), encoding="utf-8") as f:
+            base = f.read().strip()
+        count = subprocess.run(["git", "rev-list", "--count", "HEAD"], cwd=ROOT, capture_output=True, text=True,
+                               check=True).stdout.strip()
+        return f"{base}.{int(count) + 1}"
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return ""
+
+
 def to_html(md_text, title, subtitle, version):
     md = MarkdownIt("commonmark", {"html": False}).enable("table")
     tokens = md.parse(md_text)
@@ -72,8 +95,10 @@ def to_html(md_text, title, subtitle, version):
              + (f'<p class="small">Version {html.escape(version)}</p>' if version else "")
              + '<p class="small">https://github.com/hghaken/DJAP</p>'
              '<p class="small">Free software under the GNU General Public License v3</p></div>')
+    footer = datetime.date.today().isoformat() + (f" \\00B7  DJAP {version}" if version else "")
+    css = CSS.replace("%LOGO%", LOGO).replace("%FOOTER%", footer)
     return (f"<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>{html.escape(title)}</title>"
-            f"<style>{CSS}</style></head><body>{cover}{body}</body></html>")
+            f"<style>{css}</style></head><body>{cover}{body}</body></html>")
 
 
 def browser():
@@ -87,7 +112,7 @@ def browser():
 
 
 def main():
-    version = sys.argv[1] if len(sys.argv) > 1 else ""
+    version = sys.argv[1] if len(sys.argv) > 1 else default_version()
     exe = browser()
     profile = tempfile.mkdtemp(prefix="djap-pdf-")
     try:
