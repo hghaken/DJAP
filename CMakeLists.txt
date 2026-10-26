@@ -54,6 +54,7 @@ add_library(apcore STATIC
     src/core/sampleformat.cpp
     src/core/asyncinput.cpp
     src/core/analysis.cpp
+    src/core/monitor.cpp
     src/core/colour.cpp
     src/core/engine.cpp)
 target_include_directories(apcore PUBLIC src/core)
@@ -130,6 +131,24 @@ add_executable(DJAPCmd src/app/cli.cpp)
 ap_own(DJAPCmd)
 target_link_libraries(DJAPCmd PRIVATE apapp)
 target_link_options(DJAPCmd PRIVATE /PDBALTPATH:%_PDB%)
+
+# ---- Plug-in for DJ software (src/plugin): the Steinberg SDK in third_party/vst3sdk (MIT; not committed) ----
+set(VST3SDK "${CMAKE_SOURCE_DIR}/third_party/vst3sdk")
+option(AP_BUILD_PLUGIN "Build the plug-in when its SDK is in third_party/vst3sdk" ON)
+if(AP_BUILD_PLUGIN AND EXISTS "${VST3SDK}/CMakeLists.txt")
+    # only what the plug-in needs: no examples, no VSTGUI, the static runtime like the program; nothing is copied
+    # or linked into the computer's plug-in folder by the build (the setup installs it)
+    set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SMTG_ENABLE_VSTGUI_SUPPORT OFF CACHE BOOL "" FORCE)
+    set(SMTG_USE_STATIC_CRT ON CACHE BOOL "" FORCE)
+    set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
+    set(SMTG_RUN_VST_VALIDATOR OFF CACHE BOOL "" FORCE)
+    # the SDK's own targets (its validator and test host among them) are built only when asked for
+    add_subdirectory("${VST3SDK}" "${CMAKE_BINARY_DIR}/vst3sdk" EXCLUDE_FROM_ALL)
+    add_subdirectory(src/plugin)
+else()
+    message(STATUS "Plug-in SDK not in third_party/vst3sdk: building without the plug-in.")
+endif()
 endif()
 
 # ---- Unit tests ----

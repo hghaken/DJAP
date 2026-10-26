@@ -486,7 +486,10 @@ const char* meterStage(int target) {
     return target >= 0 && target < kMeterTargets ? tabs[target] : "General";
 }
 
+static HINSTANCE g_instance = nullptr; // the module the class is registered for (the program, or the plug-in DLL)
+
 void registerMeterView(HINSTANCE instance) {
+    g_instance = instance;
     WNDCLASSW wc{};
     wc.lpfnWndProc = proc;
     wc.hInstance = instance;
@@ -497,7 +500,12 @@ void registerMeterView(HINSTANCE instance) {
 
 HWND createMeterView(HWND parent, int id) {
     return CreateWindowExW(0, kClass, L"", WS_CHILD | WS_VISIBLE, 0, 0, 10, 10, parent,
-                           reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), GetModuleHandleW(nullptr), nullptr);
+                           reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), g_instance, nullptr);
+}
+
+void unregisterMeterView() {
+    if (g_instance) UnregisterClassW(kClass, g_instance);
+    g_instance = nullptr;
 }
 
 void setMeterView(HWND view, const MeterViewData& data) {

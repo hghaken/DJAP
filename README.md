@@ -2,8 +2,19 @@
 
 A standalone Windows loudness and dynamics processor. For DJs: two independent stereo channels - deck A and deck
 B - come in on an ASIO interface, each runs its own processing chain with its own preset, and goes out again on
-its own output pair. For other Windows users: one channel, one stereo processor (Audio window, "Processing"). The
-same code renders WAV files offline. Licence: GPL-3.0.
+its own output pair. For other Windows users: one channel, one stereo processor (Setup window, "Processing"). A
+plug-in brings the same processing into DJ software, one deck per plug-in. The same code renders WAV files offline.
+Licence: GPL-3.0.
+
+## Download
+
+The setup program is on the [releases page](https://github.com/hghaken/DJAP/releases/latest)
+(`DJAP-Setup-<version>.exe`, Windows 10 / 11, 64-bit). It installs the DJAP program and, if chosen, the VST®3
+plug-in for DJ software (into the computer's plug-in folder; an installation for all users).
+
+<img src="docs/images/vst-compatible-logo.png" width="110" alt="VST compatible">
+
+VST is a registered trademark of Steinberg Media Technologies GmbH.
 
 ## Manuals
 
@@ -72,12 +83,17 @@ colours are managed like presets.
 
   A 2-channel file is deck A, a 4-channel file is deck A (1-2) and deck B (3-4). Input may be WAV or anything
   Windows decodes (MP3, M4A, WMA, FLAC; mono plays on both channels); the output is WAV.
+- `DJAP.vst3` - the plug-in for DJ software: one deck (stereo in, stereo out) with the same chain, the same presets
+  and colours (read from the program's settings file) and a window like a deck strip of the program: preset,
+  colour, look-ahead, Bypass, the four bass sliders and the meter panel. Every value is a parameter the host can
+  show and automate; a project stores the values themselves. The host is told the latency (the look-ahead).
 
 ## Building
 
 Windows, Visual Studio 2026 (MSVC, with its CMake and Ninja). The ASIO SDK is not in the repository: put it in
 `third_party\asiosdk` first (`THIRD_PARTY.md`, `tools\get_asiosdk.ps1`). Without it the programs build without live
-audio.
+audio. The plug-in needs Steinberg's plug-in SDK in `third_party\vst3sdk` (`tools\get_vst3sdk.ps1 -Yes`); without
+it everything else builds.
 
 ```
 build.cmd                  # Release build of everything -> build\
@@ -88,7 +104,8 @@ build.cmd build-core core  # DSP core and unit tests only -> build-core\
 
 `tools\make_installer.ps1` builds the setup program `release\DJAP-Setup-<version>.exe` (Windows 10 / 11,
 x64, English; Inno Setup 6 is needed on the building PC only). It installs both programs into `Program Files\DJAP`
-with a Start menu entry and an uninstaller, and checks the PC first:
+with a Start menu entry and an uninstaller - and, on its "Select Components" page, the plug-in for DJ software into
+`Common Files\VST3\DJAP` (an installation for all users only; both are chosen by default) - and checks the PC first:
 
 - the Windows components the programs use (no Visual C++ redistributable is needed: the runtime is linked in);
 - Media Foundation, which the N editions of Windows lack: only `DJAPCmd` needs it, and setup offers to
@@ -98,7 +115,8 @@ with a Start menu entry and an uninstaller, and checks the PC first:
   missing it says what it is for and offers its download page;
 - the ASIO drivers it finds (listed on the last page before installing).
 
-After the installation DJAP starts and, at the first start, opens the Audio window. Setup updates an existing
+After the installation DJAP starts and, at the first start, opens the Setup window. A plug-in that DJ software has
+loaded is never a reason to close that software: the setup replaces it when Windows starts again. Setup updates an existing
 installation - also one of a version up to 0.1.57, whose folder and shortcuts it removes (its settings are
 taken over by the program) - and asks to end a running DJAP first (notification area: Exit). Uninstalling keeps
 the settings in `%APPDATA%\DJAP` unless you choose to delete them. The setup is not signed: SmartScreen warns
@@ -119,7 +137,8 @@ powershell -ExecutionPolicy Bypass -File tools\run_tests.ps1 -Renders
 runs the unit tests (`tests\*_test.cpp`: loudness meter against the EBU Tech 3341 / 3342 cases, limiter and true
 peak, every dynamics stage, the whole deck - bit-exact bypass, no clicks on any change, no allocation on the audio
 path, CPU -, settings and presets, the audio engine with every device sample format, the drift correction with
-simulated clocks) and `tools\render_check.ps1`,
+simulated clocks; `plugin_test` loads the built plug-in like a host and checks it is bit-exact with the program's
+deck) and `tools\render_check.ps1`,
 which renders synthetic songs through every preset and checks the results with an independent meter.
 
 ## Layout

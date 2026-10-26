@@ -51,7 +51,8 @@ $hits = @(git grep -n -i -F -f $block $tree -- 2>$null) # an array: += on $null 
 foreach ($w in $words) { if ($Message -match [regex]::Escape($w)) { $hits += "message: $w" } }
 foreach ($w in $words) { if ($Release -and $Notes -match [regex]::Escape($w)) { $hits += "notes: $w" } }
 if ($Release) { # the setup is compressed: its programs are checked (ASCII and UTF-16 text)
-    foreach ($exe in "DJAP.exe", "DJAPCmd.exe") {
+    $plugin = "VST3\Release\DJAP.vst3\Contents\x86_64-win\DJAP.vst3", "VST3\Release\DJAP.vst3\Contents\Resources\moduleinfo.json"
+    foreach ($exe in @("DJAP.exe", "DJAPCmd.exe") + ($plugin | Where-Object { Test-Path "$root\build\$_" })) {
         $bytes = [IO.File]::ReadAllBytes("$root\build\$exe")
         $text = [Text.Encoding]::GetEncoding(28591).GetString($bytes) + [Text.Encoding]::Unicode.GetString($bytes)
         foreach ($w in $words) { if ($text.IndexOf($w, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $hits += "${exe}: $w" } }

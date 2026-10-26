@@ -3,6 +3,7 @@
 #include "check.h"
 #include "settings.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -394,11 +395,34 @@ void handEdited() {
     checkSame(l, l2);
 }
 
+// The positions of every parameter (the GUI's sliders, the plug-in's host steps): the ends are the range (or "auto" /
+// "off"), values rise with the position, and every shipped value has a position that gives it back within a step.
+void positions() {
+    for (int p = 0; p < kParamCount; ++p) {
+        const ParamInfo& in = paramInfo(p);
+        const int n = paramPositions(p);
+        CHECK(n >= 1);
+        if (p == pCompMakeup) CHECK(paramValueAt(p, 0) < 0);
+        else if (p == pCompSideHpf) CHECK(paramValueAt(p, 0) == 0);
+        else CHECK(paramValueAt(p, 0) == in.min);
+        CHECK(paramValueAt(p, n) == in.max);
+        for (int k = 1; k <= n; ++k) CHECK(paramValueAt(p, k) >= paramValueAt(p, k - 1));
+        for (int s = 0; s < kShippedPresetCount + kShippedColourCount; ++s) {
+            const PresetValues v = s < kShippedPresetCount ? shippedPresetValues(s)
+                                                           : shippedColourValues(s - kShippedPresetCount);
+            const double x = v[static_cast<size_t>(p)], back = paramValueAt(p, paramPositionOf(p, x));
+            // a step, or 2 % of the value on the log scales (300 positions over a factor of 8 or more)
+            CHECK_NEAR(back, x, std::max(in.step * 0.5 + 1e-9, std::fabs(x) * 0.02));
+        }
+    }
+}
+
 } // namespace
 
 int main() {
     const fs::path dir = tempDir();
     defaults();
+    positions();
     roundTrip(dir);
     presetRules();
     handEdited();

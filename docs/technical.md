@@ -6,7 +6,7 @@ and curious users. How to use the program is in the user manual (`DJAP-Manual.pd
 specification with every decision is `docs/design.md`; the code is in `src/core/` (the DSP, no Windows code) and
 `src/app/` (the program) - all on <https://github.com/hghaken/DJAP>.
 
-Numbers in square brackets, such as [1], refer to the sources in chapter 19, with links. All code was written for
+Numbers in square brackets, such as [1], refer to the sources in chapter 21, with links. All code was written for
 DJAP; no code or parameter values were taken from other products.
 
 ## Contents
@@ -28,9 +28,10 @@ DJAP; no code or parameter values were taken from other products.
 15. [Meters and graphs](#15-meters-and-graphs)
 16. [The real-time engine](#16-the-real-time-engine)
 17. [Inputs on another clock](#17-inputs-on-another-clock)
-18. [The presets and the standards behind them](#18-the-presets-and-the-standards-behind-them)
-19. [Verification](#19-verification)
-20. [Sources](#20-sources)
+18. [The plug-in](#18-the-plug-in)
+19. [The presets and the standards behind them](#19-the-presets-and-the-standards-behind-them)
+20. [Verification](#20-verification)
+21. [Sources](#21-sources)
 
 ---
 
@@ -626,7 +627,49 @@ into a virtual cable. The two devices run on their own crystals, so their sample
 This is the only place where DJAP adds buffering beyond the look-ahead, and only when the user chooses such an input.
 The Setup window shows the added latency and the measured drift.
 
-## 18. The presets and the standards behind them
+## 18. The plug-in
+
+The plug-in (`src/plugin/`, built with Steinberg's plug-in SDK [24]) runs one `DeckProcessor` inside a host such
+as DJ software. Everything in chapters 2-15 applies unchanged: the plug-in calls the same deck on the host's
+buffers.
+
+- **Audio.** Stereo in, stereo out, 32-bit float, the host's sample rate and block size (any size, also 1 frame).
+  The host's buffers are processed in place by `DeckProcessor::process`. Activation (outside the audio thread)
+  prepares the deck - the only allocations - and starts the 5 ms fade-in of a live start.
+- **One object.** Processor and controller are one object (the SDK's single-component effect), so the plug-in's
+  window reads the deck's meter and tap rings itself through the same `DeckMonitor` (`src/core/monitor.*`) the
+  program uses: one reader per ring, as the rings require (16.2).
+- **Parameters.** The 71 values of the chain plus the preset and colour lists, Bypass and the look-ahead. A value's
+  normalised position (0..1) maps to the program's slider positions (`paramPositions`, `paramValueAt`,
+  `paramPositionOf`): linear in the value's steps, logarithmic (300 positions) for times and frequencies spanning
+  a factor of 8 or more. A parameter's id is an FNV-1a hash of its settings key plus 1000, so ids stay the same
+  when values are added or reordered; a test checks that every id is unique.
+- **Changes in the audio thread.** Parameter changes arrive with each block; the processor takes the block's last
+  value of each, and when anything changed designs a new `DeckConfig` (`makeDeckConfig`: coefficients only, no
+  allocation) and hands it to the deck through its sequence-locked slot before processing the block. The deck then
+  ramps or crossfades as in 1.4: no automation step clicks.
+- **Presets.** Choosing a preset or colour (the list parameters) makes the processor copy that preset's values into
+  its own; the controller loads the same values and asks the host to read all parameters again
+  (`kParamValuesChanged`). The controller keeps the exact values of a preset or a project, so a stored project
+  holds 800 Hz and not the 810 Hz of the nearest log step; a value the host sets is that step's value.
+- **Latency.** The look-ahead in samples (`round(ms x rate / 1000)`, 72 at 1.5 ms and 48 kHz) is reported to the
+  host, and announced again (`kLatencyChanged`) when the look-ahead or the sample rate changes, so the host can
+  delay the other channels by the same amount (plug-in delay compensation).
+- **State.** A versioned binary stream: preset and colour names, look-ahead, Bypass and every value as a pair of
+  settings key and value. Loading it sets the controller and hands the processor a complete snapshot through a
+  second sequence-locked slot (the host may load a project while audio runs).
+- **Window.** A Win32 child window in the host's window, scaled to its DPI, built from the program's own parts:
+  the brushed metal (`theme.*`), the meter panel (`meterview.*`) and tooltips. A DLL must not leave window classes
+  registered after it is unloaded (they would point into freed code), so the classes and GDI+ are registered with
+  the first open window and removed with the last. Common controls version 6 come from the DLL's own manifest
+  (`ISOLATION_AWARE_ENABLED`), whatever the host's manifest says.
+- **Verification.** `plugin_test` loads the built plug-in like a host and compares it with a `DeckProcessor` given
+  the same values: bit-exact over 8 s at block sizes 512, 333, 1024, 64 and 1 with a target change half-way;
+  bit-exact after a state is stored and loaded into a new instance; Bypass is the input delayed by the reported
+  latency, bit-exact. The SDK's validator passes all 47 standard and 537 extended tests (bus arrangements, sample
+  rates, block sizes, parameter and state handling, threading rules).
+
+## 19. The presets and the standards behind them
 
 The presets' targets follow the loudness standards of the media they imitate:
 
@@ -652,7 +695,7 @@ The presets' targets follow the loudness standards of the media they imitate:
 
 The reasons for every value are in `docs/design.md` sections 3 and 3.1.
 
-## 19. Verification
+## 20. Verification
 
 Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 -Renders`):
 
@@ -677,11 +720,13 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Inputs on another clock | simulated clocks -500..+500 ppm, late callbacks, pauses | no xruns, drift within 3 ppm, fill within 0.5 ms |
 | Graphs | FFT against a DFT; sines 50 Hz - 18 kHz; correlation and width of known signals | 1e-12; within a bin; +-0.05 / 1 % |
 | Offline | synthetic songs through every preset, checked with an independent meter | integrated loudness within 1 LU of the target, true peak <= ceiling |
+| Plug-in | loaded like a host: against the deck at block sizes 1..1024 with a change; state stored and loaded; Bypass; latency; parameter ids; the SDK's validator | bit-exact; 71 of 71 values, bit-exact; bit-exact; 72 / 144 samples; unique; 47 + 537 tests passed |
+| Slider positions | every value's positions: range, order, every shipped value back within a step | exact ends, rising, within a step (2 % on log scales) |
 
 The offline render check runs the real deck code on synthetic songs (fades, pauses, loud entries) and measures the
 results with a separate, independently written loudness and true-peak meter.
 
-## 20. Sources
+## 21. Sources
 
 Standards, papers and books the design is based on. All links were checked on 2026-10-26; some publishers' pages
 need a membership or a purchase for the full text.
@@ -689,10 +734,10 @@ need a membership or a purchase for the full text.
 | # | Source | Used for |
 |---|---|---|
 | [1] | ITU-R BS.1770-5 (2023), *Algorithms to measure audio programme loudness and true-peak audio level* - <https://www.itu.int/rec/R-REC-BS.1770-5-202311-I> | K-weighting, gating, true peak (2.5, 2.6, 3) |
-| [2] | EBU R 128, *Loudness normalisation and permitted maximum level of audio signals* - <https://tech.ebu.ch/publications/r128> | loudness normalisation, LUFS / LU, -1 dBTP (18) |
+| [2] | EBU R 128, *Loudness normalisation and permitted maximum level of audio signals* - <https://tech.ebu.ch/publications/r128> | loudness normalisation, LUFS / LU, -1 dBTP (19) |
 | [3] | EBU Tech 3341, *Loudness Metering: "EBU Mode" metering to supplement EBU R 128* - <https://tech.ebu.ch/publications/tech3341> | momentary / short-term / integrated, test cases (3, 19) |
 | [4] | EBU Tech 3342, *Loudness Range: a measure to supplement EBU R 128* - <https://tech.ebu.ch/publications/tech3342> | loudness range (3) |
-| [5] | EBU Tech 3344, *Guidelines for distribution and reproduction in accordance with EBU R 128* - <https://tech.ebu.ch/publications/tech3344> | the DAB+ preset (18) |
+| [5] | EBU Tech 3344, *Guidelines for distribution and reproduction in accordance with EBU R 128* - <https://tech.ebu.ch/publications/tech3344> | the DAB+ preset (19) |
 | [6] | D. Giannoulis, M. Massberg, J. D. Reiss, *Digital Dynamic Range Compressor Design - A Tutorial and Analysis*, J. Audio Eng. Soc. 60(6), 2012, pp. 399-408 - <https://aes2.org/publications/elibrary-page/?id=16354> | compressor structure, soft knee, smoothing (6) |
 | [7] | U. Zoelzer (ed.), *DAFX - Digital Audio Effects*, 2nd ed., Wiley 2011 - <https://dafx.de/DAFX_Book_Page_2nd_edition/> | look-ahead limiting, nonlinear processing (9, 13) |
 | [8] | R. Bristow-Johnson, *Audio EQ Cookbook* (W3C note) - <https://www.w3.org/TR/audio-eq-cookbook/> | biquads, shelves (2.1, 10) |
@@ -701,7 +746,7 @@ need a membership or a purchase for the full text.
 | [11] | J. O. Smith III, *Digital Audio Resampling Home Page* - <https://ccrma.stanford.edu/~jos/resample/> | band-limited interpolation (17) |
 | [12] | E. Larsen, R. M. Aarts, *Reproducing Low-Pitched Signals through Small Loudspeakers*, J. Audio Eng. Soc. 50(3), 2002, pp. 147-164 - <https://aes2.org/publications/elibrary-page/?id=11088>; summary at <https://research.tue.nl/en/publications/reproducing-low-pitched-signals-through-small-loudspeakers/> | bass enhancer (8) |
 | [13] | E. Larsen, R. M. Aarts, *Audio Bandwidth Extension: Application of Psychoacoustics, Signal Processing and Loudspeaker Design*, Wiley 2004 | bass enhancer (8) |
-| [14] | ITU-R BS.412-9, *Planning standards for terrestrial FM sound broadcasting at VHF* - <https://www.itu.int/rec/R-REC-BS.412/en> | multiplex power limit, the FM Station preset (18) |
+| [14] | ITU-R BS.412-9, *Planning standards for terrestrial FM sound broadcasting at VHF* - <https://www.itu.int/rec/R-REC-BS.412/en> | multiplex power limit, the FM Station preset (19) |
 | [15] | A. Simper, *Linear Trap Optimised SVF* (Cytomic technical paper) - <https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf> | state-variable filters of the colour stage (2.3, 5) |
 | [16] | S. H. Linkwitz, *Active Crossover Networks for Noncoincident Drivers*, J. Audio Eng. Soc. 24(1), 1976, pp. 2-8 - <https://aes2.org/publications/elibrary-page/?id=2649>; see also <https://www.linkwitzlab.com/filters.htm> | Linkwitz-Riley band splits (2.2, 7, 11) |
 | [17] | ISO 226:2023, *Acoustics - Normal equal-loudness-level contours* - <https://www.iso.org/standard/83117.html> | loudness contour (5.4) |
@@ -710,7 +755,8 @@ need a membership or a purchase for the full text.
 | [20] | F. J. Harris, *On the use of windows for harmonic analysis with the discrete Fourier transform*, Proc. IEEE 66(1), 1978 - <https://doi.org/10.1109/PROC.1978.10837> | Hann window (15.3) |
 | [21] | Steinberg, ASIO SDK (used under its GPL-3.0 option) - <https://www.steinberg.net/developers/> | ASIO driver interface (16.3) |
 | [22] | D. Reid, miniaudio (public domain / MIT-0) - <https://miniaud.io/> | WASAPI, DirectSound and MME streams (16.3) |
-| [23] | AES Technical Council, TD1004 (2015) and TD1008 (2021), *Recommendations for loudness of internet audio streaming and on-demand distribution* (TD1008 later became the AES77 standard) - AES technical documents: <https://aes2.org/?p=50870> | streaming targets, the Web Stream preset (18) |
+| [23] | AES Technical Council, TD1004 (2015) and TD1008 (2021), *Recommendations for loudness of internet audio streaming and on-demand distribution* (TD1008 later became the AES77 standard) - AES technical documents: <https://aes2.org/?p=50870> | streaming targets, the Web Stream preset (19) |
+| [24] | Steinberg Media Technologies, plug-in SDK v3.8.1 (MIT licence; the plug-in interfaces, base classes, validator and test hosts) - <https://github.com/steinbergmedia/vst3sdk> | the plug-in (18) |
 
 Besides these sources the design draws on the project's own measurements, recorded with each decision in
 `docs/design.md`.

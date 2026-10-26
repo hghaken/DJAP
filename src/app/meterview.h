@@ -6,7 +6,7 @@
 // Custom-drawn, double-buffered, sized by the window's DPI.
 #pragma once
 
-#include "audioio.h"
+#include "monitor.h"
 #include "deck.h"
 
 #include <windows.h>
@@ -35,6 +35,7 @@ constexpr int kMeterRows = 6, kMeterTargets = 8;
 const char* meterStage(int target); // the preset window's tab of a target ("Leveller", ...)
 
 void registerMeterView(HINSTANCE instance);
+void unregisterMeterView(); // a plug-in DLL, before it is unloaded (the class would point into freed code)
 // The panel has its own tooltips, one per part (bars, stage rows, numbers).
 HWND createMeterView(HWND parent, int id);
 void setMeterView(HWND view, const MeterViewData& data); // copies and repaints

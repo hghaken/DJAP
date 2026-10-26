@@ -16,6 +16,36 @@
   fills in the driver's DLL path, so `AsioHost::drivers()` reads it from the registry.
 - **Trademark:** ASIO is a trademark and software of Steinberg Media Technologies GmbH. The ASIO logo is not used.
 
+## Steinberg VST 3 SDK v3.8.1 (plug-in)
+
+- **What:** the plug-in interfaces and base classes (`pluginterfaces`, `base`, `public.sdk`: the factory, the
+  single-component effect, parameters, the plug-in view base, the Windows module entry), compiled into
+  `DJAP.vst3`; its validator, editor test host and module-info tool are built for the tests only. VSTGUI is not
+  used (the plug-in's window is DJAP's own Win32 code).
+- **Licence:** MIT, Copyright (c) 2026 Steinberg Media Technologies GmbH:
+
+  > Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
+  > documentation files (the "Software"), to deal in the Software without restriction, including without limitation
+  > the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and
+  > to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+  >
+  > The above copyright notice and this permission notice shall be included in all copies or substantial portions
+  > of the Software.
+  >
+  > THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+  > TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+  > THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+  > CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+  > DEALINGS IN THE SOFTWARE.
+
+  MIT allows use in GPL v3 software.
+- **Not in the repository:** `third_party/vst3sdk/` is git-ignored; `tools\get_vst3sdk.ps1 -Yes` clones the tag
+  `v3.8.1_build_84` with its submodules from github.com/steinbergmedia/vst3sdk and checks its commit
+  (`3cdf9ca5d1f5b1b21e0a86832aa4abe55607bd96`). Used unchanged.
+- **Trademark:** VST is a registered trademark of Steinberg Media Technologies GmbH. The name and the VST
+  Compatible Logo (`docs/images/vst-compatible-logo.png`, from the SDK) are used as the SDK's usage guidelines
+  ask: on the download section of `README.md`, with this attribution.
+
 ## miniaudio 0.11.22
 
 - **What:** `third_party/miniaudio/miniaudio.h` (David Reid), the device layer for WASAPI, DirectSound and MME.

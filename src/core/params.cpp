@@ -1,5 +1,6 @@
 #include "params.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace ap {
@@ -334,6 +335,61 @@ void normaliseValues(PresetValues& v) {
     if (v[pCompSideHpf] > 0 && v[pCompSideHpf] < 40) v[pCompSideHpf] = 40;
     if (v[pCompMakeup] < 0) v[pCompMakeup] = -1;
     enforceSplits(v, 0);
+}
+
+namespace {
+constexpr int kLogPositions = 300;
+
+struct Scale {
+    bool log = false, special = false;
+    double lo = 0.0, hi = 1.0;
+    int positions = 1; // the highest position
+};
+
+Scale scaleOf(int p) {
+    const ParamInfo& in = paramInfo(p);
+    Scale s;
+    s.lo = in.min;
+    s.hi = in.max;
+    if (p == pCompMakeup) s.special = true, s.lo = 0.0;
+    if (p == pCompSideHpf) s.special = true, s.lo = 40.0;
+    const std::string unit = in.unit;
+    s.log = (unit == "Hz" || unit == "ms" || unit == "s") && s.lo > 0.0 && s.hi / s.lo >= 8.0;
+    s.positions = s.log ? kLogPositions : static_cast<int>(std::lround((s.hi - s.lo) / in.step));
+    if (s.special) ++s.positions;
+    return s;
+}
+} // namespace
+
+int paramPositions(int p) { return scaleOf(p).positions; }
+
+double paramValueAt(int p, int pos) {
+    const ParamInfo& in = paramInfo(p);
+    const Scale s = scaleOf(p);
+    pos = std::min(s.positions, std::max(0, pos));
+    if (s.special) {
+        if (pos <= 0) return p == pCompMakeup ? -1.0 : 0.0;
+        --pos;
+    }
+    const int n = s.positions - (s.special ? 1 : 0);
+    double v = s.log ? std::round(s.lo * std::pow(s.hi / s.lo, static_cast<double>(pos) / n) / in.step) * in.step
+                     : s.lo + pos * in.step;
+    const double scale = std::pow(10.0, in.decimals);
+    v = std::round(v * scale) / scale; // no 0.30000000000000004
+    return std::min(s.hi, std::max(s.lo, v));
+}
+
+int paramPositionOf(int p, double v) {
+    const Scale s = scaleOf(p);
+    int off = 0;
+    if (s.special) {
+        if ((p == pCompMakeup && v < 0.0) || (p == pCompSideHpf && v <= 0.0)) return 0;
+        off = 1;
+    }
+    const int n = s.positions - off;
+    const double t = s.log ? std::log(std::max(v, s.lo) / s.lo) / std::log(s.hi / s.lo) * n
+                           : (v - s.lo) / paramInfo(p).step;
+    return off + static_cast<int>(std::min<long>(n, std::max<long>(0, std::lround(t))));
 }
 
 double workingLevel(const PresetValues& v) {

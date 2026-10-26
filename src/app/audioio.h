@@ -12,6 +12,7 @@
 #include "analysis.h"
 #include "engine.h"
 #include "loudness.h"
+#include "monitor.h"
 #include "params.h"
 #include "settings.h"
 #include "sysaudio.h"
@@ -44,41 +45,6 @@ SysInputs sysInputsFrom(const Settings& s);
 AsioChannels asioChannelsFrom(const Settings& s);   // deck B's pairs 0 (unused) with one channel
 void sysRoutesFrom(const Settings& s, SysRoute routes[2]); // WASAPI / DirectSound / MME devices of each deck
 
-struct DeckMeters {
-    bool live = false;                    // records arrived during the last 0.5 s
-    double inM = kFloorDb, inI = kFloorDb; // input loudness (LUFS)
-    double outM = kFloorDb, outS = kFloorDb, outI = kFloorDb, outLra = 0.0;
-    double outMaxM = kFloorDb;
-    double tpNow[2] = {kFloorDb, kFloorDb}; // output true peak, held (dBTP)
-    double inPeak[2] = {kFloorDb, kFloorDb}; // input sample peak, held the same way (dBFS)
-    double tpMax = kFloorDb;              // output true peak since the last reset
-    double levellerDb = 0, compressorDb = 0, deEsserDb = 0, clipperDb = 0, limiterDb = 0;
-    double densityDb[kMaxBands] = {};
-    int bands = 0;
-    uint8_t flags = 0;                    // MeterFlag bits of the newest record
-    double seconds = 0;                   // measured since the last reset
-    double compressorIn = kFloorDb;       // compressor detector level (same scale as its threshold)
-    double chain[kChainTaps] = {};        // mean L^2 + R^2 per frame at each point of the chain, over about 0.4 s
-    uint16_t active = 0;                  // MeterRecord::active of the newest record
-};
-
-// What the graphs show (analysis.h): spectra and stereo statistics of a deck's input and output, and the last 60 s
-// of loudness and gains, a point every 0.1 s.
-struct DeckAnalysis {
-    static constexpr int kHistory = 600;
-    struct Point {
-        float inM = static_cast<float>(kFloorDb), outM = static_cast<float>(kFloorDb); // LUFS
-        float leveller = 0, compressor = 0, density = 0;                                 // dB (compressor <= 0)
-        bool live = false;
-    };
-    SpectrumAnalyzer specIn, specOut;
-    StereoAnalyzer stereoIn, stereoOut;
-    std::vector<Point> history = std::vector<Point>(kHistory); // ring
-    int historyPos = 0;
-    // the history oldest first
-    const Point& at(int i) const { return history[static_cast<size_t>((historyPos + i) % kHistory)]; }
-};
-
 class AudioIO {
 public:
     AudioIO();
@@ -93,8 +59,8 @@ public:
 
     // GUI timer (20 Hz): drains the meter rings.
     void poll();
-    const DeckMeters& meters(int d) const { return meters_[d]; }
-    const DeckAnalysis& analysis(int d) const { return analysis_[d]; }
+    const DeckMeters& meters(int d) const { return monitor_[d].meters(); }
+    const DeckAnalysis& analysis(int d) const { return monitor_[d].analysis(); }
     void resetMeters(int d);
 
     // Test aid without a device: plays `file` (2 channels = deck A, 4 = A + B) through the engine in real time,
@@ -145,13 +111,7 @@ private:
     PresetValues values_[2] = {};
     DeckControl control_[2];
     bool haveDeck_[2] = {false, false};
-    LoudnessMeter in_[2], out_[2];
-    DeckMeters meters_[2];
-    double quietFor_[2] = {1e9, 1e9};
-    void drainTaps(int d);
-    DeckAnalysis analysis_[2];
-    double analysisRate_ = 0;
-    int historyTick_ = 0;
+    DeckMonitor monitor_[2];
 
     std::thread sim_;
     std::atomic<bool> simRunning_{false}, simStop_{false};

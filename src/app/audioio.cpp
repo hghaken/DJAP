@@ -28,12 +28,7 @@ void sysRoutesFrom(const Settings& s, SysRoute routes[2]) {
         routes[d] = d == 1 && s.decks == 1 ? SysRoute() : SysRoute{s.inDevice[d], s.outDevice[d]};
 }
 
-AudioIO::AudioIO() {
-    for (int d = 0; d < 2; ++d) {
-        in_[d].reset();
-        out_[d].reset();
-    }
-}
+AudioIO::AudioIO() = default;
 
 AudioIO::~AudioIO() {
     fadeOutDecks(); // Exit, Windows ending the session, the setup closing the program
@@ -214,133 +209,10 @@ void AudioIO::poll() {
         stopDevice(); // with ASIO too, when it was a deck's input
         deviceError_ = "an audio device stopped (unplugged, or taken by another program); start the audio again";
     }
-    for (int d = 0; d < 2; ++d) {
-        DeckMeters& m = meters_[d];
-        MeterRecord recs[64];
-        int n, total = 0;
-        float tp[2] = {0, 0}, pin[2] = {0, 0};
-        double comp = 0, dess = 0, clip = 0, lim = 0;
-        while ((n = engine_.deck(d).meters().pop(recs, 64)) > 0) {
-            for (int i = 0; i < n; ++i) {
-                const MeterRecord& r = recs[i];
-                in_[d].addRecord(r.energyIn, r.frames);
-                out_[d].addRecord(r.energyOut, r.frames);
-                tp[0] = std::max(tp[0], r.tpOut[0]);
-                tp[1] = std::max(tp[1], r.tpOut[1]);
-                pin[0] = std::max(pin[0], r.peakIn[0]);
-                pin[1] = std::max(pin[1], r.peakIn[1]);
-                comp = std::max(comp, static_cast<double>(r.compressorDb));
-                dess = std::max(dess, static_cast<double>(r.deEsserDb));
-                clip = std::max(clip, static_cast<double>(r.clipperDb));
-                lim = std::max(lim, static_cast<double>(r.limiterDb));
-                m.levellerDb = r.levellerDb;
-                m.compressorIn = r.compressorIn;
-                m.bands = r.bands;
-                for (int b = 0; b < kMaxBands; ++b) m.densityDb[b] = r.densityDb[b];
-                m.flags = r.flags;
-                m.seconds += r.frames / std::max(1.0, engine_.sampleRate());
-                // the signal-chain bars: each point's level, a 0.4 s one-pole over the records
-                if (r.frames > 0) {
-                    const double a = std::min(1.0, r.frames / (0.4 * std::max(1.0, engine_.sampleRate())));
-                    for (int k = 0; k < kChainTaps; ++k) m.chain[k] += a * (r.chain[k] / r.frames - m.chain[k]);
-                }
-                m.active = r.active;
-            }
-            total += n;
-        }
-        quietFor_[d] = total > 0 ? 0.0 : quietFor_[d] + dt;
-        m.live = quietFor_[d] < 0.5;
-        if (total > 0) {
-            m.compressorDb = comp;
-            m.deEsserDb = dess;
-            m.clipperDb = clip;
-            m.limiterDb = lim;
-        }
-        // true peak: the newest value, falling 20 dB/s when lower
-        for (int c = 0; c < 2; ++c) {
-            const double now = linToDb(tp[c]);
-            m.tpNow[c] = std::max(now, m.tpNow[c] - 20.0 * dt);
-            m.tpMax = std::max(m.tpMax, now);
-            m.inPeak[c] = std::max(linToDb(pin[c]), m.inPeak[c] - 20.0 * dt);
-        }
-        m.inM = in_[d].momentary();
-        m.inI = in_[d].integrated();
-        m.outM = out_[d].momentary();
-        m.outS = out_[d].shortTerm();
-        m.outI = out_[d].integrated();
-        m.outLra = out_[d].loudnessRange();
-        m.outMaxM = out_[d].maxMomentary();
-        if (!m.live) {
-            m.tpNow[0] = m.tpNow[1] = kFloorDb;
-            m.inPeak[0] = m.inPeak[1] = kFloorDb;
-            m.levellerDb = m.compressorDb = m.deEsserDb = m.clipperDb = m.limiterDb = 0;
-            m.compressorIn = kFloorDb;
-            for (double& x : m.densityDb) x = 0;
-            for (double& x : m.chain) x = 0;
-        }
-        drainTaps(d);
-    }
-    // graph history: a point every 0.1 s
-    if (++historyTick_ >= 2) {
-        historyTick_ = 0;
-        for (int d = 0; d < 2; ++d) {
-            const DeckMeters& m = meters_[d];
-            DeckAnalysis::Point p;
-            p.live = m.live;
-            p.inM = static_cast<float>(m.inM);
-            p.outM = static_cast<float>(m.outM);
-            p.leveller = static_cast<float>(m.levellerDb);
-            p.compressor = static_cast<float>(-m.compressorDb);
-            double dens = 0;
-            for (int b = 0; b < m.bands; ++b) dens += m.densityDb[b];
-            p.density = static_cast<float>(m.bands > 0 ? dens / m.bands : 0.0);
-            DeckAnalysis& a = analysis_[d];
-            a.history[static_cast<size_t>(a.historyPos)] = p;
-            a.historyPos = (a.historyPos + 1) % DeckAnalysis::kHistory;
-        }
-    }
+    for (int d = 0; d < 2; ++d) monitor_[d].poll(engine_.deck(d), engine_.sampleRate(), dt);
 }
 
-void AudioIO::drainTaps(int d) {
-    DeckAnalysis& a = analysis_[d];
-    const double fs = engine_.sampleRate();
-    if (fs > 0 && fs != analysisRate_) { // a new rate: every analyzer starts again
-        analysisRate_ = fs;
-        for (DeckAnalysis& x : analysis_) {
-            x.specIn.reset(fs);
-            x.specOut.reset(fs);
-            x.stereoIn.reset(fs);
-            x.stereoOut.reset(fs);
-        }
-    }
-    constexpr int kBlock = 1024;
-    TapFrame frames[kBlock];
-    float inL[kBlock], inR[kBlock], outL[kBlock], outR[kBlock], inMono[kBlock], outMono[kBlock];
-    int n;
-    while ((n = engine_.deck(d).taps().pop(frames, kBlock)) > 0) {
-        for (int i = 0; i < n; ++i) {
-            inL[i] = frames[i].inL;
-            inR[i] = frames[i].inR;
-            outL[i] = frames[i].outL;
-            outR[i] = frames[i].outR;
-            inMono[i] = 0.5f * (inL[i] + inR[i]);
-            outMono[i] = 0.5f * (outL[i] + outR[i]);
-        }
-        a.specIn.feed(inMono, n);
-        a.specOut.feed(outMono, n);
-        a.stereoIn.feed(inL, inR, n);
-        a.stereoOut.feed(outL, outR, n);
-    }
-}
-
-void AudioIO::resetMeters(int d) {
-    in_[d].reset();
-    out_[d].reset();
-    analysis_[d].history.assign(DeckAnalysis::kHistory, DeckAnalysis::Point());
-    DeckMeters fresh;
-    fresh.live = meters_[d].live;
-    meters_[d] = fresh;
-}
+void AudioIO::resetMeters(int d) { monitor_[d].reset(); }
 
 bool AudioIO::simulate(const std::filesystem::path& file, std::string& error) {
     stopSimulation();

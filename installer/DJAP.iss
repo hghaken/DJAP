@@ -14,6 +14,11 @@
   #error DJAP.exe not found in BuildDir: run build.cmd first
 #endif
 #define AppVersion GetStringFileInfo(AppExe, "ProductVersion")
+; the plug-in for DJ software (a bundle folder), when the build made it (third_party/vst3sdk present)
+#define PluginBundle BuildDir + "\VST3\Release\DJAP.vst3"
+#if DirExists(PluginBundle)
+  #define HavePlugin
+#endif
 #define AppNumVersion GetVersionNumbersString(AppExe)
 ; the setup's identity (AudioProcessor's, so DJAP updates it); tests compile with /DAppGuid=<another> so they never
 ; meet the real installation
@@ -54,6 +59,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 PrivilegesRequiredOverridesAllowed=commandline
 CloseApplications=yes
+; only the program's own files: a plug-in held by DJ software is never a reason to close that program (in the middle
+; of a set); it is replaced at the next start of Windows instead (restartreplace below)
+CloseApplicationsFilter=DJAP.exe,DJAPCmd.exe
 RestartApplications=no
 ; the program keeps running in the notification area: setup and uninstall ask to end it first (its menu: Exit)
 AppMutex={#AppMutexes}
@@ -72,7 +80,7 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 VacTitle=VAC (Virtual Audio Cable)
 VacSubtitle=Needed only to run Windows' own sound through DJAP.
-VacText=VAC was not found on this PC.%n%nYou need it (the free Lite version is enough) to send ordinary Windows sound - browser, music player, video - through DJAP with one channel: make a VAC line the Windows default playback device, choose that line as deck A's input in the Audio window and your speakers as the output.%n%nDJ use with two decks through an ASIO audio interface does not need it.%n%nVAC is a separate program by another author and setup does not install it. Leave "Open the VAC download page" ticked on the last page to get it.
+VacText=VAC was not found on this PC.%n%nYou need it (the free Lite version is enough) to send ordinary Windows sound - browser, music player, video - through DJAP with one channel: make a VAC line the Windows default playback device, choose that line as the input in DJAP's Setup window and your speakers as the output.%n%nDJ use with two decks through an ASIO audio interface does not need it.%n%nVAC is a separate program by another author and setup does not install it. Leave "Open the VAC download page" ticked on the last page to get it.
 MediaTitle=Media Foundation
 MediaSubtitle=A part of Windows that this edition does not have.
 MediaText=This Windows edition (an N edition) has no Media Foundation. DJAP itself runs without it, but the command-line tool DJAPCmd needs it to start and to read MP3, M4A, WMA and FLAC files.%n%nSetup can add Microsoft's Media Feature Pack now; Windows downloads it from Windows Update, which can take a few minutes.
@@ -94,15 +102,42 @@ OpenVacPage=Open the VAC download page
 DeleteSettings=Also delete your DJAP settings and own presets?%n%n%1
 StartupGroup=When Windows starts:
 StartupTask=Start DJAP in the notification area, with the audio devices used last
+TypeFull=DJAP and the plug-in for DJ software
+TypeProgram=Only the DJAP program
+TypePlugin=Only the plug-in for DJ software
+TypeCustom=Custom
+CompProgram=DJAP - the program (two decks or one channel, in the notification area)
+CompPlugin=Plug-in for DJ software (one deck per plug-in, the same presets and colours)
+
+[Types]
+Name: "full"; Description: "{cm:TypeFull}"
+Name: "program"; Description: "{cm:TypeProgram}"
+#ifdef HavePlugin
+Name: "plugin"; Description: "{cm:TypePlugin}"; Check: IsAdminInstallMode
+#endif
+Name: "custom"; Description: "{cm:TypeCustom}"; Flags: iscustom
+
+[Components]
+Name: "program"; Description: "{cm:CompProgram}"; Types: full program custom
+#ifdef HavePlugin
+; into the computer's plug-in folder (Common Files): an installation for all users only
+Name: "plugin"; Description: "{cm:CompPlugin}"; Types: full plugin custom; Check: IsAdminInstallMode
+#endif
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "startup"; Description: "{cm:StartupTask}"; GroupDescription: "{cm:StartupGroup}"
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Components: program; Flags: unchecked
+Name: "startup"; Description: "{cm:StartupTask}"; GroupDescription: "{cm:StartupGroup}"; Components: program
 
 [Files]
 ; never the developer's DJAP.ini from the build folder: settings live in %APPDATA%\DJAP
-Source: "{#BuildDir}\DJAP.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\DJAPCmd.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\DJAP.exe"; DestDir: "{app}"; Components: program; Flags: ignoreversion
+Source: "{#BuildDir}\DJAPCmd.exe"; DestDir: "{app}"; Components: program; Flags: ignoreversion
+#ifdef HavePlugin
+; the plug-in as one file in a folder of its own, VST3\DJAP\DJAP.vst3 (client, 2026-10-26: the bundle folder hid the
+; module three folders deep; hosts read the single-file form too); a module in use by DJ software is replaced when
+; Windows starts again
+Source: "{#PluginBundle}\Contents\x86_64-win\DJAP.vst3"; DestDir: "{commoncf64}\VST3\DJAP"; Components: plugin; Flags: ignoreversion restartreplace uninsrestartdelete
+#endif
 ; no .pdb symbol files: the setup is public and they hold the build machine's paths; make_installer.ps1 keeps them
 ; next to the setup in release\ for --diag reports
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
@@ -121,16 +156,16 @@ Type: files; Name: "{app}\DJAP.pdb"
 Type: files; Name: "{app}\DJAPCmd.pdb"
 
 [Icons]
-Name: "{autoprograms}\DJAP"; Filename: "{app}\DJAP.exe"
+Name: "{autoprograms}\DJAP"; Filename: "{app}\DJAP.exe"; Components: program
 Name: "{autoprograms}\DJAP manual"; Filename: "{app}\DJAP-Manual.pdf"
 Name: "{autoprograms}\DJAP technical manual"; Filename: "{app}\DJAP-Technical-Manual.pdf"
-Name: "{autodesktop}\DJAP"; Filename: "{app}\DJAP.exe"; Tasks: desktopicon
+Name: "{autodesktop}\DJAP"; Filename: "{app}\DJAP.exe"; Tasks: desktopicon; Components: program
 
 [Run]
-Filename: "{app}\DJAP.exe"; Description: "{cm:LaunchProgram,DJAP}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\DJAP.exe"; Description: "{cm:LaunchProgram,DJAP}"; Components: program; Flags: nowait postinstall skipifsilent
 ; an update started by the program itself (/UPDATE=1, silent): the program comes back after it, as the user
-Filename: "{app}\DJAP.exe"; Parameters: "{code:RestartParams}"; Flags: nowait runasoriginaluser; Check: IsUpdateRun
-Filename: "{#VacPage}"; Description: "{cm:OpenVacPage}"; Flags: shellexec nowait postinstall skipifsilent; Check: not VacFound
+Filename: "{app}\DJAP.exe"; Parameters: "{code:RestartParams}"; Components: program; Flags: nowait runasoriginaluser; Check: IsUpdateRun
+Filename: "{#VacPage}"; Description: "{cm:OpenVacPage}"; Components: program; Flags: shellexec nowait postinstall skipifsilent; Check: not VacFound
 
 [Code]
 const
@@ -311,12 +346,15 @@ end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
-  Result := ((PageID = VacPage.ID) and VacPresent) or ((PageID = MediaPage.ID) and MediaPresent);
+  // the VAC and Media Foundation pages are about the program, not the plug-in
+  Result := ((PageID = VacPage.ID) and (VacPresent or not WizardIsComponentSelected('program'))) or
+            ((PageID = MediaPage.ID) and (MediaPresent or not WizardIsComponentSelected('program')));
 end;
 
 function AddMedia: Boolean;
 begin
-  Result := not MediaPresent and IsAdminInstallMode and MediaPage.Values[0] and not IsUpdateRun;
+  Result := not MediaPresent and IsAdminInstallMode and MediaPage.Values[0] and not IsUpdateRun and
+            WizardIsComponentSelected('program');
 end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo,
@@ -325,6 +363,7 @@ var
   Asio: String;
 begin
   Result := MemoDirInfo + NewLine + NewLine;
+  if MemoComponentsInfo <> '' then Result := Result + MemoComponentsInfo + NewLine + NewLine;
   if MemoTasksInfo <> '' then Result := Result + MemoTasksInfo + NewLine + NewLine;
   Result := Result + CustomMessage('ReadyChecks') + NewLine + Space + CustomMessage('ReadyCore') + NewLine;
   if MediaPresent then
@@ -398,6 +437,24 @@ begin
   RemoveDir(Dir);
 end;
 
+// 0.1.106 put the plug-in into a bundle folder, VST3\DJAP.vst3; now it is VST3\DJAP\DJAP.vst3. The old folder goes
+// (else a host would list DJAP twice); a module still loaded by DJ software is deleted when Windows starts again.
+procedure RemoveOldPluginBundle;
+var
+  Dir, Module: String;
+begin
+  if not IsAdminInstallMode then Exit;
+  Dir := ExpandConstant('{commoncf64}\VST3\DJAP.vst3');
+  if not DirExists(Dir) then Exit;
+  Log('Removing the plug-in bundle of an earlier version: ' + Dir);
+  DelTree(Dir, True, True, True);
+  Module := Dir + '\Contents\x86_64-win\DJAP.vst3';
+  if FileExists(Module) then begin
+    Log('The old plug-in is in use: deleted when Windows starts again');
+    RestartReplace(Module, '');
+  end;
+end;
+
 const
   RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run';
 
@@ -415,7 +472,7 @@ end;
 procedure SetStartWithWindows;
 begin
   // an update from the program keeps what the user set there (the task list is the first installation's)
-  if IsUpdateRun then Exit;
+  if IsUpdateRun or not WizardIsComponentSelected('program') then Exit;
   if WizardIsTaskSelected('startup') then begin
     if not RegWriteStringValue(HKCU, RunKey, '{#RunValue}', '"' + ExpandConstant('{app}\DJAP.exe') + '" --autostart') then
       Log('Start with Windows: the Run value could not be written');
@@ -425,7 +482,10 @@ end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if CurStep = ssInstall then RemoveOldProgram;
+  if CurStep = ssInstall then begin
+    RemoveOldProgram;
+    RemoveOldPluginBundle;
+  end;
   if CurStep = ssPostInstall then begin
     SetStartWithWindows;
     if AddMedia then InstallMediaPack;

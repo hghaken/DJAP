@@ -585,3 +585,70 @@ preset (`[Preset X]`) and per colour (`[Colour X]`), readable and editable by ha
 | Input on another clock | simulated clocks -500..+500 ppm, late callbacks, capture pause, output pause; read speed 1; fractional speed 1.0001 with tones; engine with one deck from an async input | no xruns in normal running, drift within 3 ppm, fill within 0.5 ms; recovers; bit-exact; +-0.1 dB to 16 kHz, residual < -85 dB to 10 kHz; 0 allocations |
 
 Not verified by Claude: listening, and any live test on audible outputs (only with the client's OK).
+
+## 10. Plug-in
+
+Client, 2026-10-26: plug-in support for DJ software (R6), in the same setup with a choice of components ("1 setup
+with a choice"), a small window of its own at once ("directly a small window"), every value a parameter ("all"),
+and the format's name only at the downloads, with its logo ("only plug-in in the texts; VST3 at the downloads and
+the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3sdk` (not committed;
+`tools/get_vst3sdk.ps1`); `src/plugin/`.
+
+- **One deck per plug-in**: stereo in, stereo out (other bus layouts are refused), 32-bit float, any sample rate
+  and block size. The audio path is `DeckProcessor::process` on the host's buffers in place - the program's deck,
+  bit for bit (`plugin_test`). Activation prepares the deck (allocations happen there, never while processing) and
+  fades in over 5 ms like a live start.
+- **Processor and controller in one object** (the SDK's single-component effect): the window reads the deck's
+  meter and tap rings directly (`DeckMonitor`, `src/core/monitor.*`, shared with the program). Such a plug-in
+  cannot be split over two computers by a host; DJ software does not do that.
+- **Parameters**: the 71 chain values, each with the program's slider positions as its host steps
+  (`paramPositions` / `paramValueAt` / `paramPositionOf` in `params.*`: the same log scale for times and
+  frequencies, "auto" / "off" at the left end), grouped by stage (14 units). Ids are a hash of the ini key (`pluginids.h`), so
+  values can be added or reordered without breaking a host's project. Four more: the preset list and the colour list
+  (the program's presets and colours from `%APPDATA%\DJAP\DJAP.ini`, read only, or the shipped ones; a last entry
+  "(other values)"), Bypass (the host's bypass flag: the input delayed by the look-ahead) and the look-ahead (0..5
+  ms in steps of 0.1). All can be automated.
+- **Choosing a preset or colour** (window or host): the processor copies that preset's values into its own at the
+  next block; the controller loads the same values and tells the host to read them again
+  (`restartComponent(kParamValuesChanged)`). Choosing the preset that is already chosen loads its values again (back
+  after changes). A value set by the host is the value of its step; the controller keeps the exact values of a
+  preset or a project (an 800 Hz split stays 800, not the 810 of the nearest step).
+- **Edits reach the processing directly** (client's DJ program, 2026-10-26: the plug-in processed, but no edit in
+  its window changed the sound - the program never passes a parameter change to `process()` for a plug-in whose
+  controller and processor are one object; found with the diagnostics, `plugindiag.*`): every edit in the window
+  also hands the controller's whole state to the processing through a second sequence-locked slot. Values the host
+  sets on the controller go the same way as long as the host has never delivered a parameter change to `process()`
+  itself; once it has, its own sample-accurate changes are used alone, so the controller's later copies never
+  overtake its automation.
+- **The coefficients** (`makeDeckConfig`) are designed on the audio thread when the host changed a value - no
+  allocation, a few microseconds, once per block; the program designs them on its GUI thread.
+- **Latency**: the look-ahead in samples, reported to the host (`getLatencySamples`), and a new value announced
+  (`kLatencyChanged`) when the look-ahead or the sample rate changes, so the host keeps the decks in time.
+- **State** (a project, a host preset): a version, the preset and colour names, look-ahead, Bypass and every value
+  by its ini key - the values themselves, so a project sounds the same on a computer where that preset does not
+  exist or was changed; unknown keys of a newer version are skipped.
+- **Window** (`pluginview.*`, 740 x 640 at 96 DPI, scaled to the host window's DPI): the program's deck strip -
+  DJAP and the version, look-ahead, Bypass; preset and colour; the four bass sliders (as in the program: bass level
+  in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same
+  code). On the brushed metal (`theme.*`); tooltips on every control. Its own common controls 6 through the DLL's
+  manifest and `ISOLATION_AWARE_ENABLED`. The window classes and GDI+ live while a window of the DLL is open and are
+  removed with the last one (a class left behind would point into an unloaded DLL).
+- **Build**: `src/plugin/CMakeLists.txt` in its own directory, so the SDK's compiler options (`/fp:fast`, `/W3`) do
+  not reach the program; the plug-in's own files are compiled with `/W4 /WX /fp:precise`. The SDK is added with
+  `EXCLUDE_FROM_ALL`: its validator and editor test host are built only for the tests. The build never copies or
+  links anything into the computer's plug-in folder (`SMTG_CREATE_PLUGIN_LINK` off). Output:
+  `build/VST3/Release/DJAP.vst3` (a bundle folder: the module, `moduleinfo.json`, the program's icon; the setup
+  installs only the module).
+- **Setup**: a "Select Components" page - DJAP (the program) and the plug-in, both chosen by default; the plug-in
+  only in an installation for all users, as one file in a folder of its own: `{commoncf64}\VST3\DJAP\DJAP.vst3`
+  (client, 2026-10-26: the bundle folder `VST3\DJAP.vst3` of 0.1.106 hid the module three folders deep; hosts read
+  the single-file form too; the setup removes that old folder, a module still loaded at the next Windows start). Restart Manager closes only DJAP's own
+  programs (`CloseApplicationsFilter`); a plug-in module held by DJ software is replaced when Windows starts again
+  (`restartreplace`), never by closing that software.
+- **Tests**: `plugin_test` loads the built bundle like a host (the SDK's hosting classes) - bit-exact against a
+  `DeckProcessor` with the same values for 8 s at block sizes 512 / 333 / 1024 / 64 / 1 with a target change
+  half-way; a state stored and loaded into a new instance (71 of 71 values, bit-exact output); Bypass = the input
+  delayed by the look-ahead, bit-exact; the latency at 1.5 and 3.0 ms. The SDK's validator: 47 tests, and 537 in
+  its extended mode, all passed. The window was driven in the SDK's editor host (no audio): preset, Bypass, a slider.
+  Not tested by Claude: a real DJ program, an installation into the computer's plug-in folder (needs
+  administrator rights).

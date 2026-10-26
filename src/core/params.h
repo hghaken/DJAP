@@ -111,6 +111,14 @@ struct ParamInfo {
 
 const ParamInfo& paramInfo(int p);
 
+// A parameter as positions 0 .. paramPositions(p) - the GUI's sliders and the plug-in's host steps: linear in the
+// parameter's steps; a log scale for times and frequencies that span a factor of 8 or more (density splits 20 Hz -
+// 16 kHz, releases: 300 positions); position 0 is "auto" for the compressor make-up and "off" for its side-chain
+// high-pass.
+int paramPositions(int p);
+double paramValueAt(int p, int position); // rounded to the parameter's decimals, within its range
+int paramPositionOf(int p, double value); // the nearest position
+
 using PresetValues = std::array<double, kParamCount>;
 
 // Generic defaults (the Medium preset).

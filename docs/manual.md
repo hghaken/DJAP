@@ -6,7 +6,8 @@ never pass a set ceiling. This manual explains how to install it, connect it, an
 setting. How the processing works inside is described in the separate technical manual (`DJAP-Technical-Manual.pdf`
 in the installation folder; `docs/technical.md` on <https://github.com/hghaken/DJAP>).
 
-This manual describes DJAP from version 0.1.96 on (the first version with updates from GitHub).
+This manual describes DJAP from version 0.1.96 on (the first version with updates from GitHub); the plug-in for DJ
+software (chapter 9) came with the version after 0.1.100.
 
 ## Contents
 
@@ -18,12 +19,13 @@ This manual describes DJAP from version 0.1.96 on (the first version with update
 6. [Presets and the preset window](#6-presets-and-the-preset-window)
 7. [Colours and the colour window](#7-colours-and-the-colour-window)
 8. [The analysis window](#8-the-analysis-window)
-9. [Latency and real-time health](#9-latency-and-real-time-health)
-10. [Updates](#10-updates)
-11. [The command-line program DJAPCmd](#11-the-command-line-program-djapcmd)
-12. [The settings file](#12-the-settings-file)
-13. [Troubleshooting](#13-troubleshooting)
-14. [Glossary](#14-glossary)
+9. [The plug-in for DJ software](#9-the-plug-in-for-dj-software)
+10. [Latency and real-time health](#10-latency-and-real-time-health)
+11. [Updates](#11-updates)
+12. [The command-line program DJAPCmd](#12-the-command-line-program-djapcmd)
+13. [The settings file](#13-the-settings-file)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Glossary](#15-glossary)
 
 ---
 
@@ -32,7 +34,8 @@ This manual describes DJAP from version 0.1.96 on (the first version with update
 DJAP has two independent stereo channels, **deck A** and **deck B**. In a DJ set-up each deck of the DJ software or
 each channel of the mixer is sent through its own DJAP deck, so both decks are processed separately and come out at
 the same loudness. For other use - for example everything Windows plays - DJAP can also run as **one channel**: one
-stereo processor.
+stereo processor. The **plug-in** (chapter 9) brings the same processing into DJ software itself, one deck per
+plug-in.
 
 Each deck runs the same chain of processing stages:
 
@@ -92,6 +95,8 @@ The setup checks the computer first and shows what it found on the last page bef
 
 Options on the way:
 
+- **Select Components**: *DJAP* (the program) and the *Plug-in for DJ software* (chapter 9); both are chosen by
+  default, each can be left out.
 - **Create a desktop shortcut** (off by default).
 - **Start DJAP in the notification area when Windows starts, with the audio devices used last** (on by default).
   This can be changed later in the Setup window.
@@ -131,7 +136,7 @@ Windows' own list of startup apps (Settings > Apps > Startup) can switch it off 
 ### 2.6 Updating
 
 DJAP checks once a day whether a newer version has been published and tells you; installing it takes one click.
-See chapter 10.
+See chapter 11.
 
 ### 2.7 Removing
 
@@ -199,7 +204,7 @@ the drift between them at the cost of a buffer of about 10-20 ms.
 | **DirectSound**, **MME** | higher | Older interfaces; for devices without a good driver. |
 
 With every API the processing itself adds only the limiter look-ahead; the rest of the latency is the devices'
-buffers (chapter 9).
+buffers (chapter 10).
 
 ### 3.4 Test safely
 
@@ -314,7 +319,7 @@ the audio again (a short fade-out and fade-in).
 
 - **Check GitHub for a new version once a day** - on by default.
 - **Check now** asks at once.
-- **Install update** downloads and installs a newer version (chapter 10). Greyed while the audio runs or when there is
+- **Install update** downloads and installs a newer version (chapter 11). Greyed while the audio runs or when there is
   nothing newer.
 - The text beside the buttons shows this version and what the last check found.
 
@@ -328,7 +333,7 @@ the audio again (a short fade-out and fade-in).
 
 ### 5.5 Health
 
-Counters that show whether the computer keeps up with the audio (chapter 9). **Reset counters** sets them to 0.
+Counters that show whether the computer keeps up with the audio (chapter 10). **Reset counters** sets them to 0.
 
 ## 6. Presets and the preset window
 
@@ -578,7 +583,59 @@ Click **Graphs** on a deck strip. The window has a row per deck with five panels
 
 The history is cleared at every start of the audio.
 
-## 9. Latency and real-time health
+## 9. The plug-in for DJ software
+
+![The plug-in's window](images/plugin.jpg)
+
+The plug-in brings DJAP's processing into DJ software (or any other program that loads plug-ins): one deck per
+plug-in, stereo in and stereo out, with exactly the same chain, presets and colours as the program. The DJ software
+keeps the audio interface; DJAP only processes what passes through it.
+
+### 9.1 Installing and finding it
+
+Choose "Plug-in for DJ software" on the setup's "Select Components" page (it is chosen by default). It needs an
+installation for all users (the normal one): the plug-in goes into the computer's plug-in folder,
+`C:\Program Files\Common Files\VST3\DJAP\DJAP.vst3` (one file in a folder of its own), where DJ software looks for
+plug-ins. If the DJ software does not
+list "DJAP" yet, let it scan its plug-ins again (its settings usually have a button for that) and restart it.
+
+Put one plug-in on each deck (as an effect of that deck or channel), or one on the master. The plug-in tells the
+DJ software its delay (the look-ahead, 1.5 ms by default), so the DJ software can keep the decks in time.
+
+The program and the plug-in can be installed and used together or apart.
+
+### 9.2 The window
+
+The window is one deck strip of the program:
+
+- **Look-ahead** - the limiter's look-ahead, 0 to 5 ms (see 5.1); the DJ software is told the new delay.
+- **Bypass** - lit: the input goes out unchanged, delayed by the same look-ahead.
+- **Preset** and **Colour** - the lists of the program (see 9.3).
+- **The four bass sliders** - as in the main window (4.2).
+- **The meter panel** - LED bars, the gain of each stage and the spectrum, as in the main window (4.3). Clicking it
+  does nothing here: every value is in the DJ software's parameter list instead.
+
+### 9.3 Presets, colours and values
+
+- The preset and colour lists come from the program's settings file (`%APPDATA%\DJAP\DJAP.ini`): the shipped
+  presets and colours, and your own. Make and change presets in the program; the plug-in only reads them, when it
+  is loaded. Without the program's settings the plug-in has the shipped ones.
+- Choosing a preset or colour loads its values. Choosing the one that is already chosen loads its values again -
+  back to the preset after changes. "(other values)" means the values match no preset in the list (for example a
+  project made on another computer).
+- **Every value is a parameter** the DJ software can show and automate: the 71 values of the preset and colour
+  (named "Stage: value", for example "Compressor: Threshold", grouped by stage), the preset and colour lists, Bypass
+  and the look-ahead. They move in the same steps as the program's sliders.
+- A **project** (or a preset of the DJ software) stores the values themselves, not only the preset's name: it
+  sounds the same on a computer where that preset does not exist or was changed.
+
+### 9.4 Updates
+
+The plug-in is updated by the same setup as the program (chapter 11). If the DJ software has the plug-in loaded
+during an update, the setup never closes the DJ software: the new plug-in takes the old one's place the next time
+Windows starts.
+
+## 10. Latency and real-time health
 
 **Latency** is the time from the input socket to the output socket. It has three parts:
 
@@ -603,7 +660,7 @@ The Setup window and the status bar show the total.
 If late periods appear, raise the buffer size, close other heavy programs, or use fewer density bands. The processing
 of both decks together uses only a few percent of one CPU core.
 
-## 10. Updates
+## 11. Updates
 
 With "Check GitHub for a new version once a day" on (default), DJAP asks the project's public GitHub page about 15
 seconds after it starts and then once a day. It only asks; it sends nothing about you or your computer beyond what any
@@ -624,7 +681,7 @@ Install update:
 If something goes wrong the Setup window says what. The setup's log of the last update is in
 `%TEMP%\DJAP-update\setup.log`.
 
-## 11. The command-line program DJAPCmd
+## 12. The command-line program DJAPCmd
 
 `DJAPCmd.exe` (in the installation folder) processes files offline with exactly the same code as the live program. It
 never plays audio and never changes the settings. Open a command prompt in the installation folder, or give its full
@@ -660,7 +717,7 @@ DJAPCmd --render song.mp3 song-loud.wav --a Loud --ca Oldies --pcm24
 
 Exit code: 0 done, 1 wrong command line, 2 a file could not be read or written.
 
-## 12. The settings file
+## 13. The settings file
 
 All settings, the decks' choices and your own presets and colours are kept in one text file, `DJAP.ini`:
 
@@ -685,7 +742,7 @@ window. Back the file up to keep your own presets.
 Settings of versions up to 0.1.57 (which had another program name) are copied once at the first start of DJAP; the
 old file stays.
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 | Problem | What to do |
 |---|---|
@@ -701,9 +758,11 @@ old file stays.
 | **Limiter works hard all the time** | Lower the input gain, the clipper drive or the target, or use a quieter preset. |
 | **DJAP does not start with Windows** | Check the option in the Setup window and Windows' startup apps list. |
 | **The update failed** | The Setup window says why; `%TEMP%\DJAP-update\setup.log` has the setup's log. The setup can always be downloaded from the GitHub page and run by hand. |
+| **The DJ software does not list the plug-in** | Was "Plug-in for DJ software" chosen in the setup, in an installation for all users? Is `C:\Program Files\Common Files\VST3\DJAP\DJAP.vst3` there? Let the DJ software scan its plug-ins again and restart it. The DJ software must be 64-bit. |
+| **The plug-in's preset list lacks my own presets** | The plug-in reads the program's settings in `%APPDATA%\DJAP\DJAP.ini` when it is loaded: make the preset in the program, then load the plug-in again. A portable program (settings next to `DJAP.exe`) is not seen. |
 | **DJAP closed unexpectedly** | Start `DJAP.exe --diag <file.txt>` from a command prompt; when it happens again, the file holds a report that helps to find the cause. |
 
-## 14. Glossary
+## 15. Glossary
 
 | Term | Meaning |
 |---|---|

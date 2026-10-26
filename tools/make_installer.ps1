@@ -34,4 +34,11 @@ Write-Host ("{0} ({1:N1} MB)" -f $setup, ((Get-Item $setup).Length / 1MB))
 $symbols = Join-Path $root "release\DJAP-$version-symbols"
 New-Item -ItemType Directory -Force $symbols | Out-Null
 Copy-Item "$root\build\DJAP.pdb", "$root\build\DJAPCmd.pdb", "$root\build\DJAP.exe", "$root\build\DJAPCmd.exe" $symbols
+$plugin = "$root\build\VST3\Release\DJAP.vst3\Contents\x86_64-win\DJAP.vst3"
+if (Test-Path $plugin) { # the plug-in's module and its symbols (under another name: the program's are DJAP.pdb too)
+    Copy-Item $plugin (Join-Path $symbols "DJAP-plugin.vst3")
+    Copy-Item "$root\build\src\plugin\WIN_PDB64\DJAP.pdb" (Join-Path $symbols "DJAP-plugin.pdb")
+} else {
+    Write-Warning "no plug-in in build\VST3: the setup has none (third_party\vst3sdk missing?)"
+}
 Write-Host "symbols: $symbols"

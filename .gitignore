@@ -2,6 +2,8 @@
 /work/
 /release/
 /third_party/asiosdk/
+# VST3 SDK v3.8.1_build_84 (MIT; VSTGUI BSD-3): a shallow clone of github.com/steinbergmedia/vst3sdk, 220 MB
+/third_party/vst3sdk/
 *.user
 .vs/
 __pycache__/

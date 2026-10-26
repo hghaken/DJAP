@@ -20,7 +20,6 @@ const wchar_t* const kClass = L"APEditWindow";
 enum Id { idPreset = 10, idSaveAs, idRename, idDelete, idResetPreset, idTabs, idRow0 = 100 };
 // the controls of row r have the ids idRow0 + kRowIds * r + part
 enum RowPart { rpSlider, rpCheck, rpValue, rpReset, kRowIds };
-constexpr int kLogPositions = 300; // slider positions of a log-scaled parameter
 
 std::string number(double v, int decimals) {
     char b[32];
@@ -294,56 +293,8 @@ std::wstring describe(const Preset& p, PresetKind kind) {
     return L"Your own preset: " + s + L"; on: " + (on.empty() ? std::wstring(L"nothing") : on) + L".";
 }
 
-// How a parameter's slider maps positions to values: linear in the parameter's steps; a log scale for times and
-// frequencies that span a factor of 8 or more (density splits 20 Hz - 16 kHz, releases); position 0 is "auto" for
-// the make-up and "off" for the side-chain high-pass.
-struct Scale {
-    bool log = false, special = false;
-    double lo = 0.0, hi = 1.0;
-    int positions = 1; // the highest position
-};
-
-Scale scaleOf(int p) {
-    const ParamInfo& in = paramInfo(p);
-    Scale s;
-    s.lo = in.min;
-    s.hi = in.max;
-    if (p == pCompMakeup) s.special = true, s.lo = 0.0;
-    if (p == pCompSideHpf) s.special = true, s.lo = 40.0;
-    const std::string unit = in.unit;
-    s.log = (unit == "Hz" || unit == "ms" || unit == "s") && s.lo > 0.0 && s.hi / s.lo >= 8.0;
-    s.positions = s.log ? kLogPositions : static_cast<int>(std::lround((s.hi - s.lo) / in.step));
-    if (s.special) ++s.positions;
-    return s;
-}
-
-double valueAt(int p, int pos) {
-    const ParamInfo& in = paramInfo(p);
-    const Scale s = scaleOf(p);
-    if (s.special) {
-        if (pos <= 0) return p == pCompMakeup ? -1.0 : 0.0;
-        --pos;
-    }
-    const int n = s.positions - (s.special ? 1 : 0);
-    double v = s.log ? std::round(s.lo * std::pow(s.hi / s.lo, static_cast<double>(pos) / n) / in.step) * in.step
-                     : s.lo + pos * in.step;
-    const double scale = std::pow(10.0, in.decimals);
-    v = std::round(v * scale) / scale; // no 0.30000000000000004
-    return std::min(s.hi, std::max(s.lo, v));
-}
-
-int positionOf(int p, double v) {
-    const Scale s = scaleOf(p);
-    int off = 0;
-    if (s.special) {
-        if ((p == pCompMakeup && v < 0.0) || (p == pCompSideHpf && v <= 0.0)) return 0;
-        off = 1;
-    }
-    const int n = s.positions - off;
-    const double t = s.log ? std::log(std::max(v, s.lo) / s.lo) / std::log(s.hi / s.lo) * n
-                           : (v - s.lo) / paramInfo(p).step;
-    return off + static_cast<int>(std::min<long>(n, std::max<long>(0, std::lround(t))));
-}
+// The sliders use the parameters' positions (params.h: paramPositions / paramValueAt / paramPositionOf), the same
+// scale the plug-in gives its host.
 
 // ---- name prompt ----
 
@@ -635,11 +586,11 @@ void EditWindow::createRows() {
             r.check = make(L"BUTTON", L"on", BS_AUTOCHECKBOX | WS_TABSTOP, id + rpCheck); // "on" / "off"
         } else {
             r.slider = make(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_NOTICKS | TBS_BOTH | WS_TABSTOP, id + rpSlider);
-            const Scale s = scaleOf(p);
+            const int positions = paramPositions(p);
             SendMessageW(r.slider, TBM_SETRANGEMIN, FALSE, 0);
-            SendMessageW(r.slider, TBM_SETRANGEMAX, FALSE, s.positions);
+            SendMessageW(r.slider, TBM_SETRANGEMAX, FALSE, positions);
             SendMessageW(r.slider, TBM_SETLINESIZE, 0, 1);
-            SendMessageW(r.slider, TBM_SETPAGESIZE, 0, std::max(1, s.positions / 10));
+            SendMessageW(r.slider, TBM_SETPAGESIZE, 0, std::max(1, positions / 10));
             r.value = make(L"EDIT", L"", ES_RIGHT | ES_AUTOHSCROLL | WS_TABSTOP, id + rpValue, WS_EX_CLIENTEDGE);
             SetWindowSubclass(r.value, editProc, 1, reinterpret_cast<DWORD_PTR>(this));
             r.unit = make(L"STATIC", fromUtf8(in.unit).c_str(), SS_LEFT | SS_CENTERIMAGE, 0);
@@ -871,7 +822,7 @@ void EditWindow::updateRow(size_t r, bool moveSlider) {
     const double v = p->values[static_cast<size_t>(i)];
     const double ref = referenceValues(current_, p->values, kind_)[static_cast<size_t>(i)];
     const bool changed = std::fabs(v - ref) > 1e-9;
-    if (row.slider && moveSlider) SendMessageW(row.slider, TBM_SETPOS, TRUE, positionOf(i, v));
+    if (row.slider && moveSlider) SendMessageW(row.slider, TBM_SETPOS, TRUE, paramPositionOf(i, v));
     if (row.check) {
         SendMessageW(row.check, BM_SETCHECK, v >= 0.5 ? BST_CHECKED : BST_UNCHECKED, 0);
         SetWindowTextW(row.check, v >= 0.5 ? L"on" : L"off");
@@ -958,7 +909,7 @@ void EditWindow::slider(HWND bar, int code) {
     const Preset* p = settings_.find(current_, kind_);
     if (r < 0 || !p) return;
     const int i = rows_[static_cast<size_t>(r)].param;
-    const double v = valueAt(i, static_cast<int>(SendMessageW(bar, TBM_GETPOS, 0, 0)));
+    const double v = paramValueAt(i, static_cast<int>(SendMessageW(bar, TBM_GETPOS, 0, 0)));
     const bool save = code != TB_THUMBTRACK;
     if (v != p->values[static_cast<size_t>(i)]) {
         setValue(i, v, save);
