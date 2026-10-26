@@ -32,6 +32,7 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
             m.compressorIn = r.compressorIn;
             m.bands = r.bands;
             for (int b = 0; b < kMaxBands; ++b) m.densityDb[b] = r.densityDb[b];
+            for (int k = 0; k < 4; ++k) m.autoToneDb[k] = r.autoToneDb[k];
             m.flags = r.flags;
             m.seconds += r.frames / std::max(1.0, fs);
             // the signal-chain bars: each point's level, a 0.4 s one-pole over the records

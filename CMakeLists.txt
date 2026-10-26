@@ -109,6 +109,9 @@ add_executable(DJAP WIN32
     src/app/editwnd.cpp
     src/app/audiodlg.cpp
     src/app/meterview.cpp
+    src/app/bassctl.cpp
+    src/app/spectrumdraw.cpp
+    src/app/spectrumwnd.cpp
     src/app/audioio.cpp
     src/app/tooltips.cpp
     src/app/tray.cpp

@@ -1,7 +1,9 @@
 #include "settings.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -241,14 +243,18 @@ std::string Settings::toText() const {
     o << "; The outputs follow the volume and mute of Windows' default playback device (the volume keys), with one\n"
          "; channel and with two decks (1 = on)\nFollowWindowsVolumeOneChannel="
       << (followVolume[0] ? 1 : 0) << "\nFollowWindowsVolumeTwoDecks=" << (followVolume[1] ? 1 : 0) << "\n\n";
-    o << "[Decks]\n; Preset and processing switch (1 = on, 0 = bypass) of each deck\n";
+    o << "[Decks]\n; Loudness preset and processing switch (1 = on, 0 = bypass) of each deck\n";
     o << "PresetA=" << deck[0].preset << "\nProcessingA=" << (deck[0].processing ? 1 : 0) << "\n";
     o << "PresetB=" << deck[1].preset << "\nProcessingB=" << (deck[1].processing ? 1 : 0) << "\n";
-    o << "; Colour preset of each deck (tone, auto tone, sub bass, loudness)\nColourA=" << deck[0].colour
+    o << "; Colour of each deck (tone, auto tone, sub bass, contour)\nColourA=" << deck[0].colour
       << "\nColourB=" << deck[1].colour << "\n";
-    o << "; 1 = both decks use the same preset (deck B follows deck A)\nLinkPresets=" << (linkPresets ? 1 : 0)
+    o << "; 1 = both decks use the same loudness preset and colour (deck B follows deck A)\nLinkPresets=" << (linkPresets ? 1 : 0)
       << "\n\n";
-    o << "[Window]\nX=" << windowX << "\nY=" << windowY << "\n";
+    o << "[Window]\n; Where each window was last: x, y, width, height (screen pixels), 1 = maximised; a window without a\n"
+         "; line opens centred on the screen\n";
+    for (const auto& [name, p] : windows)
+        o << name << "=" << p.x << "," << p.y << "," << p.w << "," << p.h << "," << (p.maximised ? 1 : 0) << "\n";
+    o << "SnapToBands=" << (snapToBands ? 1 : 0) << "\nTooltips=" << (showTooltips ? 1 : 0) << "\n";
     o << "; 1 = the hint that the program keeps running in the notification area was shown\nTrayHintShown="
       << (trayHintShown ? 1 : 0) << "\n\n";
     o << "[Updates]\n; 1 = ask GitHub once a day for a newer version (installed only after a click)\nCheckUpdates="
@@ -358,8 +364,25 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Audio", "StartAudio")) startAudio = toInt(*v, 0) != 0;
     if (auto v = get("Audio", "FollowWindowsVolumeOneChannel")) followVolume[0] = toInt(*v, 1) != 0;
     if (auto v = get("Audio", "FollowWindowsVolumeTwoDecks")) followVolume[1] = toInt(*v, 0) != 0;
-    if (auto v = get("Window", "X")) windowX = toInt(*v, -1);
-    if (auto v = get("Window", "Y")) windowY = toInt(*v, -1);
+    for (const char* name : {"Main", "Setup", "Loudness", "Colour", "Analysis", "Spectrum", "About"})
+        if (auto v = get("Window", name)) {
+            WindowPlace p;
+            std::istringstream f(*v);
+            char c[4] = {};
+            int max = 0;
+            if ((f >> p.x >> c[0] >> p.y >> c[1] >> p.w >> c[2] >> p.h) && c[0] == ',' && c[1] == ',' && c[2] == ',' &&
+                p.w >= 0 && p.h >= 0) {
+                if ((f >> c[3] >> max) && c[3] == ',') p.maximised = max != 0;
+                windows[name] = p;
+            }
+        }
+    // versions up to 0.1.132 kept only the main window's position, as X and Y
+    if (!windows.count("Main"))
+        if (auto x = get("Window", "X"))
+            if (auto y = get("Window", "Y"))
+                if (toInt(*x, -1) >= 0) windows["Main"] = WindowPlace{toInt(*x, 0), toInt(*y, 0), 0, 0, false};
+    if (auto v = get("Window", "SnapToBands")) snapToBands = toInt(*v, 0) != 0;
+    if (auto v = get("Window", "Tooltips")) showTooltips = toInt(*v, 1) != 0;
     if (auto v = get("Window", "TrayHintShown")) trayHintShown = toInt(*v, 0) != 0;
     if (auto v = get("Updates", "CheckUpdates")) checkUpdates = toInt(*v, 1) != 0;
     if (auto v = get("Updates", "Url")) updateUrl = *v;
@@ -447,8 +470,11 @@ bool Settings::load(const std::filesystem::path& file) {
 }
 
 bool Settings::save(const std::filesystem::path& file) const {
+    // a temporary name of this writer's own: the program and a plug-in may save the same file at the same moment
     std::filesystem::path tmp = file;
-    tmp += ".tmp";
+    tmp += "." + std::to_string((reinterpret_cast<uintptr_t>(this) >> 4) ^
+                                static_cast<uintptr_t>(std::chrono::steady_clock::now().time_since_epoch().count())) +
+           ".tmp";
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         if (!out) return false;
@@ -462,6 +488,64 @@ bool Settings::save(const std::filesystem::path& file) const {
         std::filesystem::remove(tmp, ec);
         return false;
     }
+    return true;
+}
+
+namespace {
+
+Preset* named(std::vector<Preset>& list, const std::string& name) {
+    for (Preset& p : list)
+        if (p.name == name) return &p;
+    return nullptr;
+}
+
+const Preset* named(const std::vector<Preset>& list, const std::string& name) {
+    for (const Preset& p : list)
+        if (p.name == name) return &p;
+    return nullptr;
+}
+
+// `result` holds the file's list; this writer's changes since `base` (`ours` against `base`) are applied to it.
+void mergeList(std::vector<Preset>& result, const std::vector<Preset>& ours, const std::vector<Preset>& base) {
+    for (const Preset& b : base) // deleted or renamed away here (shipped ones are never deleted)
+        if (!b.shipped && !named(ours, b.name))
+            result.erase(std::remove_if(result.begin(), result.end(), [&](const Preset& r) { return r.name == b.name; }),
+                         result.end());
+    for (const Preset& p : ours) { // added or changed here
+        const Preset* b = named(base, p.name);
+        if (b && b->values == p.values) continue; // not touched here: the file's version stays
+        if (Preset* r = named(result, p.name)) r->values = p.values;
+        else result.push_back(p);
+    }
+}
+
+} // namespace
+
+bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, SaveRole role) {
+    Settings now; // the file as it is now (the shipped lists when there is none yet)
+    std::error_code ec;
+    const bool existed = std::filesystem::exists(file, ec);
+    if (existed) now.load(file);
+    Settings out = role == SaveRole::Owner ? *this : now;
+    out.presets = now.presets;
+    out.colours = now.colours;
+    mergeList(out.presets, presets, base.presets);
+    mergeList(out.colours, colours, base.colours);
+    // what this writer's decks use stays, even if the other deleted it meanwhile
+    for (const DeckSettings& d : deck) {
+        if (!named(out.presets, d.preset))
+            if (const Preset* p = named(presets, d.preset)) out.presets.push_back(*p);
+        if (!named(out.colours, d.colour))
+            if (const Preset* c = named(colours, d.colour)) out.colours.push_back(*c);
+    }
+    out.sortPresets();
+    // nothing new (a guest only reading the other's presets): the file stays untouched
+    const bool same = (existed || role == SaveRole::Guest) && out.toText() == now.toText();
+    if (!same && !out.save(file)) return false;
+    presets = out.presets;
+    colours = out.colours;
+    base.presets = presets;
+    base.colours = colours;
     return true;
 }
 

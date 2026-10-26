@@ -63,7 +63,7 @@ CloseApplications=yes
 ; of a set); it is replaced at the next start of Windows instead (restartreplace below)
 CloseApplicationsFilter=DJAP.exe,DJAPCmd.exe
 RestartApplications=no
-; the program keeps running in the notification area: setup and uninstall ask to end it first (its menu: Exit)
+; the program keeps running in the notification area: setup and uninstall ask to end it first (its menu: Shutdown)
 AppMutex={#AppMutexes}
 SetupIconFile=..\assets\DJAP.ico
 WizardSmallImageFile=wizard-small-55.bmp,wizard-small-64.bmp,wizard-small-83.bmp,wizard-small-92.bmp,wizard-small-110.bmp

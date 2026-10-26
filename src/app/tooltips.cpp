@@ -2,7 +2,23 @@
 
 #include <commctrl.h>
 
+#include <algorithm>
+#include <vector>
+
 namespace ap {
+
+namespace {
+bool g_enabled = true;
+std::vector<HWND> g_tips; // the tooltip controls created so far (the destroyed ones are dropped on the next switch)
+} // namespace
+
+void Tooltips::setEnabled(bool on) {
+    g_enabled = on;
+    g_tips.erase(std::remove_if(g_tips.begin(), g_tips.end(), [](HWND h) { return !IsWindow(h); }), g_tips.end());
+    for (HWND h : g_tips) SendMessageW(h, TTM_ACTIVATE, on ? TRUE : FALSE, 0);
+}
+
+bool Tooltips::enabled() { return g_enabled; }
 
 void Tooltips::create(HWND owner) {
     owner_ = owner;
@@ -13,6 +29,9 @@ void Tooltips::create(HWND owner) {
     SendMessageW(tip_, TTM_SETDELAYTIME, TTDT_AUTOPOP, 30000);
     SendMessageW(tip_, TTM_SETDELAYTIME, TTDT_INITIAL, 600);
     setDpi(GetDpiForWindow(owner));
+    g_tips.erase(std::remove_if(g_tips.begin(), g_tips.end(), [](HWND h) { return !IsWindow(h); }), g_tips.end());
+    g_tips.push_back(tip_);
+    if (!g_enabled) SendMessageW(tip_, TTM_ACTIVATE, FALSE, 0);
 }
 
 void Tooltips::setDpi(UINT dpi) {

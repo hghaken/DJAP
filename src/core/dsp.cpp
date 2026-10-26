@@ -79,6 +79,15 @@ double magnitudeDb(const BiquadCoeffs& c, double fs, double hz) {
     return 20.0 * std::log10(std::abs(h));
 }
 
+double magnitudeDb(const SvfCoeffs& c, double fs, double hz) {
+    // a1 = 1 / (1 + g (g + k)), a2 = g a1: the section's g and k back; H(s) = m0 + m1 s / D + m2 / D with
+    // D = s^2 + k s + 1 and s = j tan(pi f / fs) / g
+    const double g = c.a2 / c.a1, k = (1.0 / c.a1 - 1.0) / g - g;
+    const std::complex<double> s(0.0, std::tan(kPi * std::min(hz, 0.4999 * fs) / fs) / g);
+    const std::complex<double> d = s * s + k * s + 1.0;
+    return 20.0 * std::log10(std::abs(c.m0 + c.m1 * s / d + c.m2 / d));
+}
+
 } // namespace design
 
 SvfCoeffs SvfCoeffs::design(Mode mode, double fs, double hz, double gainDb, double q) {

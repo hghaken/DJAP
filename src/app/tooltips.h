@@ -1,5 +1,6 @@
 // Tooltips: one tooltip control per window, several lines wide, shown for 30 s while the mouse rests on a control
 // (or on a rectangle of a custom-drawn window). The texts say what a control does; they are copied when added.
+// One switch for all of them (client, 2026-10-26: "an option to turn all tooltips on or off", in Setup).
 #pragma once
 
 #include <windows.h>
@@ -18,6 +19,9 @@ public:
     // Line width for the window's DPI.
     void setDpi(UINT dpi);
     HWND hwnd() const { return tip_; }
+    // Every tooltip of this module on or off at once (those created later too). GUI thread only.
+    static void setEnabled(bool on);
+    static bool enabled();
 
 private:
     HWND tip_ = nullptr, owner_ = nullptr;

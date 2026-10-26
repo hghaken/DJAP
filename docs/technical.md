@@ -29,7 +29,7 @@ DJAP; no code or parameter values were taken from other products.
 16. [The real-time engine](#16-the-real-time-engine)
 17. [Inputs on another clock](#17-inputs-on-another-clock)
 18. [The plug-in](#18-the-plug-in)
-19. [The presets and the standards behind them](#19-the-presets-and-the-standards-behind-them)
+19. [The loudness presets and the standards behind them](#19-the-loudness-presets-and-the-standards-behind-them)
 20. [Verification](#20-verification)
 21. [Sources](#21-sources)
 
@@ -46,7 +46,7 @@ input (stereo)
  -> clean-up: non-finite or absurd samples (|x| > 1e6) -> 0; the input factor of the volume follower (14.4)
  -> [input meter: K-weighted energy, sample peak]            [dry path: the input delayed by the look-ahead]
  -> leveller gain x input gain                               (4)
- -> colour: sub bass, tone, auto tone, loudness contour       (5)
+ -> colour: sub bass, tone, auto tone, contour       (5)
  -> compressor                                               (6)
  -> density, 1-7 bands                                       (7)
  -> bass enhancer -> exciter -> de-esser                     (8-10)
@@ -85,7 +85,7 @@ of BS.1770, specified at 48 kHz, is re-derived for other rates (2.5).
 
 ### 1.4 Changes without clicks
 
-A new configuration (a preset, a slider, a stage switch) is computed on the GUI thread and handed to the audio
+A new configuration (a loudness preset, a slider, a stage switch) is computed on the GUI thread and handed to the audio
 thread (16.2). There:
 
 | What changes | How it reaches the sound |
@@ -180,7 +180,7 @@ kHz. The offline renders (`DJAPCmd --render`, `--measure`) use the same meter.
 
 ## 4. Leveller
 
-The leveller is a slow automatic gain that brings each song to the preset's target loudness T. It replaces the
+The leveller is a slow automatic gain that brings each song to the loudness preset's target loudness T. It replaces the
 per-song gain a playback system would compute in advance from an analysis of the file: a live DJ input has no such
 analysis, so the leveller has to measure as the music plays.
 
@@ -189,7 +189,10 @@ analysis, so the leveller has to measure as the music plays.
 - **Input level** (0.4 s, K-weighted, before any processing): decides whether the music is *quiet* (below
   `T - Hold below` after the leveller and input gain), *silent* (below -60 LUFS) or playing.
 - **Post level**: measured after the stereo width stage - after compressor and density have done their work - so the
-  leveller aims the *processed* sound at the target. Two averages, 0.4 s (*fast*) and 3 s (*slow*).
+  leveller aims the *processed* sound at the target. Three averages, 0.4 s (*fast*), 1.5 s (*mid*) and 3 s (*slow*),
+  and a *trend* level: 0.4 s, but a control block more than 10 dB under the mid level leaves it where it is - the gap
+  between two sung or spoken phrases is not a fall, while every block of a fade passes. It is kept every 0.25 s for
+  6 s and compared as 1 s averages (the ups and downs of the beat averaged out).
 - The leveller's own gain of the last block is divided out of the post level. Without this the 3 s average would lag
   the leveller's own moves and, with a closed loop through it, a fast catch-up overshot to the end of its range.
 - The post level is capped at `T + Range + 6 LU`: a single sample far over full scale (and filters ringing after it)
@@ -209,13 +212,31 @@ enough not to follow the phrases of a song.
 
 ### 4.3 Rules
 
-- **Hold below.** While the input is more than `Hold below` (10 LU) under the target - a fade, a breakdown, a pause -
-  the gain is held. Fades are never pumped up.
-- **Fall hold.** While the 0.4 s level is more than 3 LU under the 3 s level (the music is falling), the gain may not
-  rise. This covers the first 10 dB of a fade, before "hold below" applies. Measured: a 40 dB / 10 s fade was lifted
-  3.2 dB without this rule, 0.65 dB with it.
-- **Warm start.** A 3 s average starting from nothing reads new music as far too quiet for seconds. After at least 1 s
-  of quiet, the slow detector follows the fast one for the first 1.5 s of music, and the gain is held meanwhile.
+- **Hold below.** While the input is more than `Hold below` (10 LU) under the target - a fade, a pause, the start of
+  a quiet passage - the gain is held. A quiet passage that *stays* is music, though: when the music has been under
+  that level for 3 s without falling (the trend level not more than 3.5 dB under its value 4 s earlier) and not more
+  than 12 LU under it (music, not a noise floor), the hold ends and the passage is levelled like any other part.
+- **Falling.** The gain may not rise while the music falls: the trend level dropped more than 2.5 dB over the last
+  2 s (a fade of 1.25 dB/s or more, the drop into a quiet passage), or it sank more than 0.8 dB in each of the last
+  two 2 s (a slow fade: it goes on falling, while a quiet passage is flat again after its drop); a fall counts for at
+  least 1 s. When the music has stopped falling, the 3 s level starts from the 1.5 s level instead of its lag - after
+  a drop of 10 dB a 3 s average needs 6-8 s to come down by itself. In the first moment of a fade, before the trend
+  shows it, the gain also may not rise while the 0.4 s level is more than 3 LU under the 3 s level. Measured: a
+  40 dB / 10 s fade was lifted 0.7 dB at most, a 40 s fade of 1 dB/s 1.5 dB in its first 4 s (4.7 dB before the
+  trend rule).
+- **Warm start.** A 3 s average starting from nothing reads new music as far too quiet for seconds. After a pause
+  (at least 1 s of silence), the slow detector follows the fast one for the first 1.5 s of music, and the gain is held
+  meanwhile. A quiet passage without silence is not a pause: the leveller goes on from where it was.
+- **Fast up.** When the gain is more than 4 dB under what the 3 s level needs and the music is not falling - a quiet
+  verse after a loud chorus - it goes up at four times the loudness preset's speed up to 3 dB/s, or twice its speed when that is more (Gentle and DAB+ 2 dB/s, Light, Medium, Web Stream and Loud 3, FM Station 4), until it is within 1 dB. A gap
+  between two phrases does not stop it (only a fall does). The counterpart of fast down.
+- **Why these rules** (client, 2026-10-26, a song whose spoken verses lie 10 LU under its choruses): after each
+  chorus the output stayed 6-8 LU under the target for 10-19 s on every loudness preset. The gaps between the phrases had
+  dipped the 0.4 s level under the hold level and under the old fall rule (no move for half of each verse, and a
+  1.5 s warm restart after every gap of 1 s), the 3 s level needed 6-8 s to come down to the verse, and the normal
+  speed another 7 s. A synthetic verse 10 LU under its chorus with a 0.8 s gap every 3 s stayed at -24.1 LUFS (target
+  -14) with the old rules and is levelled to -14.0 LUFS from 9 s on now; the drop itself still sounds (the first 2 s
+  are not lifted), as do the first 3 s of a breakdown.
 - **Catch-up.** After at least 2 s of silence (a stopped deck) the next song is caught up at 20 dB/s, following the
   0.4 s level, so a new song is at level within about half a second. Catch-up goes on while the 0.4 s level still
   rises more than 1 dB per second (a track fading in), for at most 15 s; then the 3 s detector starts from the level
@@ -230,7 +251,7 @@ enough not to follow the phrases of a song.
 
 A leveller that measures before the compressor and density aims the *unprocessed* level at the target; the stages
 after it then change the loudness again, and the output misses the target by however much they compress or lift.
-Measuring after them (the handbook's "measure what you control") puts the output on target for every preset.
+Measuring after them (the handbook's "measure what you control") puts the output on target for every loudness preset.
 
 ## 5. Colour
 
@@ -244,10 +265,10 @@ Four sections, each a state-variable filter (2.3):
 
 | Section | Type | Gain | Frequency |
 |---|---|---|---|
-| Bass | low shelf, Q 0.71 | -12..+9 dB | 40..250 Hz (100) |
-| Low-mid | bell, Q 0.9 | -9..+6 dB | 150..1000 Hz (350) |
-| Presence | bell, Q 0.9 | -9..+6 dB | 1000..6000 Hz (3000) |
-| Treble | high shelf, Q 0.71 | -9..+9 dB | 3000..16000 Hz (8000) |
+| Bass | low shelf, Q 0.71 | -12..+12 dB | 40..250 Hz (100) |
+| Low-mid | bell, Q 0.9 | -12..+12 dB | 150..1000 Hz (350) |
+| Presence | bell, Q 0.9 | -12..+12 dB | 1000..6000 Hz (3000) |
+| Treble | high shelf, Q 0.71 | -12..+12 dB | 3000..16000 Hz (8000) |
 
 Targets glide with a 25 ms one-pole. Each section is redesigned once per control block (16 samples) when it moved
 by at least 0.005 dB or 0.05 Hz, and its coefficients are ramped linearly per sample from the old design to the new
@@ -286,7 +307,7 @@ Adds the octave below the bass, which many records of the 1960s and 1970s lack:
 Measured: a 60 Hz tone gets 30 Hz at -2.3 dB (amount 100 %) or -8.3 dB (50 %); silence stays silent. This is the
 classic octave-divider principle of analogue sub-harmonic synthesisers.
 
-### 5.4 Loudness contour
+### 5.4 Contour
 
 At a low listening volume the ear is less sensitive to low and high frequencies (the equal-loudness contours of ISO
 226 [17]). The loudness amount adds a low shelf at 100 Hz (up to +9 dB) and a high shelf at 10 kHz (up to +4 dB),
@@ -365,7 +386,7 @@ Default splits per band count (each split movable, always rising and at least 1.
     never more than 40 dB under the reference.
 - The gain moves with the attack time (20 ms) when it goes down and the release time (300 ms) when it goes up, and is
   ramped linearly across each control block.
-- A fixed **band gain** (-6..+6 dB, glided) multiplies on top: with Amount 0 % the stage is a plain multiband tone
+- A fixed **band gain** (-12..+12 dB, glided) multiplies on top: with Amount 0 % the stage is a plain multiband tone
   control.
 
 ### 7.3 Two rules found by testing
@@ -639,7 +660,7 @@ buffers.
 - **One object.** Processor and controller are one object (the SDK's single-component effect), so the plug-in's
   window reads the deck's meter and tap rings itself through the same `DeckMonitor` (`src/core/monitor.*`) the
   program uses: one reader per ring, as the rings require (16.2).
-- **Parameters.** The 71 values of the chain plus the preset and colour lists, Bypass and the look-ahead. A value's
+- **Parameters.** The 71 values of the chain plus the loudness preset and colour lists, Bypass and the look-ahead. A value's
   normalised position (0..1) maps to the program's slider positions (`paramPositions`, `paramValueAt`,
   `paramPositionOf`): linear in the value's steps, logarithmic (300 positions) for times and frequencies spanning
   a factor of 8 or more. A parameter's id is an FNV-1a hash of its settings key plus 1000, so ids stay the same
@@ -648,18 +669,27 @@ buffers.
   value of each, and when anything changed designs a new `DeckConfig` (`makeDeckConfig`: coefficients only, no
   allocation) and hands it to the deck through its sequence-locked slot before processing the block. The deck then
   ramps or crossfades as in 1.4: no automation step clicks.
-- **Presets.** Choosing a preset or colour (the list parameters) makes the processor copy that preset's values into
-  its own; the controller loads the same values and asks the host to read all parameters again
-  (`kParamValuesChanged`). The controller keeps the exact values of a preset or a project, so a stored project
-  holds 800 Hz and not the 810 Hz of the nearest log step; a value the host sets is that step's value.
+- **Loudness presets.** Choosing a loudness preset or colour (the list parameters) makes the controller load that loudness preset's values,
+  ask the host to read all parameters again (`kParamValuesChanged`) and hand the processor a complete snapshot; the
+  processor never reads the loudness preset lists, which change on the GUI thread. The controller keeps the exact values of
+  a loudness preset or a project, so a stored project holds 800 Hz and not the 810 Hz of the nearest log step; a value the
+  host sets is that step's value.
+- **Shared loudness presets.** The plug-in's loudness window is the program's (`editwnd.*`). Program and plug-ins save into
+  one settings file, each with a three-way merge (`Settings::saveMerged`): the file is read again, the writer's own
+  changes since it last read or wrote the file (its "base") are applied to it - additions, changed values,
+  renames, deletions - and everything else stays. Two writers therefore never lose each other's loudness presets; when both
+  changed the same loudness preset, the later save wins. A plug-in writes only the loudness preset and colour lists, never the
+  program's other settings, and nothing when it has nothing new. Each writer saves through a temporary file of its
+  own name and renames it over the file, so a reader never sees half a file.
 - **Latency.** The look-ahead in samples (`round(ms x rate / 1000)`, 72 at 1.5 ms and 48 kHz) is reported to the
   host, and announced again (`kLatencyChanged`) when the look-ahead or the sample rate changes, so the host can
   delay the other channels by the same amount (plug-in delay compensation).
-- **State.** A versioned binary stream: preset and colour names, look-ahead, Bypass and every value as a pair of
+- **State.** A versioned binary stream: loudness preset and colour names, look-ahead, Bypass and every value as a pair of
   settings key and value. Loading it sets the controller and hands the processor a complete snapshot through a
   second sequence-locked slot (the host may load a project while audio runs).
 - **Window.** A Win32 child window in the host's window, scaled to its DPI, built from the program's own parts:
-  the brushed metal (`theme.*`), the meter panel (`meterview.*`) and tooltips. A DLL must not leave window classes
+  the brushed metal (`theme.*`), the meter panel (`meterview.*`), the loudness window and tooltips. A DLL must not
+  leave window classes
   registered after it is unloaded (they would point into freed code), so the classes and GDI+ are registered with
   the first open window and removed with the last. Common controls version 6 come from the DLL's own manifest
   (`ISOLATION_AWARE_ENABLED`), whatever the host's manifest says.
@@ -669,25 +699,25 @@ buffers.
   latency, bit-exact. The SDK's validator passes all 47 standard and 537 extended tests (bus arrangements, sample
   rates, block sizes, parameter and state handling, threading rules).
 
-## 19. The presets and the standards behind them
+## 19. The loudness presets and the standards behind them
 
-The presets' targets follow the loudness standards of the media they imitate:
+The loudness presets' targets follow the loudness standards of the media they imitate:
 
 - **EBU R 128** [2] introduced loudness normalisation in broadcasting: programme loudness -23 LUFS, true peak at most
-  -1 dBTP. **EBU Tech 3344** [5] applies it to distribution and reproduction. The **DAB+** preset follows it: -23
+  -1 dBTP. **EBU Tech 3344** [5] applies it to distribution and reproduction. The **DAB+** loudness preset follows it: -23
   LUFS, wide dynamics, songs shifted slowly instead of squashed, compression only above -18 LUFS (R 128's short-term
   maximum for "s1"), no density, clipping or exciter (a low-bit-rate codec smears clipping and spends its bits on
   added highs).
 - **FM radio** is limited by the multiplex power of ITU-R BS.412 [14] (an average over 60 s), which caps the
-  loudness at about -12..-15 LUFS while station processing makes the sound very dense. The **FM Station** preset
+  loudness at about -12..-15 LUFS while station processing makes the sound very dense. The **FM Station** loudness preset
   processes like a loud station (-9 LUFS) and turns the result down 4 dB, leaving peaks only about 8 dB above the
   loudness (measured -13.3 LUFS, -5.1 dBTP). It is the sound, not a transmitter-ready signal: no 15 kHz low-pass and
   no stereo coder.
 - **Streaming and file playback**: the AES recommendations for audio streaming and network file playback (TD1004,
   then TD1008, later the AES77 standard) [23] put music at about -16 LUFS for portable listening; music services
-  normalise to -14..-16 LUFS. The **Web Stream** preset uses -16 LUFS without clipping and with a ceiling of -2 dBTP,
+  normalise to -14..-16 LUFS. The **Web Stream** loudness preset uses -16 LUFS without clipping and with a ceiling of -2 dBTP,
   because lossy coding raises peaks slightly and turns clipping into audible distortion. **Medium** sits at -14 LUFS.
-- The five strength presets (Gentle -18 .. Very Loud -10 LUFS) step about 2 LU at a time; each compresses a little
+- The five strength loudness presets (Gentle -18 .. Very Loud -10 LUFS) step about 2 LU at a time; each compresses a little
   earlier and harder and uses more bands and more density. Gentle sits at the low end of the AES playback range
   (-16..-20 LUFS); Very Loud approaches modern club masters (-8..-9 LUFS) but keeps a margin so the limiter does not
   carry everything, and keeps its release at 50 ms or more so a 50 Hz bass is not distorted by the limiter's gain
@@ -710,16 +740,16 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Density | band-sum flatness for every band count 1..7 | 0.01 dB |
 | Band count | 3 -> 7 -> 1 bands on a sine while playing | no step larger than the signal's own |
 | Clicks | every parameter changed on a sine in its own band | no step larger than the signal's own |
-| Colour | every section against its analogue prototype; loudness contour; neutral; auto tone; sub bass | 0.02 dB; +8.9 / +3.9 dB; bit-exact; reference - balance; 30 Hz -2.3 dB |
+| Colour | every section against its analogue prototype; contour; neutral; auto tone; sub bass | 0.02 dB; +8.9 / +3.9 dB; bit-exact; reference - balance; 30 Hz -2.3 dB |
 | Width | left-only tone at 200 % and 0 %; mono stays mono | 1.5 / 0.5; 0.5 / 0.5 |
-| Presets | all 8 presets on test material at -18 and -9 LUFS in | output within 1 LU of each preset's target; true peak <= ceiling |
+| Loudness presets | all 8 loudness presets on test material at -18 and -9 LUFS in | output within 1 LU of each loudness preset's target; true peak <= ceiling |
 | Robustness | NaN / Inf input; FTZ restored | recovers within a block; processor mode unchanged |
 | Real time | allocation counter during processing and changes | 0 allocations |
 | Decks | deck A's processing does not change deck B; equal latency | bit-exact; the same delay |
 | CPU | both decks, full chain, 48 kHz | < 3 % of one core (fail > 5 %) |
 | Inputs on another clock | simulated clocks -500..+500 ppm, late callbacks, pauses | no xruns, drift within 3 ppm, fill within 0.5 ms |
 | Graphs | FFT against a DFT; sines 50 Hz - 18 kHz; correlation and width of known signals | 1e-12; within a bin; +-0.05 / 1 % |
-| Offline | synthetic songs through every preset, checked with an independent meter | integrated loudness within 1 LU of the target, true peak <= ceiling |
+| Offline | synthetic songs through every loudness preset, checked with an independent meter | integrated loudness within 1 LU of the target, true peak <= ceiling |
 | Plug-in | loaded like a host: against the deck at block sizes 1..1024 with a change; state stored and loaded; Bypass; latency; parameter ids; the SDK's validator | bit-exact; 71 of 71 values, bit-exact; bit-exact; 72 / 144 samples; unique; 47 + 537 tests passed |
 | Slider positions | every value's positions: range, order, every shipped value back within a step | exact ends, rising, within a step (2 % on log scales) |
 
@@ -737,7 +767,7 @@ need a membership or a purchase for the full text.
 | [2] | EBU R 128, *Loudness normalisation and permitted maximum level of audio signals* - <https://tech.ebu.ch/publications/r128> | loudness normalisation, LUFS / LU, -1 dBTP (19) |
 | [3] | EBU Tech 3341, *Loudness Metering: "EBU Mode" metering to supplement EBU R 128* - <https://tech.ebu.ch/publications/tech3341> | momentary / short-term / integrated, test cases (3, 19) |
 | [4] | EBU Tech 3342, *Loudness Range: a measure to supplement EBU R 128* - <https://tech.ebu.ch/publications/tech3342> | loudness range (3) |
-| [5] | EBU Tech 3344, *Guidelines for distribution and reproduction in accordance with EBU R 128* - <https://tech.ebu.ch/publications/tech3344> | the DAB+ preset (19) |
+| [5] | EBU Tech 3344, *Guidelines for distribution and reproduction in accordance with EBU R 128* - <https://tech.ebu.ch/publications/tech3344> | the DAB+ loudness preset (19) |
 | [6] | D. Giannoulis, M. Massberg, J. D. Reiss, *Digital Dynamic Range Compressor Design - A Tutorial and Analysis*, J. Audio Eng. Soc. 60(6), 2012, pp. 399-408 - <https://aes2.org/publications/elibrary-page/?id=16354> | compressor structure, soft knee, smoothing (6) |
 | [7] | U. Zoelzer (ed.), *DAFX - Digital Audio Effects*, 2nd ed., Wiley 2011 - <https://dafx.de/DAFX_Book_Page_2nd_edition/> | look-ahead limiting, nonlinear processing (9, 13) |
 | [8] | R. Bristow-Johnson, *Audio EQ Cookbook* (W3C note) - <https://www.w3.org/TR/audio-eq-cookbook/> | biquads, shelves (2.1, 10) |
@@ -746,16 +776,16 @@ need a membership or a purchase for the full text.
 | [11] | J. O. Smith III, *Digital Audio Resampling Home Page* - <https://ccrma.stanford.edu/~jos/resample/> | band-limited interpolation (17) |
 | [12] | E. Larsen, R. M. Aarts, *Reproducing Low-Pitched Signals through Small Loudspeakers*, J. Audio Eng. Soc. 50(3), 2002, pp. 147-164 - <https://aes2.org/publications/elibrary-page/?id=11088>; summary at <https://research.tue.nl/en/publications/reproducing-low-pitched-signals-through-small-loudspeakers/> | bass enhancer (8) |
 | [13] | E. Larsen, R. M. Aarts, *Audio Bandwidth Extension: Application of Psychoacoustics, Signal Processing and Loudspeaker Design*, Wiley 2004 | bass enhancer (8) |
-| [14] | ITU-R BS.412-9, *Planning standards for terrestrial FM sound broadcasting at VHF* - <https://www.itu.int/rec/R-REC-BS.412/en> | multiplex power limit, the FM Station preset (19) |
+| [14] | ITU-R BS.412-9, *Planning standards for terrestrial FM sound broadcasting at VHF* - <https://www.itu.int/rec/R-REC-BS.412/en> | multiplex power limit, the FM Station loudness preset (19) |
 | [15] | A. Simper, *Linear Trap Optimised SVF* (Cytomic technical paper) - <https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf> | state-variable filters of the colour stage (2.3, 5) |
 | [16] | S. H. Linkwitz, *Active Crossover Networks for Noncoincident Drivers*, J. Audio Eng. Soc. 24(1), 1976, pp. 2-8 - <https://aes2.org/publications/elibrary-page/?id=2649>; see also <https://www.linkwitzlab.com/filters.htm> | Linkwitz-Riley band splits (2.2, 7, 11) |
-| [17] | ISO 226:2023, *Acoustics - Normal equal-loudness-level contours* - <https://www.iso.org/standard/83117.html> | loudness contour (5.4) |
+| [17] | ISO 226:2023, *Acoustics - Normal equal-loudness-level contours* - <https://www.iso.org/standard/83117.html> | contour (5.4) |
 | [18] | A. D. Blumlein, British patent 394,325 (filed 1931, granted 1933), *Improvements in and relating to sound-transmission, sound-recording and sound-reproducing systems* | mid / side stereo (11) |
 | [19] | J. W. Cooley, J. W. Tukey, *An algorithm for the machine calculation of complex Fourier series*, Mathematics of Computation 19 (1965) - <https://doi.org/10.1090/S0025-5718-1965-0178586-1> | FFT (15.3) |
 | [20] | F. J. Harris, *On the use of windows for harmonic analysis with the discrete Fourier transform*, Proc. IEEE 66(1), 1978 - <https://doi.org/10.1109/PROC.1978.10837> | Hann window (15.3) |
 | [21] | Steinberg, ASIO SDK (used under its GPL-3.0 option) - <https://www.steinberg.net/developers/> | ASIO driver interface (16.3) |
 | [22] | D. Reid, miniaudio (public domain / MIT-0) - <https://miniaud.io/> | WASAPI, DirectSound and MME streams (16.3) |
-| [23] | AES Technical Council, TD1004 (2015) and TD1008 (2021), *Recommendations for loudness of internet audio streaming and on-demand distribution* (TD1008 later became the AES77 standard) - AES technical documents: <https://aes2.org/?p=50870> | streaming targets, the Web Stream preset (19) |
+| [23] | AES Technical Council, TD1004 (2015) and TD1008 (2021), *Recommendations for loudness of internet audio streaming and on-demand distribution* (TD1008 later became the AES77 standard) - AES technical documents: <https://aes2.org/?p=50870> | streaming targets, the Web Stream loudness preset (19) |
 | [24] | Steinberg Media Technologies, plug-in SDK v3.8.1 (MIT licence; the plug-in interfaces, base classes, validator and test hosts) - <https://github.com/steinbergmedia/vst3sdk> | the plug-in (18) |
 
 Besides these sources the design draws on the project's own measurements, recorded with each decision in

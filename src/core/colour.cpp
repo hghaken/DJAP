@@ -252,6 +252,21 @@ bool ColourProcessor::finite() const {
     return std::isfinite(env_ + power_[0] + power_[1] + power_[2] + power_[3] + power_[4]);
 }
 
+double colourSectionDb(const PresetValues& v, int s, double autoDb, double fs, double hz) {
+    const ColourConfig c = makeColourConfig(v, fs, fs / kColourBlock);
+    if (s < 0 || s >= ColourConfig::kSections) return 0.0;
+    const double gain = c.gainDb[s] + (s < 4 ? autoDb : 0.0);
+    if (gain == 0.0) return 0.0;
+    const SvfCoeffs k = SvfCoeffs::design(modeOf(s), fs, c.hz[s], gain, modeOf(s) == SvfCoeffs::Bell ? kBellQ : kShelfQ);
+    return design::magnitudeDb(k, fs, hz);
+}
+
+double colourCurveDb(const PresetValues& v, const double* autoDb, double fs, double hz) {
+    double db = 0.0;
+    for (int s = 0; s < ColourConfig::kSections; ++s) db += colourSectionDb(v, s, autoDb && s < 4 ? autoDb[s] : 0.0, fs, hz);
+    return db;
+}
+
 void toneBalance(const float* mono, size_t n, double fs, double out[kToneBands]) {
     Biquad band[kToneBands];
     for (int b = 0; b < kToneBands; ++b) band[b].c = design::bandPass(fs, kToneBandHz[b], kBandQ);

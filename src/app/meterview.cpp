@@ -1,5 +1,6 @@
 #include "meterview.h"
 
+#include "spectrumdraw.h"
 #include "tooltips.h"
 
 #include <algorithm>
@@ -22,18 +23,19 @@ const COLORREF kBack = RGB(28, 30, 33), kWell = RGB(44, 47, 52), kText = RGB(214
 constexpr double kSpecTop = 0.0, kSpecBottom = -90.0; // spectrum scale (dB)
 
 constexpr double kTop = 3.0, kBottom = -40.0; // vertical bar scale (LUFS / dBTP)
+constexpr int kShownRows = 5;                  // stage rows drawn: the density row's place went to the spectrum
 
 // Tooltip parts: the four bars, the six stage rows, the spectrum.
 enum TipPart { tInL, tInR, tOutL, tOutR, tRow0, tSpectrum = tRow0 + 6, kTipParts };
 const wchar_t* const kTips[kTipParts] = {
-    L"Input, left channel, after the preset's input gain (what enters the processing): its sample peak (dBFS, held, "
+    L"Input, left channel, after the loudness preset's input gain (what enters the processing): its sample peak (dBFS, held, "
     L"falling 20 dB/s) as LEDs - amber from -6 dBFS, red from "
     L"-1 dBFS (near clipping); the single lit LED above holds the highest peak for 1.5 s. White line across In L / R: "
-    L"the input's loudness (momentary, 400 ms, LUFS - right scale); yellow line: the preset's target.",
-    L"Input, right channel, after the preset's input gain (what enters the processing): its sample peak (dBFS, held, "
+    L"the input's loudness (momentary, 400 ms, LUFS - right scale); yellow line: the loudness preset's target.",
+    L"Input, right channel, after the loudness preset's input gain (what enters the processing): its sample peak (dBFS, held, "
     L"falling 20 dB/s) as LEDs - amber from -6 dBFS, red from "
     L"-1 dBFS (near clipping); the single lit LED above holds the highest peak for 1.5 s. White line across In L / R: "
-    L"the input's loudness (momentary, 400 ms, LUFS - right scale); yellow line: the preset's target.",
+    L"the input's loudness (momentary, 400 ms, LUFS - right scale); yellow line: the loudness preset's target.",
     L"Output, left channel: its true peak (dBTP: peaks between the samples included, falling 20 dB/s) as LEDs - "
     L"amber in the last 3 dB under the limiter's ceiling (red line), red over it; the single lit LED above holds the "
     L"highest peak for 1.5 s. White line across Out L / R: the output's loudness (momentary, LUFS); yellow: the target.",
@@ -41,17 +43,18 @@ const wchar_t* const kTips[kTipParts] = {
     L"amber in the last 3 dB under the limiter's ceiling (red line), red over it; the single lit LED above holds the "
     L"highest peak for 1.5 s. White line across Out L / R: the output's loudness (momentary, LUFS); yellow: the target.",
     L"Leveller gain now: blue to the right = lifted, orange to the left = turned down; the ends of the bar are the "
-    L"preset's leveller range. A grey name: the stage is off in the preset, or the deck is bypassed.",
+    L"loudness preset's leveller range. A grey name: the stage is off in the loudness preset, or the deck is "
+    L"bypassed.",
     L"Compressor gain reduction now (scale 0-12 dB, a tick every 3 dB).",
-    L"Density: each band's gain now, the lowest band on the left: blue up = lifted, orange down = turned down "
-    L"(+-12 dB).",
+    L"",
     L"De-esser gain reduction now (scale 0-12 dB): how much sharp 's' sounds are turned down.",
     L"Soft clipper gain reduction now (scale 0-12 dB): how much the peaks are rounded off.",
-    L"Limiter gain reduction now (scale 0-12 dB). Often busy means the input is far louder than the preset expects.",
+    L"Limiter gain reduction now (scale 0-12 dB). Often busy means the input is far louder than the loudness preset expects.",
     L"Spectrum of this deck, 20 Hz - 20 kHz, averaged over about 0.3 s: orange = the original (the deck's input), "
-    L"turquoise = processed (the output). The scale is dB of a sine's level (0 dB = full scale). Dashed lines: the "
-    L"density stage's band splits, with the band numbers. Where the turquoise line lies above the orange one the "
-    L"processing lifts that range.",
+    L"turquoise = processed (the output). The scale is dB of a sine's level (0 dB = full scale). Where the turquoise "
+    L"line lies above the orange one the processing lifts that range. Purple: the density stage's bands (dashed: "
+    L"their splits, with the band numbers) and a line per band at its gain now, +-12 dB over the height - blue = "
+    L"lifted, red = turned down.",
 };
 
 void line(HDC dc, int x0, int y0, int x1, int y1, COLORREF c, int style = PS_SOLID, int width = 1) {
@@ -183,7 +186,7 @@ void paint(HWND hwnd, HDC target, View& v) {
         text(dc, (barX(0) + barX(1) + barW) / 2, margin, "In", kText, TA_CENTER);
         text(dc, (barX(2) + barX(3) + barW) / 2, margin, "Out", kText, TA_CENTER);
         SelectObject(dc, v.small);
-        // In: the input after the preset's input gain - what enters the processing (client, 2026-10-25: the input
+        // In: the input after the loudness preset's input gain - what enters the processing (client, 2026-10-25: the input
         // slider should move the In bars); the gain is a fixed factor, added here, not in the measurement
         auto afterGain = [&](double db) { return db > kFloorDb + 1.0 ? db + d.inputGain : kFloorDb; };
         const double values[4] = {afterGain(m.inPeak[0]), afterGain(m.inPeak[1]), m.tpNow[0], m.tpNow[1]};
@@ -256,7 +259,7 @@ void paint(HWND hwnd, HDC target, View& v) {
     GetTextMetricsW(dc, &stmRows);
     const int sth = stmRows.tmHeight;
     SelectObject(dc, v.font);
-    const int rowH = std::min(px(16) + sth + px(8), (rowsBottom - rowsTop) / 6);
+    const int rowH = std::min(px(16) + sth + px(8), (rowsBottom - rowsTop) / kShownRows);
     auto hz = [](double f) {
         char b[16];
         if (f < 1000.0) std::snprintf(b, sizeof b, "%.0f", f);
@@ -265,10 +268,11 @@ void paint(HWND hwnd, HDC target, View& v) {
         return std::string(b);
     };
     if (fullR - barL > px(40) && rowH > th) {
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0, shown = 0; i < 6; ++i) {
+            if (rows[i].kind == 2) continue; // density: its bands are drawn in the spectrum
             const Row& r = rows[i];
             const int barR = fullR;
-            const int y0 = rowsTop + i * rowH, bt = y0 + px(3), bb = bt + px(12), yc = (bt + bb) / 2;
+            const int y0 = rowsTop + shown++ * rowH, bt = y0 + px(3), bb = bt + px(12), yc = (bt + bb) / 2;
             const int ly = bb + px(2); // scale labels
             placeTip(hwnd, v, tRow0 + i, gx, y0, W, y0 + rowH);
             const bool on = d.stageOn[r.stage] && d.processing;
@@ -328,73 +332,21 @@ void paint(HWND hwnd, HDC target, View& v) {
         }
     }
 
-    // ---- spectrum under the stage rows: original and processed, density splits ----
+    // ---- spectrum under the stage rows: original and processed, the density bands and their gains ----
     {
         const int sx0 = gx, sx1 = W - margin;
-        const int sy0 = rowsTop + 6 * rowH + px(6), sy1 = rowsBottom - px(4);
+        const int sy0 = rowsTop + kShownRows * rowH + px(6), sy1 = rowsBottom - px(4);
         if (sx1 - sx0 > px(120) && sy1 - sy0 > px(80)) {
             placeTip(hwnd, v, tSpectrum, sx0, sy0, sx1, sy1);
-            fill(dc, sx0, sy0, sx1, sy1, RGB(22, 24, 27));
-            SetBkColor(dc, RGB(22, 24, 27)); // the gaps of the dotted lines
-            SelectObject(dc, v.small); // sth: its line height (above)
-            const int dbW = px(30); // dB labels on the right
-            const int px0 = sx0 + px(4), px1 = sx1 - dbW, py0 = sy0 + sth + px(4), py1 = sy1 - sth - px(4);
-            const double lo = SpectrumAnalyzer::kLowHz, hi = SpectrumAnalyzer::kHighHz;
-            auto xOf = [&](double f) {
-                return px0 + static_cast<int>((px1 - px0) * std::log(f / lo) / std::log(hi / lo) + 0.5);
-            };
-            auto yOfDb = [&](double db) {
-                const double t = (std::min(kSpecTop, std::max(kSpecBottom, db)) - kSpecBottom) / (kSpecTop - kSpecBottom);
-                return py1 - static_cast<int>(t * (py1 - py0) + 0.5);
-            };
-            for (int db = -12; db >= -84; db -= 12) {
-                const int y = yOfDb(db);
-                line(dc, px0, y, px1, y, RGB(70, 74, 80), PS_DOT);
-                text(dc, sx1 - px(3), y - sth / 2, std::to_string(db), kDim, TA_RIGHT);
-            }
-            const struct {
-                double f;
-                const char* label;
-            } freqs[] = {{50, "50"}, {100, "100"}, {200, "200"}, {500, "500"}, {1000, "1k"},
-                         {2000, "2k"}, {5000, "5k"},  {10000, "10k"}};
-            for (const auto& f : freqs) {
-                const int x = xOf(f.f);
-                line(dc, x, py0, x, py1, RGB(70, 74, 80), PS_DOT);
-                text(dc, x, py1 + px(2), f.label, kDim, TA_CENTER);
-            }
-            // density splits and band numbers
-            if (d.stageOn[sDensity] && m.bands > 1) {
-                int prev = px0;
-                for (int b = 0; b < m.bands; ++b) {
-                    const int x = b + 1 < m.bands ? xOf(d.splits[b]) : px1;
-                    if (b + 1 < m.bands) line(dc, x, py0, x, py1, kPurple, PS_DOT);
-                    text(dc, (prev + x) / 2, py0, std::to_string(b + 1), kPurple, TA_CENTER);
-                    prev = x;
-                }
-            }
-            text(dc, px0, sy0 + px(2), "Spectrum", kDim);
-            text(dc, px0 + px(70), sy0 + px(2), "original", kOrange);
-            text(dc, px0 + px(125), sy0 + px(2), "processed", kTeal);
-            if (d.spectrum) {
-                const HRGN clip = CreateRectRgn(px0, py0, px1, py1 + 1);
-                SelectClipRgn(dc, clip);
-                for (int curve = 0; curve < 2; ++curve) {
-                    const auto& pts = curve == 0 ? d.specIn : d.specOut;
-                    POINT poly[SpectrumAnalyzer::kPoints];
-                    for (int i = 0; i < SpectrumAnalyzer::kPoints; ++i)
-                        poly[i] = {xOf(SpectrumAnalyzer::pointHz(i)), yOfDb(pts[static_cast<size_t>(i)])};
-                    HPEN pen = CreatePen(PS_SOLID, std::max(1, px(1.5)), curve == 0 ? kOrange : kTeal);
-                    HGDIOBJ old = SelectObject(dc, pen);
-                    Polyline(dc, poly, SpectrumAnalyzer::kPoints);
-                    SelectObject(dc, old);
-                    DeleteObject(pen);
-                }
-                SelectClipRgn(dc, nullptr);
-                DeleteObject(clip);
-            } else {
-                text(dc, (px0 + px1) / 2, (py0 + py1) / 2 - sth / 2, "no audio", kDim, TA_CENTER);
-            }
-            SelectObject(dc, v.font);
+            spectrum::Data sd;
+            sd.in = d.specIn;
+            sd.out = d.specOut;
+            sd.live = d.spectrum;
+            sd.densityOn = d.stageOn[sDensity] && d.processing;
+            sd.bands = m.bands > 0 ? m.bands : 1;
+            for (int k = 0; k < kMaxSplits; ++k) sd.splits[k] = d.splits[k];
+            for (int k = 0; k < kMaxBands; ++k) sd.densityDb[k] = live ? m.densityDb[k] : 0.0;
+            spectrum::paint(dc, RECT{sx0, sy0, sx1, sy1}, sd, v.small, GetDpiForWindow(hwnd), false);
         }
     }
 
@@ -405,13 +357,15 @@ void paint(HWND hwnd, HDC target, View& v) {
     DeleteDC(dc);
 }
 
-// What a click at pt opens (meterStage's numbering): a stage row 0..5, the In bars 6, the Out bars 7; -1 = nothing.
+// What a click at pt opens (meterStage's numbering): a stage row 0..5, the In bars 6, the Out bars 7, the spectrum 8;
+// -1 = nothing.
 // The parts as last painted (their tooltip rectangles).
 int clickTarget(const View& v, POINT pt) {
     for (int i = 0; i < kMeterRows; ++i)
         if (PtInRect(&v.tipRect[tRow0 + i], pt)) return i;
     for (int b = tInL; b <= tOutR; ++b)
         if (PtInRect(&v.tipRect[b], pt)) return b <= tInR ? kMeterRows : kMeterRows + 1;
+    if (PtInRect(&v.tipRect[tSpectrum], pt)) return kMeterSpectrum;
     return -1;
 }
 
@@ -428,7 +382,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 const std::wstring tip = std::wstring(kTips[i]) +
                                          (i >= tRow0 && i < tRow0 + kMeterRows ? L" Click: opens its settings."
                                           : i <= tInR ? L" Click: opens the General tab (input gain, target)."
-                                          : i <= tOutR ? L" Click: opens the Limiter tab (its ceiling)." : L"");
+                                          : i <= tOutR ? L" Click: opens the Limiter tab (its ceiling)."
+                                                       : L" Click: opens the big spectrum window, with the colour's EQ "
+                                                         L"curve (the plug-in: the density settings).");
                 v->tips.addRect(hwnd, static_cast<UINT_PTR>(i), tip.c_str());
             }
         }
@@ -480,9 +436,35 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
 } // namespace
 
+int meterViewMinHeight(UINT dpi) {
+    // paint()'s layout: the five stage rows at their full height, then a spectrum whose dB labels (every 12 dB of its
+    // 96) do not touch each other, its title row above and the frequencies below
+    NONCLIENTMETRICSW ncm{};
+    ncm.cbSize = sizeof ncm;
+    SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0, dpi);
+    LOGFONTW lf = ncm.lfMessageFont;
+    lf.lfHeight = lf.lfHeight * 85 / 100; // the small font
+    HFONT small = CreateFontIndirectW(&lf);
+    HDC dc = GetDC(nullptr);
+    HGDIOBJ old = SelectObject(dc, small);
+    TEXTMETRICW tm{};
+    GetTextMetricsW(dc, &tm);
+    SelectObject(dc, old);
+    ReleaseDC(nullptr, dc);
+    DeleteObject(small);
+    const double s = dpi / 96.0;
+    auto px = [s](double x) { return static_cast<int>(x * s + 0.5); };
+    const int sth = tm.tmHeight;
+    const int margin = px(10), bottomH = margin - px(4);
+    const int row = px(16) + sth + px(8);
+    const int plot = (sth + px(2)) * 96 / 12 + 1; // spectrumdraw.cpp: 0 .. -96 dB
+    const int spectrum = sth + px(4) + plot + sth + px(4);
+    return margin + kShownRows * row + px(6) + spectrum + px(4) + bottomH + px(4);
+}
+
 const char* meterStage(int target) {
-    static const char* const tabs[kMeterTargets] = {"Leveller",     "Compressor", "Density", "De-esser",
-                                                    "Soft clipper", "Limiter",    "General", "Limiter"};
+    static const char* const tabs[kMeterTargets] = {"Leveller", "Compressor", "Density", "De-esser", "Soft clipper",
+                                                    "Limiter",  "General",    "Limiter", "Density"};
     return target >= 0 && target < kMeterTargets ? tabs[target] : "General";
 }
 

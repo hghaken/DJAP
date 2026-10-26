@@ -20,7 +20,7 @@ namespace {
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
           idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idAbout,
-          idCheckUpdates, idCheckNow, idInstall };
+          idCheckUpdates, idCheckNow, idInstall, idTooltips };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 const double kLooks[] = {0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0}; // limiter look-ahead choices (ms; 1.5 the default)
@@ -92,11 +92,11 @@ void AudioWindow::show(HWND owner) {
         AdjustWindowRectExForDpi(&r, style, FALSE, 0, dpi_);
         SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
         layout();
-        placement::centreOn(hwnd_, owner); // after layout(): the window fits its content
+        placement::remember(hwnd_, "Setup", owner); // after layout(): the window fits its content
     }
     fillAll();
     refresh();
-    ShowWindow(hwnd_, SW_SHOWNORMAL);
+    ShowWindow(hwnd_, placement::showCommand(hwnd_));
     SetForegroundWindow(hwnd_);
 }
 
@@ -177,7 +177,7 @@ void AudioWindow::createControls() {
     outB_ = make(WC_COMBOBOXW, L"", combo, idOutB);
     rate_ = make(WC_COMBOBOXW, L"", combo, idRate);
     buffer_ = make(WC_COMBOBOXW, L"", combo, idBuffer);
-    link_ = make(L"BUTTON", L"Deck A and deck B use the same preset (choosing one on either deck sets both)",
+    link_ = make(L"BUTTON", L"Deck A and deck B use the same loudness preset and colour (a choice on either deck sets both)",
                  BS_AUTOCHECKBOX | WS_TABSTOP, idLink);
     follow_ = make(L"BUTTON", L"The outputs follow the Windows volume (volume keys, taskbar) and mute",
                    BS_AUTOCHECKBOX | WS_TABSTOP, idFollow);
@@ -191,6 +191,8 @@ void AudioWindow::createControls() {
                                L"session)",
                     BS_AUTOCHECKBOX | WS_TABSTOP, idStartup);
     about_ = make(L"BUTTON", L"About DJAP...", BS_OWNERDRAW | WS_TABSTOP, idAbout);
+    tooltips_ = make(L"BUTTON", L"Show tooltips (what a control does, when the mouse rests on it)",
+                     BS_AUTOCHECKBOX | WS_TABSTOP, idTooltips);
     checkUpdates_ = make(L"BUTTON", L"Check GitHub for a new version once a day (installed only when you click Install "
                                     L"update)",
                          BS_AUTOCHECKBOX | WS_TABSTOP, idCheckUpdates);
@@ -206,7 +208,7 @@ void AudioWindow::createControls() {
     for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_, about_, checkNow_, install_}) theme::makeButton(b);
     for (HWND c : {decks_, api_, inputs_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_}) theme::makeCombo(c);
     tips_.create(hwnd_);
-    tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and preset (two "
+    tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
                       L"players or a mixer's channels).\nOne channel: one stereo processor, for example for everything "
                       L"Windows plays (through a virtual cable or a loopback input) to one output. Changing it while "
                       L"the audio runs starts the audio again.");
@@ -243,7 +245,7 @@ void AudioWindow::createControls() {
     tips_.add(buffer_, L"Frames per period. Smaller = lower latency, but more risk of dropouts when the PC is busy "
                        L"(watch Health: late periods are dropouts). ASIO: the driver's preferred size or a size it "
                        L"allows. Other APIs: the period asked of Windows.");
-    tips_.add(link_, L"On: deck B always uses deck A's preset and colour - the main window then shows one set of "
+    tips_.add(link_, L"On: deck B always uses deck A's loudness preset and colour - the main window then shows one set of "
                      L"controls (deck A's), and its Bypass counts for both decks.");
     tips_.add(follow_, L"On: the volume and mute of Windows' default playback device - what the keyboard's volume "
                        L"keys and the taskbar change - turn the outputs down after the processing (never up: the "
@@ -271,6 +273,8 @@ void AudioWindow::createControls() {
                         L"the audio of the last session (it retries for 2 minutes while the devices come up). "
                         L"Saved in Windows' list of startup programs, not in the settings file.");
     tips_.add(about_, L"Version, the settings file in use and the licences.");
+    tips_.add(tooltips_, L"On: every control of DJAP explains itself when the mouse rests on it (as this one). Off: no "
+                         L"tooltips in any window. The plug-in follows the next time it is loaded.");
     tips_.add(checkUpdates_, L"On: once a day (and a little after the program starts) DJAP asks GitHub whether a newer "
                              L"version has been published, and tells you (a message at the icon in the notification "
                              L"area, and here). Nothing is downloaded or installed until you click Install update. "
@@ -291,7 +295,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, state_, health_, resetHealth_, note_, look_, startup_, about_, checkUpdates_,
+                   start_, stop_, state_, health_, resetHealth_, note_, look_, startup_, about_, checkUpdates_, tooltips_,
                    checkNow_, install_, updateInfo_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
@@ -360,6 +364,8 @@ void AudioWindow::layout() {
     y += h + g;
     MoveWindow(startup_, m + labelW + g, y, W - labelW - g, h, TRUE);
     y += h + g;
+    MoveWindow(tooltips_, m + labelW + g, y, W - labelW - g, h, TRUE);
+    y += h + g;
     // updates: the switch, then Check now / Install update and what the last check found
     MoveWindow(labels_[12], m, y, labelW, h, TRUE);
     MoveWindow(checkUpdates_, m + labelW + g, y, W - labelW - g, h, TRUE);
@@ -408,9 +414,10 @@ void AudioWindow::fillAll() {
     SendMessageW(startup_, BM_SETCHECK, !testRun_ && startsWithWindows() ? BST_CHECKED : BST_UNCHECKED, 0);
     EnableWindow(startup_, !testRun_);
     SendMessageW(checkUpdates_, BM_SETCHECK, settings_.checkUpdates ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(tooltips_, BM_SETCHECK, settings_.showTooltips ? BST_CHECKED : BST_UNCHECKED, 0);
     // two decks or one channel
     SendMessageW(decks_, CB_RESETCONTENT, 0, 0);
-    addItem(decks_, L"Two decks (DJ: deck A and deck B, each its own input, output and preset)", 2);
+    addItem(decks_, L"Two decks (DJ: deck A and deck B, each its own input, output and loudness preset)", 2);
     addItem(decks_, L"One channel (one stereo processor, e.g. for what Windows plays)", 1);
     selectData(decks_, settings_.decks);
     // API
@@ -682,6 +689,12 @@ void AudioWindow::command(int id, int code) {
     }
     if (id == idAbout && code == BN_CLICKED) {
         if (onAbout_) onAbout_(hwnd_);
+        return;
+    }
+    if (id == idTooltips && code == BN_CLICKED) {
+        settings_.showTooltips = SendMessageW(tooltips_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        Tooltips::setEnabled(settings_.showTooltips);
+        onChange_(); // saved
         return;
     }
     if (id == idCheckUpdates && code == BN_CLICKED) {

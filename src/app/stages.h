@@ -12,7 +12,7 @@ inline constexpr const wchar_t* kStageName[kStageCount] = {L"Leveller", L"Compre
                                                            L"Bass",     L"Exciter",    L"De-esser",
                                                            L"Width",    L"Clipper",    L"Limiter"};
 inline constexpr const wchar_t* kStageTip[kStageCount] = {
-    L"Leveller: slow automatic gain that brings each song to the preset's target loudness (EBU R 128). It holds "
+    L"Leveller: slow automatic gain that brings each song to the loudness preset's target loudness (EBU R 128). It holds "
     L"during fades, breakdowns and pauses, and catches up quickly when the deck starts again after silence. "
     L"Freeze leveller (main window) holds it by hand.",
     L"Compressor: wide-band, soft knee. Its threshold sits relative to the target loudness, so it only works on the "
@@ -32,7 +32,7 @@ inline constexpr const wchar_t* kStageTip[kStageCount] = {
     L"(Setup window) is the only delay the processing adds.",
 };
 inline constexpr const wchar_t* kStageTipEnd =
-    L"\n\nThe switch belongs to this preset: every deck that uses it changes with it. Switching on or off fades in "
+    L"\n\nThe switch belongs to this loudness preset: every deck that uses it changes with it. Switching on or off fades in "
     L"20 ms (no click).";
 
 } // namespace ap

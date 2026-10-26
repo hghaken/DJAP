@@ -63,7 +63,7 @@ void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
     body_ = L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING) +
             L"\n\nTwo-deck loudness and dynamics processor for DJs: a leveller, compressor, density, de-esser, "
             L"stereo width, colour and a true-peak limiter per deck, with only the limiter's look-ahead as delay.";
-    path_ = L"Settings and own presets: " + settingsFile.wstring();
+    path_ = L"Settings and own loudness presets and colours: " + settingsFile.wstring();
     loadLogo();
     static bool registered = false;
     HINSTANCE inst = GetModuleHandleW(nullptr);
@@ -82,11 +82,11 @@ void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
     hwnd_ = CreateWindowExW(WS_EX_DLGMODALFRAME, kClass, L"About DJAP", style, CW_USEDEFAULT, CW_USEDEFAULT,
                             CW_USEDEFAULT, CW_USEDEFAULT, owner, nullptr, inst, this);
     if (!hwnd_) return;
-    // centred on the owner, sized for the window's DPI
+    // sized for the window's DPI, at its remembered place (or centred on the screen)
     RECT r{0, 0, px(kWidth), px(kHeight)};
     AdjustWindowRectExForDpi(&r, style, FALSE, WS_EX_DLGMODALFRAME, dpi_);
     SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
-    placement::centreOn(hwnd_, owner);
+    placement::remember(hwnd_, "About", owner);
     EnableWindow(owner_, FALSE); // modal, as a message box
     ShowWindow(hwnd_, SW_SHOWNORMAL);
     SetFocus(ok_);

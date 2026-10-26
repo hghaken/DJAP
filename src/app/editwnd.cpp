@@ -17,6 +17,11 @@ namespace ap {
 namespace {
 
 const wchar_t* const kClass = L"APEditWindow";
+
+// The module the window classes belong to: the program, or the plug-in DLL (EditWindow::setModule).
+HINSTANCE g_module = nullptr;
+bool g_askRegistered = false, g_editRegistered = false;
+HINSTANCE moduleInstance() { return g_module ? g_module : GetModuleHandleW(nullptr); }
 enum Id { idPreset = 10, idSaveAs, idRename, idDelete, idResetPreset, idTabs, idRow0 = 100 };
 // the controls of row r have the ids idRow0 + kRowIds * r + part
 enum RowPart { rpSlider, rpCheck, rpValue, rpReset, kRowIds };
@@ -115,7 +120,8 @@ const StageSound kStageSound[] = {
      L"down). A higher speed reaches a new song's level sooner but can be heard as the volume drifting within a "
      L"song; a lower one is inaudible but takes longer. Fast down only acts when a song comes in clearly too loud "
      L"(after a quiet intro or a break): higher brings it down sooner, lower lets the loud start through longer. "
-     L"Hold below keeps fades and breakdowns from being pumped up; catch-up brings a song to level within a second "
+     L"Hold below keeps fades and pauses from being pumped up; a quiet part that stays (a soft verse, a breakdown) is "
+     L"levelled after a few seconds, quickly when it is far too soft. Catch-up brings a song to level within a second "
      L"after a pause."},
     {"Compressor",
      L"Evens out the loud parts within a song. A lower threshold and a higher ratio make the sound more even and "
@@ -154,7 +160,7 @@ const StageSound kStageSound[] = {
      L"quieter. A short release recovers fast (louder, but it can distort the bass); a long one is cleaner but can "
      L"duck the sound after a peak."},
     {"Tone",
-     L"A fixed EQ on top of the preset. Bass and treble are shelves: more bass gives warmth and weight, less tightens "
+     L"A fixed EQ on top of the loudness preset. Bass and treble are shelves: more bass gives warmth and weight, less tightens "
      L"a boomy mix; more treble gives clarity and air, less softens a harsh or noisy recording. Low-mid is the boom "
      L"and mud area (take some out for a cleaner sound); presence is where voices and leads sit (up = forward and "
      L"clear, down = softer, further back). The leveller keeps the loudness, so only the balance changes."},
@@ -167,7 +173,7 @@ const StageSound kStageSound[] = {
      L"Adds a tone an octave below the bass: deep bass a recording does not have (many records from the 60s and 70s "
      L"were cut without it). It is felt more than heard on large speakers and is nearly inaudible on small ones. Use "
      L"little: too much makes the low end rumble and takes headroom."},
-    {"Loudness",
+    {"Contour",
      L"For quiet listening: ears hear less bass and treble at a low volume, so this adds deep bass (up to +9 dB) and "
      L"highs (up to +4 dB) to keep the sound full when the volume is low. At a normal or loud volume, leave it off - "
      L"it would sound boomy."},
@@ -212,7 +218,7 @@ const StageSound kShippedSound[] = {
      L"Internet radio, podcasts, streams and MP3 / AAC files, -16 LUFS: even and full like Light, but without clipping and with 2 dB "
      L"of room below full scale (ceiling -2 dBTP) - MP3 and AAC coding raise the peaks a little and turn clipping "
      L"into audible distortion. Music services turn louder streams down anyway."},
-    {"Neutral", L"Leaves the tone as it is: no EQ, no auto tone, no sub bass, no loudness contour."},
+    {"Neutral", L"Leaves the tone as it is: no EQ, no auto tone, no sub bass, no contour."},
     {"Warm",
      L"Fuller and softer: +3 dB of bass below 100 Hz, a little less low-mid (-1 dB around 350 Hz) and less treble "
      L"(-1.5 dB above 8 kHz). For bright or thin mixes and long listening."},
@@ -236,7 +242,7 @@ const StageSound kShippedSound[] = {
      L"Only the auto tone, at 100 %: each song is pulled towards a well-balanced production - a thin record gets more "
      L"bass, a dull one more highs, a boomy one less low end - by up to 6 dB (treble 3 dB)."},
     {"Quiet",
-     L"For listening at a low volume: the loudness contour at 60 % adds deep bass (about +5 dB) and highs (about "
+     L"For listening at a low volume: the contour at 60 % adds deep bass (about +5 dB) and highs (about "
      L"+2.5 dB), so the music stays full when it plays softly."},
 };
 
@@ -290,7 +296,7 @@ std::wstring describe(const Preset& p, PresetKind kind) {
             if (kStageParam[k] == pLimOn) swprintf(b, 96, L" (ceiling %.1f dBTP)", v[pLimCeiling]), stage += b;
             on += (on.empty() ? L"" : L", ") + stage;
         }
-    return L"Your own preset: " + s + L"; on: " + (on.empty() ? std::wstring(L"nothing") : on) + L".";
+    return L"Your own loudness preset: " + s + L"; on: " + (on.empty() ? std::wstring(L"nothing") : on) + L".";
 }
 
 // The sliders use the parameters' positions (params.h: paramPositions / paramValueAt / paramPositionOf), the same
@@ -336,16 +342,15 @@ LRESULT CALLBACK askProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 bool askName(HWND owner, const std::wstring& title, const std::wstring& prompt, std::string& name) {
-    static bool registered = false;
-    HINSTANCE inst = GetModuleHandleW(nullptr);
-    if (!registered) {
+    HINSTANCE inst = moduleInstance();
+    if (!g_askRegistered) {
         WNDCLASSW wc{};
         wc.lpfnWndProc = askProc;
         wc.hInstance = inst;
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
         wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
         wc.lpszClassName = L"APAskName";
-        registered = RegisterClassW(&wc) != 0;
+        g_askRegistered = RegisterClassW(&wc) != 0;
     }
     const UINT dpi = GetDpiForWindow(owner);
     auto px = [dpi](int x) { return MulDiv(x, static_cast<int>(dpi), 96); };
@@ -391,6 +396,14 @@ bool askName(HWND owner, const std::wstring& title, const std::wstring& prompt, 
     return ask.ok;
 }
 
+void EditWindow::setModule(HINSTANCE instance) { g_module = instance; }
+
+void EditWindow::unregisterClasses() {
+    if (g_editRegistered) UnregisterClassW(kClass, moduleInstance());
+    if (g_askRegistered) UnregisterClassW(L"APAskName", moduleInstance());
+    g_editRegistered = g_askRegistered = false;
+}
+
 EditWindow::EditWindow(Settings& settings, Changed onChange, PresetKind kind)
     : settings_(settings), onChange_(std::move(onChange)), kind_(kind) {}
 
@@ -402,9 +415,8 @@ void EditWindow::show(HWND owner, const std::string& preset, int deck, const std
     deck_ = deck;
     owner_ = owner;
     if (!hwnd_) {
-        static bool registered = false;
-        HINSTANCE inst = GetModuleHandleW(nullptr);
-        if (!registered) {
+        HINSTANCE inst = moduleInstance();
+        if (!g_editRegistered) {
             WNDCLASSEXW wc{};
             wc.cbSize = sizeof wc;
             wc.lpfnWndProc = proc;
@@ -413,19 +425,19 @@ void EditWindow::show(HWND owner, const std::string& preset, int deck, const std
             wc.hIcon = LoadIconW(wc.hInstance, MAKEINTRESOURCEW(IDI_APP));
             wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
             wc.lpszClassName = kClass;
-            registered = RegisterClassExW(&wc) != 0;
+            g_editRegistered = RegisterClassExW(&wc) != 0;
         }
-        hwnd_ = CreateWindowExW(0, kClass, L"Preset", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT,
+        hwnd_ = CreateWindowExW(0, kClass, L"Loudness", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT,
                                 CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, owner, nullptr, inst, this);
         if (!hwnd_) return;
         RECT r{0, 0, px(1080), px(colour() ? 600 : 780)};
         AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_);
         SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
-        placement::centreOn(hwnd_, owner);
+        placement::remember(hwnd_, colour() ? "Colour" : "Loudness", owner);
     }
     select(preset);
     if (!tab.empty() && std::find(tabStages_.begin(), tabStages_.end(), tab) != tabStages_.end()) selectTab(tab);
-    ShowWindow(hwnd_, IsIconic(hwnd_) ? SW_RESTORE : SW_SHOWNORMAL);
+    ShowWindow(hwnd_, placement::showCommand(hwnd_));
     SetForegroundWindow(hwnd_);
 }
 
@@ -469,9 +481,31 @@ LRESULT EditWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SIZE:
         layout();
         return 0;
-    case WM_GETMINMAXINFO:
-        reinterpret_cast<MINMAXINFO*>(lp)->ptMinTrackSize = {px(820), px(colour() ? 420 : 560)};
+    case WM_GETMINMAXINFO: { // the smallest width; the height follows the width (WM_WINDOWPOSCHANGING)
+        RECT r{0, 0, px(kMinClientWidth), px(300)};
+        AdjustWindowRectExForDpi(&r, static_cast<DWORD>(GetWindowLongPtrW(hwnd_, GWL_STYLE)), FALSE,
+                                 static_cast<DWORD>(GetWindowLongPtrW(hwnd_, GWL_EXSTYLE)), dpi_);
+        reinterpret_cast<MINMAXINFO*>(lp)->ptMinTrackSize = {r.right - r.left, r.bottom - r.top};
         return 0;
+    }
+    case WM_WINDOWPOSCHANGING: {
+        // the smallest height that shows the tallest tab and every text in full at the new width (client,
+        // 2026-10-26: the texts wrap, so a narrower window needs more height), within the monitor's work area;
+        // larger is always allowed
+        auto* pos = reinterpret_cast<WINDOWPOS*>(lp);
+        if (tabs_ && !(pos->flags & SWP_NOSIZE) && !IsZoomed(hwnd_) && !IsIconic(hwnd_)) {
+            RECT f{0, 0, 0, 0};
+            AdjustWindowRectExForDpi(&f, static_cast<DWORD>(GetWindowLongPtrW(hwnd_, GWL_STYLE)), FALSE,
+                                     static_cast<DWORD>(GetWindowLongPtrW(hwnd_, GWL_EXSTYLE)), dpi_);
+            const int frameW = f.right - f.left, frameH = f.bottom - f.top;
+            MONITORINFO mi{sizeof mi};
+            GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST), &mi);
+            const int need = std::min(neededHeight(std::max(pos->cx - frameW, px(kMinClientWidth))) + frameH,
+                                      static_cast<int>(mi.rcWork.bottom - mi.rcWork.top));
+            if (pos->cy < need) pos->cy = need;
+        }
+        break; // DefWindowProc: the smallest width (WM_GETMINMAXINFO)
+    }
     case WM_DPICHANGED: {
         dpi_ = HIWORD(wp);
         setFonts();
@@ -518,18 +552,18 @@ LRESULT EditWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 void EditWindow::createControls() {
-    HINSTANCE inst = GetModuleHandleW(nullptr);
+    HINSTANCE inst = moduleInstance();
     auto make = [&](const wchar_t* cls, const wchar_t* text, DWORD style, int id, DWORD ex = 0) {
         return CreateWindowExW(ex, cls, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 10, 10, hwnd_,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
     };
-    presetLabel_ = make(L"STATIC", colour() ? L"Colour" : L"Preset", SS_LEFT | SS_CENTERIMAGE, 0);
+    presetLabel_ = make(L"STATIC", colour() ? L"Colour" : L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
     preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
     saveAs_ = make(L"BUTTON", L"Save as...", BS_OWNERDRAW | WS_TABSTOP, idSaveAs);
     rename_ = make(L"BUTTON", L"Rename...", BS_OWNERDRAW | WS_TABSTOP, idRename);
     delete_ = make(L"BUTTON", L"Delete", BS_OWNERDRAW | WS_TABSTOP, idDelete);
-    resetPreset_ = make(L"BUTTON", L"Reset preset", BS_OWNERDRAW | WS_TABSTOP, idResetPreset);
-    note_ = make(L"STATIC", L"", SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS | SS_NOTIFY, 0);
+    resetPreset_ = make(L"BUTTON", L"Reset loudness", BS_OWNERDRAW | WS_TABSTOP, idResetPreset);
+    note_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY | SS_NOPREFIX, 0); // shipped or own, who uses it (wraps)
     about_ = make(L"STATIC", L"", SS_LEFT | SS_NOPREFIX, 0); // what the chosen one does to the sound (wraps)
     tabs_ = make(WC_TABCONTROLW, L"", WS_TABSTOP | WS_CLIPSIBLINGS, idTabs);
     soundTitle_ = make(L"STATIC", L"", SS_LEFT | SS_NOPREFIX, 0);
@@ -551,23 +585,23 @@ void EditWindow::createControls() {
         tips_.add(resetPreset_, L"Shipped colour: back to its shipped values. Own colour: back to neutral (asks first).");
         tips_.add(note_, L"Whether this is a shipped or an own colour and which decks use it.");
     } else {
-        tips_.add(preset_, L"The preset shown in this window (opened on the deck's own). Every change is saved at "
-                           L"once and heard on every deck that uses this preset.");
-        tips_.add(saveAs_, L"Saves these values under a new name (or over one of your own presets) and moves the "
-                           L"deck this window was opened from to it. Shipped presets cannot be saved over.");
-        tips_.add(rename_, L"Renames your own preset; the decks that use it follow. Shipped presets keep their names.");
-        tips_.add(delete_, L"Deletes your own preset (asks first); a deck that used it goes to Medium. Shipped "
-                           L"presets cannot be deleted.");
-        tips_.add(resetPreset_, L"Shipped preset: back to its shipped values. Own preset: back to the generic "
+        tips_.add(preset_, L"The loudness preset shown in this window (opened on the deck's own). Every change is saved at "
+                           L"once and heard on every deck that uses this loudness preset.");
+        tips_.add(saveAs_, L"Saves these values under a new name (or over one of your own loudness presets) and moves the "
+                           L"deck this window was opened from to it. Shipped loudness presets cannot be saved over.");
+        tips_.add(rename_, L"Renames your own loudness preset; the decks that use it follow. Shipped ones keep their names.");
+        tips_.add(delete_, L"Deletes your own loudness preset (asks first); a deck that used it goes to Medium. "
+                           L"Shipped ones cannot be deleted.");
+        tips_.add(resetPreset_, L"Shipped loudness preset: back to its shipped values. Own one: back to the generic "
                                 L"defaults. Every value at once (asks first).");
-        tips_.add(note_, L"Whether this is a shipped or an own preset and which decks use it.");
+        tips_.add(note_, L"Whether this is a shipped or an own loudness preset and which decks use it.");
     }
     createRows();
 }
 
 // A row for every parameter of the kind; switches (a stage's on / off first in its tab) are check boxes.
 void EditWindow::createRows() {
-    HINSTANCE inst = GetModuleHandleW(nullptr);
+    HINSTANCE inst = moduleInstance();
     auto make = [&](const wchar_t* cls, const wchar_t* text, DWORD style, int id, DWORD ex = 0) {
         return CreateWindowExW(ex, cls, text, WS_CHILD | style, 0, 0, 10, 10, hwnd_,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
@@ -581,7 +615,7 @@ void EditWindow::createRows() {
         r.param = p;
         // a stage switch is the first row of its tab, named after the stage
         const std::string name = isStageSwitch(p) ? std::string(in.stage) : std::string(in.name);
-        r.name = make(L"STATIC", fromUtf8(name).c_str(), SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY | SS_ENDELLIPSIS, 0);
+        r.name = make(L"STATIC", fromUtf8(name).c_str(), SS_LEFT | SS_NOTIFY | SS_NOPREFIX, 0); // wraps
         if (in.isSwitch) {
             r.check = make(L"BUTTON", L"on", BS_AUTOCHECKBOX | WS_TABSTOP, id + rpCheck); // "on" / "off"
         } else {
@@ -640,101 +674,123 @@ void EditWindow::layout() {
     if (!tabs_) return;
     RECT rc;
     GetClientRect(hwnd_, &rc);
+    place(rc.right, rc.bottom, tab_, true);
+    // the rows were moved without painting (one repaint for all); WS_CLIPCHILDREN keeps the parent's invalidation
+    // off the children, so they are invalidated too - else a resize leaves pieces of old rows
+    RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+}
+
+// Every text wraps (client, 2026-10-26: "make all text lines wrappable"): the description and the note under the
+// choice, each row's name and what it does, the stage's effect on the sound. Lays the window out for a client area
+// of cw x ch with the tab `stage` (move), or only measures: returns the height everything needs with the rows at
+// their smallest.
+int EditWindow::place(int cw, int ch, const std::string& stage, bool move) {
     const int m = px(12), h = px(28), g = px(6), bw = px(110);
-    int x = m;
-    MoveWindow(presetLabel_, x, m, px(48), h, TRUE);
-    x += px(48) + g;
-    const int comboW = std::max(px(160), static_cast<int>(rc.right - x - 4 * (bw + g) - m));
-    MoveWindow(preset_, x, m, comboW, px(300), TRUE);
-    x += comboW + g;
-    for (HWND b : {saveAs_, rename_, delete_, resetPreset_}) {
-        MoveWindow(b, x, m, bw, h, TRUE);
-        x += bw + g;
+    const int W = cw - 2 * m;
+    if (move) {
+        int x = m;
+        MoveWindow(presetLabel_, x, m, px(48), h, TRUE);
+        x += px(48) + g;
+        const int comboW = std::max(px(160), cw - x - 4 * (bw + g) - m);
+        MoveWindow(preset_, x, m, comboW, px(300), TRUE);
+        x += comboW + g;
+        for (HWND b : {saveAs_, rename_, delete_, resetPreset_}) {
+            MoveWindow(b, x, m, bw, h, TRUE);
+            x += bw + g;
+        }
     }
-    // under the choice: what the chosen preset or colour does (it wraps), then the note
-    const int W = rc.right - 2 * m;
-    aboutH_ = textHeight(about_, aboutText_, W);
+    // under the choice: what the chosen preset or colour does, then the note
+    const int aboutH = textHeight(about_, aboutText_, W), noteH = textHeight(note_, noteText_, W);
     int y = m + h + g;
-    MoveWindow(about_, m, y, W, aboutH_, TRUE);
-    y += aboutH_ + px(4);
-    MoveWindow(note_, m, y, W, h, TRUE);
-    y += h + g;
+    if (move) {
+        aboutH_ = aboutH;
+        noteH_ = noteH;
+        MoveWindow(about_, m, y, W, aboutH, TRUE);
+        MoveWindow(note_, m, y + aboutH + px(4), W, noteH, TRUE);
+    }
+    y += aboutH + px(4) + noteH + px(10);
     // the tab strip; the rows sit below it on the window's own background
-    RECT strip{0, 0, rc.right - 2 * m, px(200)};
+    RECT strip{0, 0, W, px(200)};
     TabCtrl_AdjustRect(tabs_, FALSE, &strip);
     const int tabH = std::max(px(26), static_cast<int>(strip.top) + px(2));
-    MoveWindow(tabs_, m, y, rc.right - 2 * m, tabH, TRUE);
+    if (move) MoveWindow(tabs_, m, y, W, tabH, TRUE);
     y += tabH + px(10);
 
     // under the rows: what the stage does to the sound (its height decides how much room the rows get)
-    const std::wstring sound = stageSound(tab_);
-    RECT tr{0, 0, W, 0};
-    if (HDC dc = GetDC(sound_)) {
-        HGDIOBJ old = SelectObject(dc, font_);
-        DrawTextW(dc, sound.c_str(), -1, &tr, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
-        SelectObject(dc, old);
-        ReleaseDC(sound_, dc);
-    }
-    const int soundH = static_cast<int>(tr.bottom) + px(4), soundTitleH = px(22);
+    const std::wstring sound = stageSound(stage);
+    const int soundH = textHeight(sound_, sound, W) + px(4), soundTitleH = px(22);
     const int below = px(10) + px(2) + px(8) + soundTitleH + soundH;
 
-    // rows: name, slider, value, unit, reset, what it does (wrapped: a long text makes its row taller)
+    // rows: name, slider, value, unit, reset, what it does (a long name or text makes its row taller)
     const int nameW = px(170), valueW = px(70), unitW = px(44), resetW = px(30);
     const int helpW = std::max(0, W * 34 / 100);
     const int sliderW = std::max(px(120), W - nameW - valueW - unitW - resetW - helpW - 5 * g);
     const int helpX = m + nameW + sliderW + valueW + unitW + resetW + 5 * g, helpTextW = std::max(px(40), m + W - helpX);
-    std::vector<int> textH(rows_.size(), 0);
+    std::vector<int> nameH(rows_.size(), 0), textH(rows_.size(), 0), minH(rows_.size(), 0);
     size_t n = 0;
     int extra = 0; // what wrapped texts need above the smallest row height
-    if (HDC dc = GetDC(sound_)) {
-        HGDIOBJ old = SelectObject(dc, font_);
-        for (size_t r = 0; r < rows_.size(); ++r) {
-            if (!shown(r)) continue;
-            ++n;
-            RECT t{0, 0, helpTextW, 0};
-            DrawTextW(dc, fromUtf8(paramInfo(rows_[r].param).help).c_str(), -1, &t,
-                      DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
-            textH[r] = static_cast<int>(t.bottom);
-            extra += std::max(0, textH[r] + px(8) - px(24));
-        }
-        SelectObject(dc, old);
-        ReleaseDC(sound_, dc);
-    }
-    const int avail = rc.bottom - y - m - below - extra;
-    const int rowH = n ? std::min(px(36), std::max(px(24), avail / static_cast<int>(n))) : px(36);
-    const int ch = std::min(rowH - px(4), px(26));
     for (size_t r = 0; r < rows_.size(); ++r) {
-        const Row& row = rows_[r];
-        if (!shown(r)) continue;
-        const int rh = std::max(rowH, textH[r] + px(8));
-        const int cy = y + (rh - ch) / 2;
-        int cx = m;
-        MoveWindow(row.name, cx, cy, nameW, ch, FALSE);
-        cx += nameW + g;
-        if (row.slider) MoveWindow(row.slider, cx, cy, sliderW, ch, FALSE);
-        if (row.check) MoveWindow(row.check, cx + px(6), cy, sliderW, ch, FALSE);
-        cx += sliderW + g;
-        if (row.value) MoveWindow(row.value, cx, cy + (ch - px(24)) / 2, valueW, px(24), FALSE);
-        cx += valueW + g;
-        if (row.unit) MoveWindow(row.unit, cx, cy, unitW, ch, FALSE);
-        cx += unitW + g;
-        MoveWindow(row.reset, cx, cy + (ch - px(24)) / 2, resetW, px(24), FALSE);
-        cx += resetW + g;
-        MoveWindow(row.help, cx, y + (rh - textH[r]) / 2, std::max(0, m + W - cx), textH[r], FALSE);
+        if (!shownOn(r, stage)) continue;
+        ++n;
+        nameH[r] = textHeight(rows_[r].name, nameOf(r), nameW);
+        textH[r] = textHeight(rows_[r].help, fromUtf8(paramInfo(rows_[r].param).help), helpTextW);
+        minH[r] = std::max(px(24), std::max(nameH[r], textH[r]) + px(8));
+        extra += minH[r] - px(24);
+    }
+    const int avail = ch - y - m - below - extra;
+    const int rowH = !move ? px(24) : n ? std::min(px(36), std::max(px(24), avail / static_cast<int>(n))) : px(36);
+    const int ctl = std::min(rowH - px(4), px(26));
+    for (size_t r = 0; r < rows_.size(); ++r) {
+        if (!shownOn(r, stage)) continue;
+        const int rh = std::max(rowH, minH[r]);
+        if (move) {
+            const Row& row = rows_[r];
+            const int cy = y + (rh - ctl) / 2;
+            int cx = m;
+            MoveWindow(row.name, cx, y + (rh - nameH[r]) / 2, nameW, nameH[r], FALSE);
+            cx += nameW + g;
+            if (row.slider) MoveWindow(row.slider, cx, cy, sliderW, ctl, FALSE);
+            if (row.check) MoveWindow(row.check, cx + px(6), cy, sliderW, ctl, FALSE);
+            cx += sliderW + g;
+            if (row.value) MoveWindow(row.value, cx, cy + (ctl - px(24)) / 2, valueW, px(24), FALSE);
+            cx += valueW + g;
+            if (row.unit) MoveWindow(row.unit, cx, cy, unitW, ctl, FALSE);
+            cx += unitW + g;
+            MoveWindow(row.reset, cx, cy + (ctl - px(24)) / 2, resetW, px(24), FALSE);
+            cx += resetW + g;
+            MoveWindow(row.help, cx, y + (rh - textH[r]) / 2, std::max(0, m + W - cx), textH[r], FALSE);
+        }
         y += rh;
     }
     y += px(10);
-    soundLine_ = {m, y, m + W, y + px(2)}; // drawn in WM_PAINT
-    y += px(2) + px(8);
-    MoveWindow(soundTitle_, m, y, W, soundTitleH, FALSE);
-    y += soundTitleH;
-    MoveWindow(sound_, m, y, W, soundH, FALSE);
-    SetWindowTextW(sound_, sound.c_str());
-    const std::wstring title = fromUtf8(tab_) + L": effect on the sound";
-    SetWindowTextW(soundTitle_, title.c_str());
-    // the rows were moved without painting (one repaint for all); WS_CLIPCHILDREN keeps the parent's invalidation
-    // off the children, so they are invalidated too - else a resize leaves pieces of old rows
-    RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
+    if (move) {
+        soundLine_ = {m, y, m + W, y + px(2)}; // drawn in WM_PAINT
+        MoveWindow(soundTitle_, m, y + px(10), W, soundTitleH, FALSE);
+        MoveWindow(sound_, m, y + px(10) + soundTitleH, W, soundH, FALSE);
+        SetWindowTextW(sound_, sound.c_str());
+        const std::wstring title = fromUtf8(stage) + L": effect on the sound";
+        SetWindowTextW(soundTitle_, title.c_str());
+    }
+    return y + below - px(10) + m;
+}
+
+// The smallest client height at this width: every row of the tallest tab and every text in full.
+int EditWindow::neededHeight(int cw) {
+    int most = 0;
+    if (tabStages_.empty()) return place(cw, 0, tab_, false);
+    for (const std::string& s : tabStages_) most = std::max(most, place(cw, 0, s, false));
+    return most;
+}
+
+// After the texts or the shown rows changed: a window now too small for them grows (the minimum size applies).
+void EditWindow::fit() {
+    if (!hwnd_ || IsZoomed(hwnd_) || IsIconic(hwnd_)) return;
+    RECT rc;
+    GetClientRect(hwnd_, &rc);
+    if (rc.bottom >= neededHeight(rc.right)) return;
+    RECT w;
+    GetWindowRect(hwnd_, &w);
+    SetWindowPos(hwnd_, nullptr, 0, 0, w.right - w.left, w.bottom - w.top, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 void EditWindow::fillPresets() {
@@ -776,10 +832,17 @@ void EditWindow::fillTabs() {
     }
 }
 
-bool EditWindow::shown(size_t r) const {
+bool EditWindow::shown(size_t r) const { return shownOn(r, tab_); }
+
+bool EditWindow::shownOn(size_t r, const std::string& stage) const {
     const Preset* p = const_cast<Settings&>(settings_).find(current_, kind_);
     const int i = rows_[r].param;
-    return p && paramInfo(i).stage == tab_ && visible(i, p->values, kind_);
+    return p && paramInfo(i).stage == stage && visible(i, p->values, kind_);
+}
+
+std::wstring EditWindow::nameOf(size_t r) const {
+    const ParamInfo& in = paramInfo(rows_[r].param);
+    return fromUtf8(isStageSwitch(rows_[r].param) ? in.stage : in.name); // a stage switch is named after its stage
 }
 
 void EditWindow::showRows() {
@@ -791,6 +854,7 @@ void EditWindow::showRows() {
         for (HWND h : {row.name, row.slider, row.check, row.value, row.unit, row.reset, row.help})
             if (h) ShowWindow(h, show);
     }
+    fit(); // a band count with more rows
 }
 
 void EditWindow::selectTab(const std::string& stage) {
@@ -804,7 +868,7 @@ void EditWindow::select(const std::string& preset) {
     fillPresets();
     showRows();
     updateRows();
-    const std::wstring title = (colour() ? L"Colour: " : L"Preset: ") + fromUtf8(current_);
+    const std::wstring title = (colour() ? L"Colour: " : L"Loudness: ") + fromUtf8(current_);
     SetWindowTextW(hwnd_, title.c_str());
     updateButtons();
 }
@@ -856,9 +920,6 @@ void EditWindow::updateAbout() {
     const Preset* p = settings_.find(current_, kind_);
     aboutText_ = p ? describe(*p, kind_) : L"";
     SetWindowTextW(about_, aboutText_.c_str());
-    RECT rc;
-    GetClientRect(hwnd_, &rc);
-    if (textHeight(about_, aboutText_, rc.right - px(24)) != aboutH_) layout();
 }
 
 void EditWindow::updateButtons() {
@@ -867,17 +928,26 @@ void EditWindow::updateButtons() {
     const bool own = p && !p->shipped;
     EnableWindow(rename_, own);
     EnableWindow(delete_, own);
-    SetWindowTextW(resetPreset_, own ? L"Reset to defaults" : colour() ? L"Reset colour" : L"Reset preset");
+    SetWindowTextW(resetPreset_, own ? L"Reset to defaults" : colour() ? L"Reset colour" : L"Reset loudness");
     std::wstring users;
     for (int d = 0; d < 2; ++d)
         if (d < settings_.decks && used(d) == current_)
-            users += users.empty() ? (d == 0 ? L"deck A" : L"deck B") : L" and deck B";
-    const std::wstring what = colour() ? L"colour" : L"preset";
+            users += users.empty() ? (d == 0 ? deckA_ : L"deck B") : L" and deck B";
+    const std::wstring what = colour() ? L"colour" : L"loudness preset";
     std::wstring note = own ? L"Own " + what + L"." : L"Shipped " + what + L": values can be changed and reset; it cannot "
                                                                          L"be renamed or deleted.";
     note += users.empty() ? L" Not used by a deck right now." : L" Changes are heard at once on " + users + L".";
     note += L"  Bold = differs from its reset value; \x21BA sets it back.";
+    noteText_ = note;
     SetWindowTextW(note_, note.c_str());
+    // a new line count of either text lays the window out again
+    RECT rc;
+    GetClientRect(hwnd_, &rc);
+    const int W = rc.right - px(24);
+    if (textHeight(about_, aboutText_, W) != aboutH_ || textHeight(note_, noteText_, W) != noteH_) {
+        layout();
+        fit();
+    }
 }
 
 bool EditWindow::setValue(int param, double value, bool save) {
@@ -939,7 +1009,7 @@ void EditWindow::commitValue(size_t r) {
         const std::wstring msg = L"\"" + text + L"\" is not a value for " + fromUtf8(paramInfo(row.param).name) +
                                  L" (" + fromUtf8(rangeText(row.param)) + L").";
         updateRow(r);
-        placement::messageBox(hwnd_, msg.c_str(), colour() ? L"Colour" : L"Preset", MB_OK | MB_ICONWARNING);
+        placement::messageBox(hwnd_, msg.c_str(), colour() ? L"Colour" : L"Loudness", MB_OK | MB_ICONWARNING);
         return;
     }
     if (v != p->values[static_cast<size_t>(row.param)]) setValue(row.param, v); // clamped by normaliseValues
@@ -1004,17 +1074,17 @@ void EditWindow::command(int id, int code) {
     std::string err;
     if (id == idSaveAs) {
         std::string name = current_ + " (copy)";
-        if (!askName(hwnd_, colour() ? L"Save colour as" : L"Save preset as",
-                     colour() ? L"Name of the new colour:" : L"Name of the new preset:", name))
+        if (!askName(hwnd_, colour() ? L"Save colour as" : L"Save loudness preset as",
+                     colour() ? L"Name of the new colour:" : L"Name of the new loudness preset:", name))
             return;
         if (const Preset* existing = settings_.find(name, kind_)) {
             if (!existing->shipped) {
-                const std::wstring q = L"Replace the preset \"" + fromUtf8(name) + L"\"?";
-                if (placement::messageBox(hwnd_, q.c_str(), L"Save preset as", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+                const std::wstring q = L"Replace the loudness preset \"" + fromUtf8(name) + L"\"?";
+                if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Save colour as" : L"Save loudness preset as", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
             }
         }
         if (!settings_.saveAs(name, p->values, err, kind_)) {
-            placement::messageBox(hwnd_, fromUtf8(err).c_str(), L"Save preset as", MB_OK | MB_ICONWARNING);
+            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Save colour as" : L"Save loudness preset as", MB_OK | MB_ICONWARNING);
             return;
         }
         if (used(deck_) == current_) used(deck_) = name;
@@ -1024,23 +1094,23 @@ void EditWindow::command(int id, int code) {
         select(current_);
     } else if (id == idRename) {
         std::string name = current_;
-        if (!askName(hwnd_, L"Rename preset", L"New name:", name) || name == current_) return;
+        if (!askName(hwnd_, colour() ? L"Rename colour" : L"Rename loudness preset", L"New name:", name) || name == current_) return;
         if (!settings_.rename(current_, name, err, kind_)) {
-            placement::messageBox(hwnd_, fromUtf8(err).c_str(), L"Rename preset", MB_OK | MB_ICONWARNING);
+            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Rename colour" : L"Rename loudness preset", MB_OK | MB_ICONWARNING);
             return;
         }
         current_ = name;
         onChange_(true, true);
         select(current_);
     } else if (id == idDelete) {
-        const std::wstring q = (colour() ? L"Delete the colour \"" : L"Delete the preset \"") + fromUtf8(current_) +
+        const std::wstring q = (colour() ? L"Delete the colour \"" : L"Delete the loudness preset \"") + fromUtf8(current_) +
                                (colour() ? L"\"? A deck that uses it changes to Neutral." :
                                            L"\"? A deck that uses it changes to Medium.");
-        if (placement::messageBox(hwnd_, q.c_str(), L"Delete preset", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) !=
+        if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Delete colour" : L"Delete loudness preset", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) !=
             IDYES)
             return;
         if (!settings_.remove(current_, err, kind_)) {
-            placement::messageBox(hwnd_, fromUtf8(err).c_str(), L"Delete preset", MB_OK | MB_ICONWARNING);
+            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Delete colour" : L"Delete loudness preset", MB_OK | MB_ICONWARNING);
             return;
         }
         onChange_(true, true);
@@ -1048,7 +1118,7 @@ void EditWindow::command(int id, int code) {
     } else if (id == idResetPreset) {
         const std::wstring q = L"Set every value of \"" + fromUtf8(current_) + L"\" back to " +
                                (p->shipped ? L"its shipped values?" : L"the generic defaults?");
-        if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Reset colour" : L"Reset preset",
+        if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Reset colour" : L"Reset loudness",
                                   MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
             return;
         settings_.resetPreset(current_, kind_);

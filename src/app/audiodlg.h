@@ -68,6 +68,7 @@ private:
     HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, health_ = nullptr, resetHealth_ = nullptr,
          note_ = nullptr;
     HWND look_ = nullptr, startup_ = nullptr, about_ = nullptr; // look-ahead, start with Windows, About
+    HWND tooltips_ = nullptr;                                    // the switch of all tooltips
     HWND checkUpdates_ = nullptr, checkNow_ = nullptr, install_ = nullptr, updateInfo_ = nullptr; // updates
     const Updater* updater_ = nullptr;
     std::function<void()> checkNowDo_, installDo_;

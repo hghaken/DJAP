@@ -18,6 +18,37 @@ const double kCatchMaxSeconds = 15.0;
 // after a quiet intro or a break) it comes down at the preset's fast speed until it is within kFastDownDoneDb
 const double kFastDownDb = 3.0;
 const double kFastDownDoneDb = 0.5;
+// The leveller on a song with quiet verses and loud choruses (client, 2026-10-26, a song whose spoken verses lie
+// 10 LU under its choruses: after each chorus the output stayed 6-8 LU under the target for 10-19 s on every preset).
+// Measured causes: the gaps between the phrases dipped the 0.4 s level under the hold level and under the fall rule
+// (no move for half the verse, and a 1.5 s warm restart after every gap of 1 s), the 3 s level needed 6-8 s to come
+// down to the verse, and the normal speed then needed another 7 s. Now:
+// - falling is judged on a gated 0.4 s level (as 1 s averages): blocks more than kGateDb under the 1.5 s level (the gaps between
+//   phrases, a pause) leave it where it is, so a gap is not a fall. Falling = it dropped more than kDropDb over the
+//   last 2 s (a fade of 1.25 dB/s or more, the start of a quiet passage), or it sank more than kSinkDb in each of the
+//   last two 2 s (a slow fade, 0.4 dB/s or more: it goes on falling, while a quiet passage is flat again
+//   after its drop). No move up while falling (a slow fade at 1 dB/s was turned up by 12 dB without this rule);
+// - when it has stopped falling, the 3 s level starts from the level reached instead of its lag;
+// - a quiet section under the hold level that stays (kQuietMusicSeconds, not falling, the gated level not more
+//   than kSteadyDb under its value 4 s ago, and not more than kQuietMusicLu under the hold level: music, not a noise
+//   floor) is levelled like any music; fades, pauses and the first seconds of a breakdown keep the hold;
+// - warm restart only after a real pause (at least 1 s of silence), not after a quiet passage;
+// - clearly too soft (the gain more than kFastUpDb under what the 3 s level needs, not falling): up at four times the
+//   preset's speed but at most kFastUpMax, or at twice its speed when that is more (Gentle and DAB+, 0.5 dB/s: 2;
+//   Light, Medium, Web Stream, Loud: 3; FM Station: 4 - 3 dB/s for all brought the quiet endings of three songs up too
+//   eagerly in Gentle and DAB+, 2 dB/s left the spoken verses 1 LU more uneven in the 1 dB/s presets), until within
+//   kFastUpDoneDb - the counterpart of fast down; meanwhile a gap between two phrases does not stop it (only a fall does).
+const double kDropDb = 2.5;
+const double kSinkDb = 0.8;
+const double kFallKeepSeconds = 1.0;
+const double kGateDb = 10.0;
+const double kGate = std::pow(10.0, -kGateDb / 10.0);
+const double kQuietMusicSeconds = 3.0;
+const double kSteadyDb = 3.5;
+const double kQuietMusicLu = 12.0;
+const double kFastUpDb = 4.0;
+const double kFastUpDoneDb = 1.0;
+const double kFastUpMax = 3.0; // dB/s
 
 // Crossfade position (-1..0 warm-up, 0..1 fade) to weight: raised cosine, so the fade starts and ends without a
 // corner (a linear fade's corner showed as a click on a 120 Hz tone).
@@ -74,6 +105,7 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.levRange = v[pLevRange];
     c.levStep = v[pLevSpeed] / ctrlRate;
     c.levFastStep = std::max(v[pLevFastDown], v[pLevSpeed]) / ctrlRate; // 0 = the normal speed
+    c.levFastUpStep = std::max(2.0 * v[pLevSpeed], std::min(kFastUpMax, 4.0 * v[pLevSpeed])) / ctrlRate;
     // a block far louder than the leveller could ever correct is a glitch, not music: one sample far over full scale
     // (and the low filters ringing after it) must not make fast down pull the gain to the end of its range
     c.levDetMax = lufsToPower(c.aim + c.levRange + 6.0);
@@ -81,6 +113,7 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.catchUp = on(pLevCatchUp);
     c.catchStep = 20.0 / ctrlRate; // catch-up after a pause: 20 dB/s
     c.aFast = onePoleCoeff(0.4, ctrlRate);
+    c.aMid = onePoleCoeff(1.5, ctrlRate);
     c.aSlow = onePoleCoeff(3.0, ctrlRate);
 
     // compressor
@@ -406,7 +439,8 @@ void DeckProcessor::resetStage(int s) {
     case sLeveller:
         levGainDb_ = 0.0;
         levGainLin_ = 1.0;
-        catching_ = catchPending_ = fastDown_ = false;
+        catching_ = catchPending_ = fastDown_ = fastUp_ = fell_ = false;
+        quietSteady_ = 0.0;
         break;
     case sCompressor:
         compHpf_.reset();
@@ -466,9 +500,13 @@ void DeckProcessor::resetStates() {
     blockIn_ = blockPost_ = 0.0;
     colour_.reset(cfg_.colour);
     ctrlPos_ = 0;
-    fastIn_ = postFast_ = postSlow_ = 0.0;
+    fastIn_ = midIn_ = postFast_ = postMid_ = postGated_ = postSlow_ = 0.0;
     for (double& h : riseHist_) h = kFloorDb;
     riseIdx_ = riseBlocks_ = 0;
+    for (double& h : midHist_) h = kFloorDb;
+    histIdx_ = histBlocks_ = 0;
+    fallTime_ = 0.0;
+    pauseSeen_ = true;
     quietTime_ = 1e9;
     silenceTime_ = 1e9;
     longSilence_ = true;
@@ -495,14 +533,17 @@ void DeckProcessor::controlUpdate() {
     const DeckConfig& c = cfg_;
     const double dt = static_cast<double>(kControlBlock) / fs_;
 
-    // incoming level (K-weighted, 0.4 s) -> quiet / silence / warm start
-    fastIn_ = toward(fastIn_, blockIn_ / kControlBlock, c.aFast);
+    // incoming level (K-weighted, 0.4 s and 1.5 s) -> quiet / silence / warm start
+    const double inPow = blockIn_ / kControlBlock;
+    fastIn_ = toward(fastIn_, inPow, c.aFast);
+    midIn_ = toward(midIn_, inPow, c.aMid);
     blockIn_ = 0.0;
     const double inLufs = powerToLufs(fastIn_);
     const double levDb = levGainDb_ * mix_[sLeveller];
     quiet_ = inLufs + levDb + linToDb(inGain_) < c.holdLufs;
     if (inLufs < -60.0) {
         silenceTime_ += dt;
+        if (silenceTime_ >= 1.0) pauseSeen_ = true;
         if (silenceTime_ >= 2.0) longSilence_ = true;
     } else {
         silenceTime_ = 0.0;
@@ -510,22 +551,57 @@ void DeckProcessor::controlUpdate() {
     if (quiet_) {
         quietTime_ += dt;
     } else {
-        if (quietTime_ >= 1.0) { // music after a quiet passage or a pause: warm start
+        if (quietTime_ >= 1.0 && pauseSeen_) { // music after a pause: warm start (a quiet passage is not a pause)
             musicTime_ = 0.0;
             if (longSilence_ && c.catchUp) catchPending_ = true;
         }
+        pauseSeen_ = false;
         quietTime_ = 0.0;
         longSilence_ = false;
         musicTime_ += dt;
     }
-    const bool warm = musicTime_ < 1.5;
-
     // leveller detector after the width stage, with the leveller gain of the last block taken out: the averages
     // then do not lag behind the leveller's own moves (a closed loop through the 3 s average overshoots)
     const double postPow = std::min(blockPost_ / kControlBlock / (levGainLin_ * levGainLin_), c.levDetMax);
     blockPost_ = 0.0;
     postFast_ = toward(postFast_, postPow, c.aFast);
-    if (!quiet_) postSlow_ = warm ? postFast_ : toward(postSlow_, postPow, c.aSlow);
+    postMid_ = toward(postMid_, postPow, c.aMid);
+    // the trend detector: 0.4 s, gated - a block more than kGateDb under the 1.5 s level (a gap between two phrases,
+    // a pause) leaves it where it is, a fade's blocks pass
+    if (postPow > postMid_ * kGate) postGated_ = toward(postGated_, postPow, c.aFast);
+    // the gated level every 0.25 s for the last 6 s; compared as 1 s averages (the beat's ups and downs averaged
+    // out) now, 2 s ago and 4 s ago: dropping (fast), sinking (slow and still going: a fade), steady
+    if (++histBlocks_ >= static_cast<int>(0.25 / dt)) {
+        histBlocks_ = 0;
+        histIdx_ = (histIdx_ + 1) % kLevHist;
+        midHist_[histIdx_] = powerToLufs(postGated_);
+    }
+    auto avg = [this](int ago) { // the four values from `ago` quarter seconds back
+        double s = 0;
+        for (int k = 0; k < 4; ++k) s += midHist_[(histIdx_ + 2 * kLevHist - ago - k) % kLevHist];
+        return s / 4.0;
+    };
+    const double aNow = avg(0), a2 = avg(8), a4 = avg(16);
+    const bool dropping = aNow < a2 - kDropDb;
+    const bool sinking = aNow < a2 - kSinkDb && a2 < a4 - kSinkDb; // in each of the last two 2 s
+    if (dropping || sinking) fallTime_ = kFallKeepSeconds; // a fall counts for at least this long (no creeping up
+    else fallTime_ = std::max(0.0, fallTime_ - dt);         // between two detections of a slow fade)
+    const bool falling = fallTime_ > 0.0;
+    const bool steady = !falling && aNow >= a4 - kSteadyDb;
+    if (falling) fell_ = true;
+    // a quiet section that stays is music to level; the hold keeps fades, pauses and a breakdown's first seconds
+    const double midOut = powerToLufs(midIn_) + levDb + linToDb(inGain_);
+    const bool wasReleased = quietSteady_ >= kQuietMusicSeconds;
+    if (midOut < c.holdLufs && midOut > c.holdLufs - kQuietMusicLu && steady && inLufs >= -60.0)
+        quietSteady_ += dt;
+    else
+        quietSteady_ = 0.0;
+    const bool released = quietSteady_ >= kQuietMusicSeconds;
+    if (released && !wasReleased) fell_ = true; // the 3 s level starts from the quiet section's level
+    const bool hold = quiet_ && !released;
+    if (quiet_ && released) musicTime_ += dt; // a released quiet section is music: a warm start ends in it too
+    const bool warm = musicTime_ < 1.5;
+    if (!hold) postSlow_ = warm ? postFast_ : toward(postSlow_, postPow, c.aSlow);
     // colour: the auto tone holds while the music is quiet or falling (a breakdown, a fade) and learns fast in the
     // first seconds of a song
     colour_.control(c.colour, quiet_ || postFast_ < postSlow_ * kFallHold, musicTime_ < 6.0);
@@ -538,16 +614,27 @@ void DeckProcessor::controlUpdate() {
     const bool rising = powerToLufs(postFast_) > riseHist_[(riseIdx_ + 1) & 3] + kRiseCatchDb; // 0.75..1 s ago
 
     if (running_[sLeveller]) {
-        if (!quiet_ && !warm && !c.freeze) {
+        if (!hold && !warm && !c.freeze) {
             if (catchPending_) {
                 catching_ = true;
                 catchPending_ = false;
                 catchTime_ = 0.0;
             }
+            // falling level (fade-out, the start of a quiet passage): never turn up; when it has stopped falling the
+            // 3 s level starts from the level reached, not from its lag
+            if (!falling && fell_) {
+                fell_ = false;
+                if (!catching_) postSlow_ = postMid_;
+            }
             // catching up follows the 0.4 s level: a track that is still fading in is followed up its fade
             double wanted = clampd(c.aim - powerToLufs(catching_ ? postFast_ : postSlow_), -c.levRange, c.levRange);
-            // falling level (fade-out, breakdown): never turn up before the hold rule takes over
-            if (postFast_ < postSlow_ * kFallHold) wanted = std::min(wanted, levGainDb_);
+            if (falling) {
+                wanted = std::min(wanted, levGainDb_);
+                fastUp_ = false;
+            }
+            // and not while the 0.4 s level is far under the 3 s level: the first moment of a fade, before the 1.5 s
+            // level shows it (a pause of the step only; after a drop the 3 s level restarts, so this ends with it)
+            if (!fastUp_ && postFast_ < postSlow_ * kFallHold) wanted = std::min(wanted, levGainDb_);
             // clearly too loud (judged on the 3 s level, so a chorus does not count): down at the fast speed, following
             // the 0.4 s level (the 3 s average lags a loud entry) and only down, until the gain is there
             if (!catching_ && levGainDb_ - wanted > kFastDownDb) fastDown_ = true;
@@ -558,7 +645,10 @@ void DeckProcessor::controlUpdate() {
                     postSlow_ = postFast_; // the slow level starts from the level reached, not from its lag
                 }
             }
-            const double step = catching_ ? c.catchStep : fastDown_ ? c.levFastStep : c.levStep;
+            // clearly too soft (judged on the 3 s level, not falling): up at the fast-up speed until nearly there
+            if (!catching_ && !fastDown_ && !falling && wanted - levGainDb_ > kFastUpDb) fastUp_ = true;
+            if (fastUp_ && (fastDown_ || wanted - levGainDb_ < kFastUpDoneDb)) fastUp_ = false;
+            const double step = catching_ ? c.catchStep : fastDown_ ? c.levFastStep : fastUp_ ? c.levFastUpStep : c.levStep;
             levGainDb_ = moveToward(levGainDb_, wanted, step);
             if (catching_) {
                 catchTime_ += dt;
@@ -899,6 +989,7 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             rec_.bands = static_cast<uint8_t>(running_[sDensity] ? bank.bands : 0);
             for (int b = 0; b < kMaxBands; ++b)
                 rec_.densityDb[b] = running_[sDensity] && b < bank.bands ? static_cast<float>(bank.gainDb[b]) : 0.0f;
+            for (int s = 0; s < 4; ++s) rec_.autoToneDb[s] = static_cast<float>(colour_.correctionDb(s));
             rec_.clipperDb = static_cast<float>(linToDb(recClipRatio_));
             rec_.limiterDb = static_cast<float>(-linToDb(limiter_.takeMinGain()));
             rec_.flags = static_cast<uint8_t>((quiet_ ? mfQuiet : 0) | (c.freeze ? mfFrozen : 0) |

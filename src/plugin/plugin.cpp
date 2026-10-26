@@ -2,12 +2,10 @@
 
 #include "pluginids.h"
 #include "pluginview.h"
-#include "version.h"
 
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/base/ustring.h"
-#include "pluginterfaces/vst/ivsthostapplication.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "public.sdk/source/vst/utility/stringconvert.h"
 
@@ -45,8 +43,8 @@ UnitID unitOf(int p) {
 
 void ascii(String128 out, const char* text) { UString(out, 128).fromAscii(text); }
 
-// The program's settings file, where the user's own presets and colours are (read only here). A portable program
-// (DJAP.ini next to DJAP.exe) is not found; the shipped lists are used then.
+// The program's settings file, where the user's own presets and colours are (also those saved from a plug-in). A
+// portable program (DJAP.ini next to DJAP.exe) is not seen.
 std::filesystem::path settingsFile() {
     PWSTR roaming = nullptr;
     std::filesystem::path p;
@@ -139,19 +137,41 @@ public:
     }
 };
 
+// The preset (or colour) list: the names of the plug-in's lists - which change when the preset window saves,
+// renames or deletes one - and "(other values)" after them.
+class NameListParameter : public Parameter {
+public:
+    NameListParameter(const char* title, ParamID id, const std::vector<Preset>* items) : items_(items) {
+        ascii(info.title, title);
+        ascii(info.shortTitle, title);
+        info.id = id;
+        info.unitId = kRootUnitId;
+        info.flags = ParameterInfo::kCanAutomate | ParameterInfo::kIsList;
+        follow();
+    }
+    void follow() { info.stepCount = std::max<int32>(1, static_cast<int32>(items_->size())); }
+    ParamValue toPlain(ParamValue v) const override { return std::round(v * info.stepCount); }
+    ParamValue toNormalized(ParamValue index) const override { return index / info.stepCount; }
+    void toString(ParamValue v, String128 out) const override {
+        const auto i = static_cast<size_t>(std::lround(v * info.stepCount));
+        if (i < items_->size()) StringConvert::convert((*items_)[i].name, out);
+        else ascii(out, "(other values)");
+    }
+    bool fromString(const TChar* string, ParamValue& v) const override {
+        const std::string s = StringConvert::convert(string);
+        for (size_t i = 0; i < items_->size(); ++i)
+            if ((*items_)[i].name == s) return v = toNormalized(static_cast<double>(i)), true;
+        return false;
+    }
+
+private:
+    const std::vector<Preset>* items_;
+};
+
 } // namespace
 
-std::atomic<int> g_nextId{0};
-
-Plugin::Plugin() : id_(++g_nextId) {
-    diagRegister(this);
-    diagLog("#%d created (%d instance(s) live)", id_, diagLiveInstances());
-}
-
-Plugin::~Plugin() {
-    diagUnregister(this);
-    diagLog("#%d destroyed", id_);
-}
+Plugin::Plugin() = default;
+Plugin::~Plugin() = default;
 
 ParamValue Plugin::normalizedOf(int p, double plain) {
     return static_cast<double>(paramPositionOf(p, plain)) / paramPositions(p);
@@ -162,15 +182,17 @@ double Plugin::plainFromNormalized(int p, ParamValue v) const {
 }
 
 void Plugin::loadLists() {
-    Settings s; // the shipped presets and colours
-    const std::filesystem::path file = settingsFile();
+    ini_ = settingsFile();
     std::error_code ec;
-    if (!file.empty() && std::filesystem::exists(file, ec)) s.load(file);
-    presets_ = s.presets;
-    colours_ = s.colours;
-    // the start: Medium with Neutral, as in the program
-    values_ = withColour(s.valuesOf("Medium"), s.colourValuesOf("Neutral"));
+    if (!ini_.empty() && std::filesystem::exists(ini_, ec)) settings_.load(ini_); // else the shipped lists
+    base_ = settings_;
+    // one deck; the start: Medium with Neutral, as in the program
+    settings_.decks = 1;
+    settings_.linkPresets = false;
+    settings_.deck[0] = DeckSettings();
+    values_ = settings_.deckValues(0);
     exact_ = values_;
+    applied_ = values_;
 }
 
 void Plugin::addParameters() {
@@ -179,29 +201,15 @@ void Plugin::addParameters() {
         ascii(name, kStages[u]);
         addUnit(new Unit(name, u + 1, kRootUnitId));
     }
-    // the lists: the program's names and one more for values that match none of them (a project from elsewhere)
-    auto list = [&](const char* title, ParamID id, const std::vector<Preset>& items, const char* other,
-                    const std::string& start) {
-        String128 t;
-        ascii(t, title);
-        auto* param = new StringListParameter(t, id, nullptr, ParameterInfo::kCanAutomate | ParameterInfo::kIsList);
-        int startIndex = 0;
-        for (size_t i = 0; i < items.size(); ++i) {
-            String128 n;
-            StringConvert::convert(items[i].name, n);
-            param->appendString(n);
-            if (items[i].name == start) startIndex = static_cast<int>(i);
-        }
-        String128 o;
-        ascii(o, other);
-        param->appendString(o);
-        const ParamValue norm = static_cast<double>(startIndex) / std::max<int32>(1, param->getInfo().stepCount);
+    // the lists: the presets' names and one more for values that match none of them (a project from elsewhere)
+    for (const bool colour : {false, true}) {
+        auto* param = new NameListParameter(colour ? "Colour" : "Loudness", colour ? kColourId : kPresetId,
+                                            colour ? &settings_.colours : &settings_.presets);
+        const ParamValue norm = static_cast<double>(colour ? colourIndex() : presetIndex()) / param->getInfo().stepCount;
         param->getInfo().defaultNormalizedValue = norm;
         param->setNormalized(norm);
         parameters.addParameter(param);
-    };
-    list("Preset", kPresetId, presets_, "(other values)", "Medium");
-    list("Colour", kColourId, colours_, "(other values)", "Neutral");
+    }
     parameters.addParameter(STR16("Bypass"), nullptr, 1, 0.0, ParameterInfo::kCanAutomate | ParameterInfo::kIsBypass,
                             kBypassId);
     parameters.addParameter(new LookParameter(lookMs_));
@@ -215,11 +223,6 @@ void Plugin::addParameters() {
 tresult PLUGIN_API Plugin::initialize(FUnknown* context) {
     const tresult r = SingleComponentEffect::initialize(context);
     if (r != kResultOk) return r;
-    if (FUnknownPtr<IHostApplication> host = FUnknownPtr<IHostApplication>(context)) {
-        String128 name{};
-        if (host->getName(name) == kResultOk) hostName_ = StringConvert::convert(name);
-    }
-    diagLog("#%d initialize: host \"%s\", DJAP %s", id_, hostName_.c_str(), AP_VERSION_STRING);
     addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
     loadLists();
@@ -229,19 +232,15 @@ tresult PLUGIN_API Plugin::initialize(FUnknown* context) {
 }
 
 tresult PLUGIN_API Plugin::terminate() {
-    diagLog("#%d terminate", id_);
+    closeEditors();
     return SingleComponentEffect::terminate();
 }
 
-tresult PLUGIN_API Plugin::setProcessing(TBool state) {
-    diagLog("#%d setProcessing(%d)", id_, state ? 1 : 0);
-    return kResultOk;
-}
+// (the base class answers "not implemented"; a host may take that as a failure)
+tresult PLUGIN_API Plugin::setProcessing(TBool) { return kResultOk; }
 
 tresult PLUGIN_API Plugin::setupProcessing(ProcessSetup& setup) {
     fs_ = setup.sampleRate > 0 ? setup.sampleRate : 48000.0;
-    diagLog("#%d setupProcessing: %.0f Hz, at most %d frames, mode %d, %s", id_, setup.sampleRate,
-            setup.maxSamplesPerBlock, setup.processMode, setup.symbolicSampleSize == kSample32 ? "32-bit" : "64-bit");
     setLatencyFrom(plainOf(kLookId));
     return SingleComponentEffect::setupProcessing(setup);
 }
@@ -249,17 +248,12 @@ tresult PLUGIN_API Plugin::setupProcessing(ProcessSetup& setup) {
 tresult PLUGIN_API Plugin::setBusArrangements(SpeakerArrangement* inputs, int32 numIns, SpeakerArrangement* outputs,
                                               int32 numOuts) {
     // stereo in, stereo out only (a deck)
-    const bool stereo =
-        numIns == 1 && numOuts == 1 && inputs[0] == SpeakerArr::kStereo && outputs[0] == SpeakerArr::kStereo;
-    diagLog("#%d setBusArrangements: %d in (0x%llx), %d out (0x%llx): %s", id_, numIns,
-            numIns > 0 ? static_cast<unsigned long long>(inputs[0]) : 0ull, numOuts,
-            numOuts > 0 ? static_cast<unsigned long long>(outputs[0]) : 0ull, stereo ? "accepted" : "refused");
-    if (stereo) return SingleComponentEffect::setBusArrangements(inputs, numIns, outputs, numOuts);
+    if (numIns == 1 && numOuts == 1 && inputs[0] == SpeakerArr::kStereo && outputs[0] == SpeakerArr::kStereo)
+        return SingleComponentEffect::setBusArrangements(inputs, numIns, outputs, numOuts);
     return kResultFalse;
 }
 
 tresult PLUGIN_API Plugin::canProcessSampleSize(int32 symbolicSampleSize) {
-    diagLog("#%d canProcessSampleSize(%s)", id_, symbolicSampleSize == kSample32 ? "32-bit" : "64-bit");
     return symbolicSampleSize == kSample32 ? kResultTrue : kResultFalse;
 }
 
@@ -271,7 +265,6 @@ void Plugin::setLatencyFrom(double lookMs) {
 }
 
 tresult PLUGIN_API Plugin::setActive(TBool state) {
-    diagLog("#%d setActive(%d) at %.0f Hz", id_, state ? 1 : 0, fs_);
     if (state) {
         Snapshot s;
         if (incoming_.take(s)) values_ = s.values, lookMs_ = s.lookMs, bypass_ = s.bypass;
@@ -302,7 +295,6 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
         lookMs_ = s.lookMs;
         bypass_ = s.bypass;
         dirty_ = true;
-        stats_.updates.fetch_add(1, std::memory_order_relaxed);
     }
     if (IParameterChanges* changes = data.inputParameterChanges) {
         const int32 count = changes->getParameterCount();
@@ -314,14 +306,8 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
             ParamValue v = 0;
             if (q->getPoint(q->getPointCount() - 1, offset, v) != kResultTrue) continue; // the block's last value
             const ParamID id = q->getParameterId();
-            stats_.changes.fetch_add(1, std::memory_order_relaxed);
             if (id == kPresetId || id == kColourId) {
-                const bool colour = id == kColourId;
-                const std::vector<Preset>& items = colour ? colours_ : presets_;
-                const auto index = static_cast<size_t>(std::lround(v * static_cast<double>(items.size())));
-                if (index < items.size()) // the last entry ("other values") changes nothing
-                    for (int p = colour ? kFirstColourParam : 0; p < (colour ? kParamCount : kFirstColourParam); ++p)
-                        values_[static_cast<size_t>(p)] = items[index].values[static_cast<size_t>(p)];
+                continue; // a preset's values come from the controller as a whole (publishToProcessor)
             } else if (id == kBypassId) {
                 bypass_ = v >= 0.5;
             } else if (id == kLookId) {
@@ -334,18 +320,6 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
             dirty_ = true;
         }
     }
-    // what the host hands over (diagnostics: plugindiag.h)
-    stats_.calls.fetch_add(1, std::memory_order_relaxed);
-    stats_.frames.store(data.numSamples, std::memory_order_relaxed);
-    stats_.sampleSize.store(data.symbolicSampleSize, std::memory_order_relaxed);
-    stats_.mode.store(data.processMode, std::memory_order_relaxed);
-    stats_.inputs.store(data.numInputs, std::memory_order_relaxed);
-    stats_.outputs.store(data.numOutputs, std::memory_order_relaxed);
-    stats_.inChannels.store(data.numInputs > 0 && data.inputs ? data.inputs[0].numChannels : -1,
-                            std::memory_order_relaxed);
-    stats_.outChannels.store(data.numOutputs > 0 && data.outputs ? data.outputs[0].numChannels : -1,
-                             std::memory_order_relaxed);
-    stats_.bypass.store(bypass_, std::memory_order_relaxed);
     if (!active_) return kResultOk;
     if (dirty_) publishConfig();
     if (data.numSamples <= 0 || data.numInputs < 1 || data.numOutputs < 1) return kResultOk;
@@ -356,31 +330,21 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
     float* l = out.channelBuffers32[0];
     float* r = out.channelBuffers32[1];
     const int n = data.numSamples;
-    stats_.inPlace.store(l == in.channelBuffers32[0] ? 1 : 0, std::memory_order_relaxed);
-    float inPeak = 0.0f;
-    for (int i = 0; i < n; ++i)
-        inPeak = std::max(inPeak, std::max(std::fabs(in.channelBuffers32[0][i]), std::fabs(in.channelBuffers32[1][i])));
     const size_t bytes = static_cast<size_t>(n) * sizeof(float);
     if (l != in.channelBuffers32[0]) std::memcpy(l, in.channelBuffers32[0], bytes);
     if (r != in.channelBuffers32[1]) std::memcpy(r, in.channelBuffers32[1], bytes);
     deck_.process(l, r, n);
     out.silenceFlags = 0;
-    float outPeak = 0.0f;
-    for (int i = 0; i < n; ++i) outPeak = std::max(outPeak, std::max(std::fabs(l[i]), std::fabs(r[i])));
-    stats_.inPeak.store(inPeak, std::memory_order_relaxed);
-    stats_.outPeak.store(outPeak, std::memory_order_relaxed);
     return kResultOk;
 }
 
 // ---- state: the values themselves, by ini key (a project keeps its sound without the program's presets) ----
 
 tresult PLUGIN_API Plugin::getState(IBStream* state) {
-    diagLog("#%d getState", id_);
     IBStreamer s(state, kLittleEndian);
-    const int pi = presetIndex(), ci = colourIndex();
     s.writeInt32(kStateVersion);
-    s.writeStr8(pi < static_cast<int>(presets_.size()) ? presets_[static_cast<size_t>(pi)].name.c_str() : "");
-    s.writeStr8(ci < static_cast<int>(colours_.size()) ? colours_[static_cast<size_t>(ci)].name.c_str() : "");
+    s.writeStr8(settings_.deck[0].preset.c_str()); // "" = values that match no preset
+    s.writeStr8(settings_.deck[0].colour.c_str());
     s.writeDouble(plainOf(kLookId));
     s.writeInt8(plainOf(kBypassId) >= 0.5 ? 1 : 0);
     s.writeInt32(kParamCount);
@@ -393,7 +357,6 @@ tresult PLUGIN_API Plugin::getState(IBStream* state) {
 }
 
 tresult PLUGIN_API Plugin::setState(IBStream* state) {
-    diagLog("#%d setState", id_);
     IBStreamer s(state, kLittleEndian);
     int32 version = 0, count = 0;
     if (!s.readInt32(version) || version < 1) return kResultFalse;
@@ -417,19 +380,17 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
 
     // the controller
     exact_ = v;
+    settings_.deck[0].preset = settings_.find(preset) ? preset : std::string(); // unknown here: "(other values)"
+    settings_.deck[0].colour = settings_.find(colour, PresetKind::Colour) ? colour : std::string();
     loading_ = true;
-    auto indexOf = [](const std::vector<Preset>& items, const std::string& name) {
-        for (size_t i = 0; i < items.size(); ++i)
-            if (items[i].name == name) return static_cast<double>(i);
-        return static_cast<double>(items.size()); // "(other values)"
-    };
-    SingleComponentEffect::setParamNormalized(kPresetId, indexOf(presets_, preset) / presets_.size());
-    SingleComponentEffect::setParamNormalized(kColourId, indexOf(colours_, colour) / colours_.size());
+    SingleComponentEffect::setParamNormalized(kPresetId, static_cast<double>(presetIndex()) / settings_.presets.size());
+    SingleComponentEffect::setParamNormalized(kColourId, static_cast<double>(colourIndex()) / settings_.colours.size());
     SingleComponentEffect::setParamNormalized(kBypassId, bypass ? 1.0 : 0.0);
     SingleComponentEffect::setParamNormalized(kLookId, std::min(kMaxLook, std::max(0.0, look)) / kMaxLook);
     for (int p = 0; p < kParamCount; ++p)
         SingleComponentEffect::setParamNormalized(paramId(p), normalizedOf(p, v[static_cast<size_t>(p)]));
     loading_ = false;
+    applied_ = chosenValues();
     setLatencyFrom(look);
 
     // the processing (exactly the stored values, not their positions)
@@ -441,11 +402,15 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
 // ---- controller ----
 
 int Plugin::presetIndex() const {
-    return static_cast<int>(std::lround(const_cast<Plugin*>(this)->getParamNormalized(kPresetId) * presets_.size()));
+    for (size_t i = 0; i < settings_.presets.size(); ++i)
+        if (settings_.presets[i].name == settings_.deck[0].preset) return static_cast<int>(i);
+    return static_cast<int>(settings_.presets.size());
 }
 
 int Plugin::colourIndex() const {
-    return static_cast<int>(std::lround(const_cast<Plugin*>(this)->getParamNormalized(kColourId) * colours_.size()));
+    for (size_t i = 0; i < settings_.colours.size(); ++i)
+        if (settings_.colours[i].name == settings_.deck[0].colour) return static_cast<int>(i);
+    return static_cast<int>(settings_.colours.size());
 }
 
 double Plugin::plainOf(ParamID id) const {
@@ -458,18 +423,95 @@ double Plugin::plainOf(ParamID id) const {
 
 PresetValues Plugin::currentValues() const { return exact_; }
 
-void Plugin::loadPresetIntoController(int index, bool colour) {
-    const std::vector<Preset>& items = colour ? colours_ : presets_;
-    if (index < 0 || index >= static_cast<int>(items.size())) return; // "(other values)"
+void Plugin::loadPresetIntoController(bool colour) {
+    const Preset* chosen = colour ? settings_.find(settings_.deck[0].colour, PresetKind::Colour)
+                                  : settings_.find(settings_.deck[0].preset);
+    if (!chosen) return; // "(other values)"
     loading_ = true;
-    const PresetValues& v = items[static_cast<size_t>(index)].values;
+    const PresetValues& v = chosen->values;
     for (int p = colour ? kFirstColourParam : 0; p < (colour ? kParamCount : kFirstColourParam); ++p) {
         exact_[static_cast<size_t>(p)] = v[static_cast<size_t>(p)];
         SingleComponentEffect::setParamNormalized(paramId(p), normalizedOf(p, v[static_cast<size_t>(p)]));
     }
     loading_ = false;
-    // the host reads the new values (the processing loads the same preset from the list parameter's change)
+    applied_ = chosenValues();
+    // the host reads the new values; the processing gets them as a whole (publishToProcessor)
     if (componentHandler) componentHandler->restartComponent(kParamValuesChanged);
+}
+
+void Plugin::listsChanged() {
+    for (const ParamID id : {kPresetId, kColourId})
+        if (auto* p = dynamic_cast<NameListParameter*>(getParameterObject(id))) p->follow();
+    loading_ = true;
+    SingleComponentEffect::setParamNormalized(kPresetId, static_cast<double>(presetIndex()) / settings_.presets.size());
+    SingleComponentEffect::setParamNormalized(kColourId, static_cast<double>(colourIndex()) / settings_.colours.size());
+    loading_ = false;
+    if (componentHandler) componentHandler->restartComponent(kParamTitlesChanged | kParamValuesChanged);
+    if (view_) view_->listsChanged();
+}
+
+bool Plugin::saveSettings() {
+    if (ini_.empty()) return false;
+    std::error_code ec;
+    std::filesystem::create_directories(ini_.parent_path(), ec); // a plug-in without the program: the folder
+    auto names = [this] {
+        std::vector<std::string> n;
+        for (const Preset& p : settings_.presets) n.push_back(p.name);
+        for (const Preset& p : settings_.colours) n.push_back("\x01" + p.name);
+        return n;
+    };
+    const std::vector<std::string> before = names();
+    // as a guest: only the plug-in's preset and colour changes; the program's other settings stay as they are
+    const bool ok = settings_.saveMerged(ini_, base_, Settings::SaveRole::Guest);
+    if (names() != before) listsChanged(); // another plug-in's or the program's presets came in
+    return ok;
+}
+
+PresetValues Plugin::chosenValues() const {
+    const Preset* p = settings_.find(settings_.deck[0].preset);
+    const Preset* c = settings_.find(settings_.deck[0].colour, PresetKind::Colour);
+    return withColour(p ? p->values : exact_, c ? c->values : exact_);
+}
+
+void Plugin::edited(bool listChanged, bool save) {
+    // the preset window changed values of the chosen preset (or colour), or "Save as" moved the plug-in to its copy:
+    // those values, and only those - a bass slider or the host's automation of another value stays as it is
+    const PresetValues now = chosenValues();
+    bool changed = false;
+    loading_ = true;
+    for (int i = 0; i < kParamCount; ++i) {
+        const auto k = static_cast<size_t>(i);
+        if (now[k] == applied_[k] || now[k] == exact_[k]) continue;
+        exact_[k] = now[k];
+        SingleComponentEffect::setParamNormalized(paramId(i), normalizedOf(i, now[k]));
+        changed = true;
+    }
+    loading_ = false;
+    applied_ = now;
+    if (changed) {
+        if (componentHandler) componentHandler->restartComponent(kParamValuesChanged);
+        publishToProcessor();
+    }
+    if (listChanged) listsChanged();
+    if (save) saveSettings();
+    if (view_) view_->refresh();
+}
+
+void Plugin::openEditor(bool colour, HWND owner, const std::string& tab) {
+    saveSettings(); // the lists as they are in the file now (another plug-in or the program may have added some)
+    std::unique_ptr<EditWindow>& e = colour ? colourEditor_ : editor_;
+    if (!e) {
+        e = std::make_unique<EditWindow>(settings_, [this](bool listChanged, bool save) { edited(listChanged, save); },
+                                         colour ? PresetKind::Colour : PresetKind::Dynamics);
+        e->setDeckName(L"this plug-in");
+    }
+    const std::string& chosen = colour ? settings_.deck[0].colour : settings_.deck[0].preset;
+    e->show(owner, chosen.empty() ? std::string(colour ? "Neutral" : "Medium") : chosen, 0, tab);
+}
+
+void Plugin::closeEditors() {
+    editor_.reset();
+    colourEditor_.reset();
 }
 
 tresult PLUGIN_API Plugin::setParamNormalized(ParamID id, ParamValue value) {
@@ -479,8 +521,14 @@ tresult PLUGIN_API Plugin::setParamNormalized(ParamID id, ParamValue value) {
     if (p >= 0 && !loading_ && value != normalizedOf(p, exact_[static_cast<size_t>(p)]))
         exact_[static_cast<size_t>(p)] = plainFromNormalized(p, value); // moved to another step
     if (!loading_ && before != value) {
-        if (id == kPresetId) loadPresetIntoController(presetIndex(), false);
-        if (id == kColourId) loadPresetIntoController(colourIndex(), true);
+        if (id == kPresetId || id == kColourId) { // a choice of the host or the window: the name, then its values
+            const bool colour = id == kColourId;
+            const std::vector<Preset>& items = colour ? settings_.colours : settings_.presets;
+            const auto i = static_cast<size_t>(std::lround(value * static_cast<double>(items.size())));
+            (colour ? settings_.deck[0].colour : settings_.deck[0].preset) = i < items.size() ? items[i].name : "";
+            loadPresetIntoController(colour);
+            publishToProcessor(); // a choice is not automation: always, also when the host delivers changes itself
+        }
         if (id == kLookId) setLatencyFrom(plainOf(kLookId));
     }
     // a value the host gave the controller: to the processing too, unless the host delivers changes there itself
@@ -508,7 +556,7 @@ void Plugin::editPlain(ParamID id, double plain) {
 }
 
 void Plugin::choose(bool colour, int index) {
-    const std::vector<Preset>& items = colour ? colours_ : presets_;
+    const std::vector<Preset>& items = colour ? settings_.colours : settings_.presets;
     if (index < 0 || index >= static_cast<int>(items.size())) return;
     const ParamID id = colour ? kColourId : kPresetId;
     if (index != (colour ? colourIndex() : presetIndex())) {
@@ -516,12 +564,11 @@ void Plugin::choose(bool colour, int index) {
         return;
     }
     // already chosen: its values again (after changes), exactly, to the controller and the processing
-    loadPresetIntoController(index, colour);
+    loadPresetIntoController(colour);
     publishToProcessor();
 }
 
 IPlugView* PLUGIN_API Plugin::createView(FIDString name) {
-    diagLog("#%d createView(%s)", id_, name ? name : "");
     if (!name || std::strcmp(name, ViewType::kEditor) != 0) return nullptr;
     view_ = new PluginView(this);
     return view_;

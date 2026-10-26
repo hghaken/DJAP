@@ -19,7 +19,7 @@ VST is a registered trademark of Steinberg Media Technologies GmbH.
 ## Manuals
 
 - [User manual](docs/manual.md) ([PDF](docs/DJAP-Manual.pdf)) - installing, connecting, every window, control and
-  setting, presets and colours, the command line, troubleshooting.
+  setting, loudness presets and colours, the command line, troubleshooting.
 - [Technical manual](docs/technical.md) ([PDF](docs/DJAP-Technical-Manual.pdf)) - how each part of the audio
   processing works, with formulas, measurements, tests and the sources (standards and papers) with links.
 
@@ -30,7 +30,7 @@ Markdown (markdown-it-py and Chrome or Edge).
 
 Per deck, in this order (`docs/design.md` sections 2-4):
 
-- **Leveller** - slow automatic gain that brings each song to the preset's target loudness (EBU R 128 / BS.1770),
+- **Leveller** - slow automatic gain that brings each song to the loudness preset's target loudness (EBU R 128 / BS.1770),
   holds during fades, breakdowns and pauses, catches up quickly after a stopped deck.
 - **Compressor** - wide-band, soft knee, threshold relative to the target.
 - **Density** - multiband (1-7 bands, flat sum): each band is compared with its own recent level.
@@ -38,34 +38,34 @@ Per deck, in this order (`docs/design.md` sections 2-4):
 - **Soft clipper** and **look-ahead true-peak limiter** - the output never passes the ceiling (default -1 dBTP).
 
 The limiter look-ahead (default 1.5 ms, 0-5 ms) is the only delay the processing adds; bypass is the input delayed by
-the same amount, bit-exact, so switching never jumps. Five shipped presets go from easy listening to very loud
-(Gentle -18, Light -16, Medium -14, Loud -12, Very Loud -10 LUFS), and three follow a medium: FM Station (the dense FM sound at about -13 LUFS), DAB+ (EBU R 128: -23 LUFS, wide dynamics) and Web Stream (-16 LUFS, -2 dBTP for MP3 / AAC); every value of every preset can be changed, and
-own presets can be saved, renamed and deleted.
+the same amount, bit-exact, so switching never jumps. Five shipped loudness presets go from easy listening to very loud
+(Gentle -18, Light -16, Medium -14, Loud -12, Very Loud -10 LUFS), and three follow a medium: FM Station (the dense FM sound at about -13 LUFS), DAB+ (EBU R 128: -23 LUFS, wide dynamics) and Web Stream (-16 LUFS, -2 dBTP for MP3 / AAC); every value of every loudness preset can be changed, and
+own loudness presets can be saved, renamed and deleted.
 
-Besides its preset each deck has a **colour**: the tone of the music, kept apart from its loudness - bass, low-mid,
+Besides its loudness preset each deck has a **colour**: the tone of the music, kept apart from its loudness - bass, low-mid,
 presence and treble controls, an automatic tone correction that pulls each song's balance towards that of modern
 productions (a thin old record gets more bass, a dull one more highs), a sub-bass generator (an octave under the
-bass) and a loudness contour for quiet listening. The leveller keeps the loudness on target, so a colour changes
+bass) and a contour for quiet listening. The leveller keeps the loudness on target, so a colour changes
 only the balance. Nine shipped colours (Neutral, Warm, Bass+, Less mid, Bright, Vocal, Oldies, Auto, Quiet); own
-colours are managed like presets.
+colours are managed like loudness presets.
 
 ## Programs
 
-- `DJAP.exe` - the GUI: two deck strips (preset and colour - one choice when both decks share them -, processing /
+- `DJAP.exe` - the GUI: two deck strips (loudness preset and colour - one choice when both decks share them -, processing /
   bypass, sliders for bass level, bass enhancer, bass width and bass frequency, meters for input and output
   loudness, true peak, the gain of every stage and the spectrum of input and output), an analysis window
-  (compressor curve, loudness and gain over the last minute, goniometer, correlation and stereo width), a preset
+  (compressor curve, loudness and gain over the last minute, goniometer, correlation and stereo width), a loudness
   window with the stage switches and every parameter, a colour window,
   tooltips on every control, and the
   Audio window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
-  decks the same preset, start / stop, latency, real-time health). With ASIO a deck's input may also come from a
+  decks the same loudness preset, start / stop, latency, real-time health). With ASIO a deck's input may also come from a
   WASAPI, DirectSound or MME device (for example a player sending into a virtual cable): the two clocks' drift is
   corrected by a slightly adjusted read speed (at most 0.2 %), at the cost of a buffer of about 10-20 ms, shown
   with the measured drift. The outputs can follow the Windows volume and mute (the keyboard's volume keys; on by
   default with one channel), applied after the processing.
   The program lives in the notification area (system tray): closing or minimising the window hides it there while
-  the audio goes on; a click on the icon brings it back, its menu has Exit. At the first start the Audio window
+  the audio goes on; a click on the icon brings it back, its menu has Shutdown. At the first start the Audio window
   opens, to choose the audio device. A second start shows the running program.
   Settings are kept in `DJAP.ini` next to the program (or in `%APPDATA%\DJAP\`); at the first start the settings of an earlier version (up to 0.1.57) are copied there, the old file stays.
   Test options: `--ini <file>`, `--simulate <file.wav>` (runs a file through both decks without sound),
@@ -74,7 +74,7 @@ colours are managed like presets.
   settings:
 
   ```
-  DJAPCmd --render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--keep-delay] [--pcm24]
+  DJAPCmd --render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--keep-delay] [--pcm24] [--trace <file.csv>]
   DJAPCmd --presets
   DJAPCmd --measure <file.wav> [...]
   DJAPCmd --tone <file> [...]
@@ -83,8 +83,8 @@ colours are managed like presets.
 
   A 2-channel file is deck A, a 4-channel file is deck A (1-2) and deck B (3-4). Input may be WAV or anything
   Windows decodes (MP3, M4A, WMA, FLAC; mono plays on both channels); the output is WAV.
-- `DJAP.vst3` - the plug-in for DJ software: one deck (stereo in, stereo out) with the same chain, the same presets
-  and colours (read from the program's settings file) and a window like a deck strip of the program: preset,
+- `DJAP.vst3` - the plug-in for DJ software: one deck (stereo in, stereo out) with the same chain, the same loudness presets
+  and colours (read from the program's settings file) and a window like a deck strip of the program: loudness preset,
   colour, look-ahead, Bypass, the four bass sliders and the meter panel. Every value is a parameter the host can
   show and automate; a project stores the values themselves. The host is told the latency (the look-ahead).
 
@@ -118,7 +118,7 @@ with a Start menu entry and an uninstaller - and, on its "Select Components" pag
 After the installation DJAP starts and, at the first start, opens the Setup window. A plug-in that DJ software has
 loaded is never a reason to close that software: the setup replaces it when Windows starts again. Setup updates an existing
 installation - also one of a version up to 0.1.57, whose folder and shortcuts it removes (its settings are
-taken over by the program) - and asks to end a running DJAP first (notification area: Exit). Uninstalling keeps
+taken over by the program) - and asks to end a running DJAP first (notification area: Shutdown). Uninstalling keeps
 the settings in `%APPDATA%\DJAP` unless you choose to delete them. The setup is not signed: SmartScreen warns
 before the first run.
 
@@ -136,10 +136,10 @@ powershell -ExecutionPolicy Bypass -File tools\run_tests.ps1 -Renders
 
 runs the unit tests (`tests\*_test.cpp`: loudness meter against the EBU Tech 3341 / 3342 cases, limiter and true
 peak, every dynamics stage, the whole deck - bit-exact bypass, no clicks on any change, no allocation on the audio
-path, CPU -, settings and presets, the audio engine with every device sample format, the drift correction with
+path, CPU -, settings and loudness presets, the audio engine with every device sample format, the drift correction with
 simulated clocks; `plugin_test` loads the built plug-in like a host and checks it is bit-exact with the program's
 deck) and `tools\render_check.ps1`,
-which renders synthetic songs through every preset and checks the results with an independent meter.
+which renders synthetic songs through every loudness preset and checks the results with an independent meter.
 
 ## Layout
 

@@ -4,6 +4,12 @@ Status: **approved by the client** (2026-10-24), with the client's later decisio
 Gentle's leveller range). v0.2: five shipped presets (Gentle .. Very Loud), density stage up to 7 bands with the
 band count set per preset.
 
+Names (client, 2026-10-26: "change the name Preset into Loudness", everywhere): the GUI, the plug-in and the manuals
+call the dynamics preset the **loudness preset** (its list "Loudness", its window the loudness window) and the colour's
+loudness contour **Contour**. This document keeps "preset" for the loudness preset. Ini sections and keys (`[Preset X]`,
+`PresetA`, the colour key `Loudness`), the parameter keys (and so the plug-in's parameter ids) and DJAPCmd's options
+(`--a <preset>`, `--presets`) stay as they were.
+
 DJAP is a standalone Windows audio processor for DJs: two independent stereo channels (deck A and deck B)
 come in on an ASIO interface (4 inputs), each runs its own dynamics chain, and goes out on 4 outputs. The same DSP
 code renders WAV files offline (for tests and checks) and is kept free of Windows / GUI code so it can later be
@@ -70,9 +76,10 @@ analysis.
 | Leveller | range | dB | **9** | 0..15 | **DJ**: no per-song gain in front, the leveller does the equalising (songs differ ~-6..-14 LUFS) |
 | | speed | dB/s | **1.0** | 0.1..6 | **DJ**: faster than 0.5 because nothing levels ahead; still slow enough not to follow phrases |
 | | fast down | dB/s | **10** (all shipped presets) | 0..20 (0 = the speed above) | client, 2026-10-25, after the real-music survey: a song that comes in loud after a quiet intro or a break played up to 9 LU over the target for 30 s at 0.5 dB/s (Gentle, DAB+) and went into the limiter (12.7 dB). When the gain is more than 3 dB above what the 3 s level needs, it comes down at this speed, following the 0.4 s level (the 3 s average lags a loud entry), only down, until within 0.5 dB; then the 3 s level starts from the level reached. Judged on the 3 s level, so a chorus 4 LU over the verse is not touched (`dynamics_test`: identical). Measured (`dynamics_test`, 16 dB entry after a 6 s intro): 4-10 s after the entry -6.0 LUFS without, -17.9 with (target -18); 6 dB/s left +1.9 dB in the first 2 s, 10 dB/s +0.3 |
-| | hold below | LU under T | 10 | 5..20 | never pump a fade or a breakdown (principle 9) |
-| | fall hold | LU | 3 | fixed | no upward move while the 0.4 s level is > 3 LU under the 3 s level: covers the first 10 dB of a fade, before "hold below" acts (measured: 40 dB / 10 s fade lifted 3.2 dB without, 0.65 dB with; 4 LU let 1.1 dB through) |
-| | warm start | - | on | - | after >= 1 s quiet the detector follows a 0.4 s one for 1.5 s, gain held (10.2.3) |
+| | hold below | LU under T | 10 | 5..20 | never pump a fade or a pause (principle 9); a quiet passage that stays under it for 3 s without falling (and not more than 12 LU under it) is levelled like any music (client, 2026-10-26: spoken verses 10 LU under the chorus stayed 6-8 LU too soft for 10-19 s) |
+| | falling | dB | 2.5 / 2 s; 0.8 + 0.8 / 4 s; 3 LU | fixed | no upward move while the music falls, judged on a trend level (0.4 s, control blocks > 10 dB under the 1.5 s level left out: the gaps between phrases; compared as 1 s averages): dropped > 2.5 dB over 2 s, or sank > 0.8 dB in each of the last two 2 s (a slow fade), kept 1 s; and while the 0.4 s level is > 3 LU under the 3 s level (the first moment of a fade). After a fall the 3 s level restarts from the 1.5 s level. Measured: 40 dB / 10 s fade lifted 0.7 dB, 1 dB/s fade 1.5 dB (4.7 before the trend rule) |
+| | warm start | - | on | - | after a pause (>= 1 s of silence) the detector follows a 0.4 s one for 1.5 s, gain held (10.2.3); not after a quiet passage without silence (it restarted after every gap between two phrases) |
+| | fast up | dB/s | 4 x speed up to 3, or 2 x speed if more | fixed | when the gain is > 4 dB under what the 3 s level needs and the music is not falling (a quiet verse after a loud chorus), until within 1 dB; the counterpart of fast down. Gentle and DAB+ 2, Light / Medium / Web Stream / Loud 3, FM Station 4 dB/s (3 for all brought quiet song endings up too eagerly in Gentle and DAB+) |
 | | catch-up | switch | on | - | after >= 2 s of silence (deck stopped) the gain moves at 20 dB/s to the level of the 0.4 s detector; it goes on while that level rose > 1 dB in the last second (a track fading in), at most 15 s, then the 3 s detector starts from the level reached (measured: 12 s fade-in from -50 dB to -7 LUFS ended 5.1 LU too loud without, 0.04 LU with) |
 | | freeze | switch | off | - | **DJ**: holds the gain while the DJ works with EQ kills / filters. In the DSP core (`DeckControl::freeze`, for a later plug-in); the program has no button for it since 2026-10-25 (client: the F button "is not needed") |
 | Compressor | threshold | LU re T | +6 | -10..+15 | 10.3 / 9.7 |
@@ -84,7 +91,7 @@ analysis.
 | | amount | % | 35 | 0..100 | ratio 1:1..4:1 (10.4) |
 | | down above / lift below / max lift | dB | 3 / 6 / 6 | 0..12 / 0..20 / 0..12 | 10.4 |
 | | attack / release | ms | 20 / 300 | 1..200 / 20..2000 | 10.4 |
-| | band gain (one per band, up to 7) | dB | 0 | -6..+6 | multiband tone control at amount 0 |
+| | band gain (one per band, up to 7) | dB | 0 | -12..+12 | multiband tone control at amount 0 (client, 2026-10-26: was -6..+6) |
 | | splits (bands - 1 of them) | Hz | per band count, table 3.2 | 20..16000, rising, >= 1.25x apart | 10.4, extended to 7 bands |
 | Bass enhancer | frequency / amount | Hz / % | 100 / 30 | 60..160 / 0..100 | 10.6 (Larsen & Aarts) |
 | Exciter | frequency / amount | Hz / % | 3500 / 20 | 1500..8000 / 0..100 | 10.7 |
@@ -189,10 +196,10 @@ slider sets the colour's bass corner and the preset's enhancer frequency and bas
 
 | Stage | Parameter | Unit | Default | Range | Reason |
 |---|---|---|---|---|---|
-| Tone | bass / corner | dB / Hz | 0 / 100 | -12..+9 / 40..250 | low shelf, Q 0.71: more bass for thin recordings, less for boomy ones; the leveller keeps the loudness, so +9 does not eat headroom |
-| | low-mid / frequency | dB / Hz | 0 / 350 | -9..+6 / 150..1000 | bell, Q 0.9: boom and mud of older and live recordings |
-| | presence / frequency | dB / Hz | 0 / 3000 | -9..+6 / 1000..6000 | bell, Q 0.9: voices and leads forward or back |
-| | treble / corner | dB / Hz | 0 / 8000 | -9..+9 / 3000..16000 | high shelf, Q 0.71: dull or harsh recordings |
+| Tone | bass / corner | dB / Hz | 0 / 100 | -12..+12 / 40..250 | low shelf, Q 0.71: more bass for thin recordings, less for boomy ones; the leveller keeps the loudness, so +9 does not eat headroom |
+| | low-mid / frequency | dB / Hz | 0 / 350 | -12..+12 / 150..1000 | bell, Q 0.9: boom and mud of older and live recordings |
+| | presence / frequency | dB / Hz | 0 / 3000 | -12..+12 / 1000..6000 | bell, Q 0.9: voices and leads forward or back |
+| | treble / corner | dB / Hz | 0 / 8000 | -12..+12 / 3000..16000 | high shelf, Q 0.71: dull or harsh recordings |
 | Auto tone | amount | % | 0 | 0..100 | pulls each song's balance towards a reference (below); 0 = off |
 | | maximum | dB | 6 | 0..9 | largest correction per band; the treble gets half, since the top of an old recording is often its hiss |
 | | time | s | 10 | 2..60 | averaging time of the measurement; 1.5 s during the first 6 s of music, so a new song is corrected soon |
@@ -334,10 +341,12 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
 | `third_party/asiosdk/` | Steinberg ASIO SDK (GPL-3.0 option), not committed, fetched / copied by a script |
 
 CLI: a separate console program `DJAPCmd.exe` (the GUI program is a Windows-subsystem exe):
-`--render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--look <ms>] [--keep-delay] [--pcm24]` (4-channel
+`--render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--look <ms>] [--keep-delay] [--pcm24] [--trace <csv>]` (4-channel
 WAV = A + B, 2-channel = A; input also MP3 / M4A / WMA / FLAC decoded by Windows Media Foundation, mono on both
 channels; default per deck: its preset and processing switch in the settings; output 32-bit float
-with the look-ahead delay removed unless `--keep-delay`), `--presets` (list), `--devices` (ASIO drivers from the
+with the look-ahead delay removed unless `--keep-delay`; `--trace`: deck A every 100 ms from the deck's own meter
+records - loudness in / out, momentary and short-term, the leveller gain and state (quiet, frozen, warm), the other
+stages' gains), `--presets` (list), `--devices` (ASIO drivers from the
 registry, none opened), `--measure <wav...>` (I, LRA, max M / S, sample peak, true peak 16x; per deck for 4
 channels), `--tone <files...>` (each file's balance at 60 / 250 / 3000 / 10000 Hz against 1 kHz and the auto
 tone's correction at 100 %; calibrates the reference, 3.3), `--ca` / `--cb <colour>` (colour of a deck for
@@ -346,13 +355,18 @@ tone's correction at 100 %; calibrates the reference, 3.3), `--ca` / `--cb <colo
 GUI main window (`mainwnd`, `meterview`): two deck strips side by side. Each strip (client, 2026-10-25): on the
 title row the route (inputs / outputs, each side with its API, e.g. "WASAPI: Line 1 (virtual cable) -> ASIO: outputs 7-8") and a
 Bypass button at the right (lit = bypassed; saved as `Processing`);
-then the preset choice with its "Edit..." button and the colour choice (3.3) with its "Edit..." button; four bass
-sliders; and a meter panel without buttons (its R - reset meters - and F - freeze leveller - buttons were removed,
+then the preset choice with its "Edit..." button and the colour choice (3.3) with its "Edit..." button; and a meter panel without buttons (its R - reset meters - and F - freeze leveller - buttons were removed,
 client 2026-10-25: "not needed"). With linked presets there is one
-set of controls (client, 2026-10-25): deck A's preset and colour, bass sliders, Edit and Bypass
+set of controls (client, 2026-10-25): deck A's preset and colour, Edit and Bypass
 count for both decks; deck B's strip then shows only its route ("linked to deck A") and its meters.
-The bass sliders (client, 2026-10-25) change the
-colour or the preset, so every deck using it: Bass level (-12..+9 dB, the colour's bass shelf), Bass enhancer
+Smallest size (client, 2026-10-26: "the smallest window (one channel) where the spectrum is still visible, fixed;
+larger is always allowed"): the height that shows the five stage rows of the meter panel in full and a spectrum whose
+dB labels do not touch (`meterViewMinHeight`, from the panel's own layout and fonts at the window's DPI); the width
+600 px (one channel) or 900 px (two decks) at 96 DPI, scaled. Switching between one channel and two decks enlarges the
+window when it is smaller than the new minimum.
+The bass sliders (client, 2026-10-25; on the strips until 2026-10-26, then only in the spectrum window and the
+plug-in - client: "now that these are in the big spectrum window, they can go here") change the
+colour or the preset, so every deck using it: Bass level (-12..+12 dB, the colour's bass shelf), Bass enhancer
 (0..100 %; 0 switches the enhancer off, more switches it on), Bass width (0..100 %, 0 = mono bass; switches the
 width stage on), Bass frequency (40..250 Hz: sets the colour's bass corner and, within their ranges, the preset's
 enhancer frequency and width split together). Heard while dragging, saved when let go. The nine stage switches are in
@@ -368,8 +382,35 @@ Status bar: audio state and the latency the processing adds. Per-monitor DPI awa
 saved at once.
 
 Graphs (client, 2026-10-25). In each meter panel, under the stage rows: the spectrum of the deck's input
-(original, orange) and output (processed, turquoise), 20 Hz - 20 kHz on a log scale, 0 .. -90 dB, with the
-density splits and band numbers; 4096-point FFT, Hann window, a frame every 2048 samples, power averaged over
+(original, orange) and output (processed, turquoise), 20 Hz - 20 kHz on a log scale, 0 .. -96 dB, with the
+density splits and band numbers and each band's gain now (client, 2026-10-26: the density row went into the
+spectrum, which got its room; lifted blue, turned down red - colours of their own, apart from the spectra's orange and
+turquoise; a line per band at its gain - of the strip, shade and lines first offered, the client kept only the lines;
+the same in the spectrum window; `spectrumdraw.*` draws both).
+Spectrum window (client, 2026-10-26: "all together in a separate, big spectrum graph"; `spectrumwnd.*`, a click on
+a meter panel's spectrum, WM_COMMAND 105 in GUI tests): one deck's spectrum (left scale), the density bands, and the
+deck's colour as an EQ curve (right scale, +-12 dB - client, 2026-10-26: "the scale is not quite right": the two
+scales now share their grid, 8 lines of 12 dB on the left, 8 steps of 3 dB on the right, a label on each; `colourCurveDb` / `colourSectionDb` in `colour.*`, the
+processing's own section designs, checked against it to 0.01 dB in `colour_test`): thick = now, with the auto
+tone's correction (sent in the meter records, `MeterRecord::autoToneDb`), dashed = without it, thin = each section;
+the sub bass's range shaded. A point per tone section (bass, low-mid, presence, treble) is dragged in the
+parameters' own steps (`paramPositionOf` / `paramValueAt`): x = frequency, y = gain; a double-click sets the gain
+to 0 dB; it edits the deck's colour preset like the colour window (heard at once, saved on release). Deck A / B
+buttons with two decks; Loudness and Colour lists (client, 2026-10-26: as the main window's lists, both decks when
+linked); the four bass sliders in a second row (client, 2026-10-26; `bassctl.*` holds their rule for both
+windows: positions, texts, what a position changes), and two of them in the graph (client, 2026-10-26: "something
+to drag in the graph"): the colour's bass point drives the sliders' Bass level and Bass frequency (all three
+frequencies, as the slider); a bass zone with two bars for the enhancer and the width was tried and removed again
+(client, same day: "remove these two"); a read-out of the frequency, levels and colour under the mouse
+(on the graph's title row). Client, 2026-10-26 ("make
+the tone bands equal to the density bands"; chosen over replacing the colour's sections by per-band gains, which
+would tie a colour to a preset's band layout): a handle per density band - its fixed gain (Band N gain, -12..+12 dB)
+on the EQ scale over exactly the band's range - dragged up and down (the deck's preset; double-click 0 dB); and
+"Snap to bands" (`[Window] SnapToBands`): a dragged colour point within 10 px of a split (and the split within the
+section's frequency range) takes the split's frequency exactly. Reset preset / Reset colour buttons (client,
+2026-10-26): `Settings::resetPreset` of the deck's preset or colour, after the same question as the preset window's. The plug-in's meter panel
+shows the bands the same way (lines); a click on its spectrum opens the Density tab.
+The meter panel's spectrum: 4096-point FFT, Hann window, a frame every 2048 samples, power averaged over
 0.3 s, shown at 256 log-spaced points (the loudest bin in a point's band; interpolated where the bins are wider
 than the points, below about 300 Hz). A sine of amplitude A reads 20 log10(A) dB (on a bin; up to 1.42 dB less
 between bins). The Graphs button left of Bypass in each strip (client, 2026-10-25; it replaced the View menu) opens a window with a row per deck - first the signal chain (client, 2026-10-25:
@@ -396,11 +437,18 @@ diagonals) with, in the same panel right under it (client: "the three values in 
 taller"), bars for the output's correlation (0.3 s) and the input's and output's width (side level against mid
 level, 0 % = mono). History points every 0.1 s; every start of the audio clears it.
 
-Placement (client, 2026-10-25: dialogs in the middle of the application, not of the screen; `src/app/placement.*`):
-the Audio, preset, colour, analysis, About and name windows open centred on the main window, every message box
-centred on the window that asks it (a CBT hook moves the box), all kept inside that monitor's work area. While the
-main window is minimised or in the notification area its normal position counts. Once open, a window stays where
-the user moves it.
+Placement (`src/app/placement.*`). Remembered windows (client, 2026-10-26, replacing "dialogs in the middle of the
+application" of 2026-10-25: "when no position is known: centre in the middle of the screen; after that remember every
+change of every window - position and size - and write it into the ini file"): the main, Setup, loudness, colour,
+analysis, spectrum and About windows each have a line in `[Window]` (`Main=x,y,width,height,maximised`, screen
+pixels, the normal rectangle). A window opens at its line's place - with its size when it can be resized - if its
+title bar is still on a monitor; else, and without a line, centred on the work area of its owner's monitor (the main
+monitor for the main window). Every move, resize, maximise or restore is written at once (a drag once, when it ends;
+a subclass of the window watches `WM_EXITSIZEMOVE` and `WM_WINDOWPOSCHANGED`); hiding or minimising is not a change. A
+window last maximised opens maximised. The main window's `X` / `Y` of earlier versions become its place. The
+plug-in's windows are only centred (it never writes the program's settings). The name prompt and every message box
+stay centred on the window that asks (a CBT hook moves the box), kept inside that monitor's work area; while the
+main window is minimised or in the notification area its normal position counts.
 
 Look (client, 2026-10-25: "a brushed aluminium background, a random brushed pattern, and 3D buttons"): the main,
 preset and Audio windows stand on brushed aluminium (`src/app/theme.*`) - a slightly warm grey (darker at the
@@ -431,7 +479,7 @@ Notification area (client, 2026-10-25: "the application sits in the system tray"
 there while it runs; the tooltip says whether the audio runs and each deck's preset (and colour, or "bypass").
 Closing or minimising the main window hides it with its own windows (Audio, preset, analysis) and the audio goes
 on; the first time a notification says so (`TrayHintShown`). A click on the icon shows the window again; its menu:
-Open DJAP, Setup..., Exit. The right-click menu's Exit, the icon's Exit, the end of the Windows session and setup
+Open DJAP, Setup..., Shutdown (client, 2026-10-26: "change Exit into Shutdown"). The right-click menu's Shutdown, the icon's Shutdown, the end of the Windows session and setup
 (Restart Manager) really close it, saving as before. Only one program runs on the user's own settings: a second
 start shows the first one's window and ends (named mutex `DJAP.Running`, which setup also checks; test runs
 with `--ini` or `--simulate` are exempt). At the first start - no audio device chosen yet
@@ -441,7 +489,10 @@ audio first.
 Tooltips (client, 2026-10-25): every control in the main window, the Audio window and the preset window says what
 it does when the mouse rests on it (`src/app/tooltips.*`, shown for 30 s, wrapped at 440 px). The meter panel has
 one tip per part (each bar, each stage row, the numbers); each row of the preset window shows its full explanation
-and range, its reset button the reset value.
+and range, its reset button the reset value. One switch for all of them (client, 2026-10-26: "an option to turn all
+tooltips on or off, in Setup"): the Setup window's "Show tooltips", `[Window] Tooltips` (default on);
+`Tooltips::setEnabled` sends TTM_ACTIVATE to every tooltip control of the module and to those made later. The
+plug-in reads it from the settings file when it is loaded (it never writes it).
 
 Preset window (`editwnd`, "Edit..." beside a deck's preset choice): the preset choice, Save as / Rename / Delete (own
 presets only) / Reset preset (shipped values, or the generic defaults for an own preset), and a tab per stage
@@ -454,10 +505,16 @@ the unit, a small reset button (back to the reset value; enabled only when the v
 the reset value) and what it does (the full text and the range in the row's tooltip). Switches (the stage's own,
 catch-up) are check boxes with a reset button too. Under a tab's rows a short text says what the stage does to
 the sound and what more or less of its values sounds like (client, 2026-10-25; `kStageSound` in `editwnd.cpp`).
+Every text wraps (client, 2026-10-26: "make all text lines wrappable" - the note was cut off with "..."): the
+description and the note under the choice, each row's name and what it does (a row grows with its longest text),
+the stage's effect on the sound. Smallest size (client, 2026-10-26, as for the main window): 800 px wide at 96 DPI,
+and as high as the tallest tab with all its texts needs at the window's width (`EditWindow::place` measures without
+moving; `WM_WINDOWPOSCHANGING` raises a smaller height, so a narrower window, whose texts take more lines, gets
+taller), never more than the monitor's work area; a window too small after a change (more density bands) grows.
 Under the preset (or colour) choice a line says what the chosen one does to the sound (client, 2026-10-25): a
 description per shipped preset and colour (`kShippedSound`), plus "Some values are changed" when they differ from
 the shipped ones; an own preset or colour gets a summary of its values (target and stages on; tone gains, auto
-tone, sub bass, loudness). Sliders move in the parameter's steps; times and frequencies that span a
+tone, sub bass, contour). Sliders move in the parameter's steps; times and frequencies that span a
 factor of 8 or more (density splits, releases, attacks) move on a log scale (300 positions, rounded to the step);
 make-up has "auto" and the side-chain high-pass "off" at the left end. A change is heard at once; a dragged slider
 is saved when it is let go. Values outside the range are clamped, text that is no value gives a warning. Only the
@@ -470,7 +527,7 @@ deleting a colour moves its decks to Neutral.
 
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
-choice, bass sliders, Edit, Bypass; deck B's strip shows only its
+choice, Edit, Bypass; deck B's strip shows only its
 route and meters), and that choice (or "Save as") sets both decks; deck B's processing switch follows deck A's
 (saved so). Processing / bypass stays per deck. Saved as `LinkPresets`; a
 settings file with the link on and two different presets is read with deck B on deck A's preset.
@@ -509,7 +566,7 @@ output buffer, shown as an estimate) and, when input and output are different de
 apart (miniaudio's duplex buffer absorbs it until it over- or under-runs). The processing itself still adds only
 the look-ahead.
 
-Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Exit; the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), an "About DJAP..." button, and the audio API and, for WASAPI, the exclusive switch. ASIO:
+Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), an "About DJAP..." button, and the audio API and, for WASAPI, the exclusive switch. ASIO:
 "Deck inputs" (ASIO input pairs, or WASAPI / DirectSound / MME devices, 6.1), the driver (installed drivers from the
 registry), Open /
 Close driver (opening asks first: it takes the interface from other programs), Control panel, the input and
@@ -605,17 +662,30 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   (`paramPositions` / `paramValueAt` / `paramPositionOf` in `params.*`: the same log scale for times and
   frequencies, "auto" / "off" at the left end), grouped by stage (14 units). Ids are a hash of the ini key (`pluginids.h`), so
   values can be added or reordered without breaking a host's project. Four more: the preset list and the colour list
-  (the program's presets and colours from `%APPDATA%\DJAP\DJAP.ini`, read only, or the shipped ones; a last entry
-  "(other values)"), Bypass (the host's bypass flag: the input delayed by the look-ahead) and the look-ahead (0..5
-  ms in steps of 0.1). All can be automated.
-- **Choosing a preset or colour** (window or host): the processor copies that preset's values into its own at the
-  next block; the controller loads the same values and tells the host to read them again
-  (`restartComponent(kParamValuesChanged)`). Choosing the preset that is already chosen loads its values again (back
-  after changes). A value set by the host is the value of its step; the controller keeps the exact values of a
-  preset or a project (an 800 Hz split stays 800, not the 810 of the nearest step).
+  (the presets and colours of `%APPDATA%\DJAP\DJAP.ini`, or the shipped ones; a last entry "(other values)"; they
+  grow and shrink with the preset window, announced with `restartComponent(kParamTitlesChanged)`), Bypass (the
+  host's bypass flag: the input delayed by the look-ahead) and the look-ahead (0..5 ms in steps of 0.1). All can be
+  automated.
+- **Choosing a preset or colour** (window or host): the controller loads that preset's values, tells the host to
+  read them again (`restartComponent(kParamValuesChanged)`) and hands them to the processing as a whole (the
+  processor never reads the lists: they change on the GUI thread). Choosing the preset that is already chosen loads
+  its values again (back after changes). A value set by the host is the value of its step; the controller keeps the
+  exact values of a preset or a project (an 800 Hz split stays 800, not the 810 of the nearest step).
+- **Preset window** (client, 2026-10-26: "the edit buttons for preset and colour" were missing; the presets saved in
+  the program's settings file, shared): the Edit buttons beside preset and colour, and a click on a row of the meter
+  panel, open the program's preset window (`editwnd.*`, the same code, the plug-in's module set with
+  `EditWindow::setModule`), owned by the host's top-level window, on a `Settings` of the plug-in's own (one deck).
+  A change of the chosen preset's or colour's values reaches the plug-in's parameters (only the values that changed
+  in the preset: a bass slider or the host's automation of another value stays) and the processing. Saving is a merge
+  (`Settings::saveMerged`): the file is read again, this writer's own additions, changes, renames and deletions since
+  its last read or write are applied to it, everything else in it stays - so the program and any number of plug-ins
+  keep each other's presets. The plug-in saves as a guest: only the preset and colour lists; the program's other
+  settings (devices, window, ...) are never written by it. A preset a deck of the writer uses is kept even when the
+  other side deleted it. Nothing new = nothing written (opening the window only reads). Each writer writes through
+  a temporary file of its own and renames it.
 - **Edits reach the processing directly** (client's DJ program, 2026-10-26: the plug-in processed, but no edit in
   its window changed the sound - the program never passes a parameter change to `process()` for a plug-in whose
-  controller and processor are one object; found with the diagnostics, `plugindiag.*`): every edit in the window
+  controller and processor are one object; found with a temporary log of the host's calls): every edit in the window
   also hands the controller's whole state to the processing through a second sequence-locked slot. Values the host
   sets on the controller go the same way as long as the host has never delivered a parameter change to `process()`
   itself; once it has, its own sample-accurate changes are used alone, so the controller's later copies never
@@ -628,7 +698,7 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   by its ini key - the values themselves, so a project sounds the same on a computer where that preset does not
   exist or was changed; unknown keys of a newer version are skipped.
 - **Window** (`pluginview.*`, 740 x 640 at 96 DPI, scaled to the host window's DPI): the program's deck strip -
-  DJAP and the version, look-ahead, Bypass; preset and colour; the four bass sliders (as in the program: bass level
+  DJAP and the version, look-ahead, Bypass; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same
   code). On the brushed metal (`theme.*`); tooltips on every control. Its own common controls 6 through the DLL's
   manifest and `ISOLATION_AWARE_ENABLED`. The window classes and GDI+ live while a window of the DLL is open and are
@@ -649,6 +719,10 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   `DeckProcessor` with the same values for 8 s at block sizes 512 / 333 / 1024 / 64 / 1 with a target change
   half-way; a state stored and loaded into a new instance (71 of 71 values, bit-exact output); Bypass = the input
   delayed by the look-ahead, bit-exact; the latency at 1.5 and 3.0 ms. The SDK's validator: 47 tests, and 537 in
-  its extended mode, all passed. The window was driven in the SDK's editor host (no audio): preset, Bypass, a slider.
+  its extended mode, all passed. The window was driven in the SDK's editor host (no audio): preset, Bypass, a slider;
+  the two Edit buttons and a click on the meter's density row open the preset window (on its Density tab) and the
+  colour window, and the settings file stays untouched. `settings_test` (`merged`) checks the merge: both sides'
+  presets kept, renames and deletions on either side, a preset in use kept, the program's settings never written by
+  the guest, no write when nothing is new.
   Not tested by Claude: a real DJ program, an installation into the computer's plug-in folder (needs
   administrator rights).

@@ -6,8 +6,10 @@
 #             .sha256 (what the program's update check finds); the setup must be built from this commit (no +dev)
 # Safety net: tools\publish-blocklist.txt (git-ignored, one word or phrase per line) - publishing stops when any of
 # them occurs in the public files or the message.
-param([string]$Message, [switch]$DryRun, [switch]$Release, [string]$Notes, [string]$Remote = "origin",
-      [string]$Branch = "main")
+#   -NotesFile <file>  the release text from a file (Markdown, UTF-8): quotes and line breaks in -Notes do not
+#             survive "powershell -File" (a release text was cut off at its first double quote)
+param([string]$Message, [switch]$DryRun, [switch]$Release, [string]$Notes, [string]$NotesFile,
+      [string]$Remote = "origin", [string]$Branch = "main")
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -30,6 +32,7 @@ try {
 
 $version = "{0}.{1}" -f (Get-Content VERSION -Raw).Trim(), (git rev-list --count HEAD).Trim()
 if (-not $Message) { $Message = "DJAP $version`n`nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" }
+if ($NotesFile) { $Notes = [IO.File]::ReadAllText((Resolve-Path $NotesFile).Path) }
 if (-not $Notes) { $Notes = "DJAP $version" }
 
 # a release: the setup of exactly this commit, and programs that hold no word of the blocklist either

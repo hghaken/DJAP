@@ -183,6 +183,9 @@ BiquadCoeffs highShelf(double fs, double hz, double gainDb, double slope = 1.0);
 BiquadCoeffs rerate(const BiquadCoeffs& d, double from, double to);
 // Magnitude response in dB at frequency hz.
 double magnitudeDb(const BiquadCoeffs& c, double fs, double hz);
+// The same for a state-variable filter section (its analogue prototype at the pre-warped frequency: the SVF is that
+// prototype's bilinear transform, so this is exact).
+double magnitudeDb(const SvfCoeffs& c, double fs, double hz);
 } // namespace design
 
 // Flushes denormals (FTZ/DAZ) for the lifetime of the object and restores the thread's own mode afterwards.

@@ -16,9 +16,9 @@ software (chapter 9) came with the version after 0.1.100.
 3. [Connecting DJAP](#3-connecting-djap)
 4. [The main window](#4-the-main-window)
 5. [The Setup window](#5-the-setup-window)
-6. [Presets and the preset window](#6-presets-and-the-preset-window)
+6. [Loudness presets and the loudness window](#6-loudness-presets-and-the-loudness-window)
 7. [Colours and the colour window](#7-colours-and-the-colour-window)
-8. [The analysis window](#8-the-analysis-window)
+8. [The analysis and spectrum windows](#8-the-analysis-and-spectrum-windows)
 9. [The plug-in for DJ software](#9-the-plug-in-for-dj-software)
 10. [Latency and real-time health](#10-latency-and-real-time-health)
 11. [Updates](#11-updates)
@@ -41,8 +41,8 @@ Each deck runs the same chain of processing stages:
 
 | Step | What it does for you |
 |---|---|
-| **Leveller** | A slow, automatic hand on the volume: quiet and loud songs come out at the same loudness. It does not follow the music within a song and holds still during fades, breakdowns and pauses. |
-| **Colour** | The tone of the music: bass, low-mid, presence and treble, an automatic tone correction per song, a sub-bass generator and a loudness contour for quiet listening. |
+| **Leveller** | A slow, automatic hand on the volume: quiet and loud songs come out at the same loudness. It does not follow the music within a song and holds still during fades and pauses; a quiet part that stays (a soft verse, a breakdown) comes up to the target after a few seconds. |
+| **Colour** | The tone of the music: bass, low-mid, presence and treble, an automatic tone correction per song, a sub-bass generator and a contour for quiet listening. |
 | **Compressor** | Evens out the loud parts within a song. |
 | **Density** | A multiband stage (1 to 7 frequency bands): a band that sticks out is turned down, one that falls away is lifted - the full, dense "radio" sound. |
 | **Bass enhancer** | Overtones of the bass, so the bass is heard on small speakers. |
@@ -53,8 +53,8 @@ Each deck runs the same chain of processing stages:
 | **Limiter** | The safety net: the output never passes the ceiling (true peak, default -1 dBTP). |
 | **Output gain** | A last trim, only downwards. |
 
-What each step does and how much is set by the deck's **preset** (the loudness and dynamics) and its **colour**
-(the tone). DJAP ships with 8 presets and 9 colours; every value can be changed and saved under your own name.
+What each step does and how much is set by the deck's **loudness preset** (the loudness and dynamics) and its **colour**
+(the tone). DJAP ships with 8 loudness presets and 9 colours; every value can be changed and saved under your own name.
 
 Things to know up front:
 
@@ -62,7 +62,7 @@ Things to know up front:
   both decks so they stay in time with each other when mixed.
 - **Bypass is exact.** With a deck on Bypass its input goes out unchanged, bit for bit, delayed by the same
   look-ahead - so switching between processed and unprocessed never shifts the sound in time.
-- **No clicks.** Every change - a preset, a colour, a slider, a stage switched on or off - glides in over a few
+- **No clicks.** Every change - a loudness preset, a colour, a slider, a stage switched on or off - glides in over a few
   milliseconds. Starting and stopping the audio fade in and out.
 - **Everything is saved at once.** There is no Save button: every change is stored in the settings file.
 
@@ -102,7 +102,7 @@ Options on the way:
   This can be changed later in the Setup window.
 
 DJAP is installed in `C:\Program Files\DJAP`. Installing a newer version over an older one keeps all settings and
-own presets. If DJAP is running, the setup asks to close it first.
+own loudness presets. If DJAP is running, the setup asks to close it first.
 
 ### 2.3 The first start
 
@@ -116,10 +116,10 @@ DJAP lives in the notification area (the icons next to the clock). Closing or mi
 there; **the audio goes on**. The first time this happens a message says so.
 
 - **Click** the icon to show the window again.
-- **Right-click** the icon for its menu: *Open DJAP*, *Setup...*, *Exit*.
-- The icon's tooltip shows whether the audio runs and each deck's preset and colour (or "bypass").
+- **Right-click** the icon for its menu: *Open DJAP*, *Setup...*, *Shutdown*.
+- The icon's tooltip shows whether the audio runs and each deck's loudness preset and colour (or "bypass").
 
-DJAP really ends only with **Exit** (from the icon's menu or the main window's right-click menu), when Windows shuts
+DJAP really ends only with **Shutdown** (from the icon's menu or the main window's right-click menu), when Windows shuts
 down, or when a setup closes it. Before it stops, the audio fades out over 10 ms, so there is no click.
 
 Only one DJAP runs at a time: starting it a second time brings the running one to the front.
@@ -141,7 +141,7 @@ See chapter 11.
 ### 2.7 Removing
 
 Use Windows' Settings > Apps > Installed apps > DJAP > Uninstall. The uninstaller removes the programs, the
-shortcuts and the "start with Windows" entry. It then asks whether to delete your settings and own presets too
+shortcuts and the "start with Windows" entry. It then asks whether to delete your settings and own loudness presets too
 (`%APPDATA%\DJAP`); answer No to keep them for a later installation.
 
 ## 3. Connecting DJAP
@@ -166,7 +166,7 @@ Where to take the deck signals from:
   never as clean as pre-fader.
 
 EQ kills and filter sweeps look like level changes to the leveller. Deep cuts are caught by its hold rule; with
-lighter EQ moves the leveller may make up part of the cut over a few seconds. A slower leveller (preset window,
+lighter EQ moves the leveller may make up part of the cut over a few seconds. A slower leveller (loudness window,
 Leveller > Speed) makes that less noticeable.
 
 **An ASIO driver usually serves one program at a time.** If your DJ software uses the same interface through ASIO,
@@ -217,40 +217,42 @@ amplifier, and watch the meters before you turn up.
 ![The main window with two decks](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
-no menu bar: **right-click anywhere in it** for *Setup...* and *Exit*. Every control has a tooltip that explains it
-when the mouse rests on it.
+no menu bar: **right-click anywhere in it** for *Setup...* and *Shutdown*. Every control has a tooltip that explains it
+when the mouse rests on it. The window can be made as large as you like; it cannot be made smaller than the size
+that still shows every meter row and a readable spectrum.
 
 ### 4.1 The deck strip
 
 - **Title row.** The deck's name and its route, for example `ASIO: inputs 1-2 -> ASIO: outputs 1-2`, or with
   other APIs the device names. With linked presets deck B shows "linked to deck A".
-- **Graphs** opens the analysis window (chapter 8).
+- **Graphs** opens the analysis window (8.1).
 - **Bypass.** Lit (green): the deck's input goes out unchanged, delayed by the look-ahead. Not lit: the deck is
   processed. Saved per deck.
-- **Preset** and its **Edit...** button: the deck's preset (the loudness and dynamics) and the preset window
-  (chapter 6). The list runs from the quietest output to the loudest; your own presets are sorted in.
+- **Loudness** and its **Edit...** button: the deck's loudness preset (the loudness and dynamics) and the loudness window
+  (chapter 6). The list runs from the quietest output to the loudest; your own loudness presets are sorted in.
 - **Colour** and its **Edit...** button: the deck's colour (the tone) and the colour window (chapter 7).
 
-A new preset or colour is heard at once, without a click.
+A new loudness preset or colour is heard at once, without a click.
 
-### 4.2 The bass sliders
+### 4.2 The bass settings
 
-Four sliders for the most-used bass settings. They change the preset or the colour itself, so every deck using that
-preset or colour changes with it. A change is heard while dragging and saved when the slider is let go. Arrow keys and
+Four settings for the most-used bass values, in the spectrum window (8.2: a click on the meter panel's spectrum
+opens it) as sliders - the bass level and frequency also as the blue point in its graph - and in the plug-in's window (9). They change the loudness preset or the colour itself, so every deck using that
+loudness preset or colour changes with it. A change is heard while dragging and saved when the slider is let go. Arrow keys and
 Page Up / Page Down step the slider that has the focus.
 
 | Slider | Range | What it does | Belongs to |
 |---|---|---|---|
-| **Bass level** | -12 .. +9 dB | More or less bass below the bass frequency (the colour's bass shelf). The leveller keeps the loudness, so this changes the balance, not the volume. 0 dB = off. | colour |
-| **Bass enhancer** | 0 .. 100 % | Strength of the bass overtones, so the bass is heard on small speakers. 0 % switches the enhancer off; more switches it on. | preset |
-| **Bass width** | 0 .. 100 % | Stereo width of the bass: 0 % = bass in mono (tighter in a club, safe on mono systems), 100 % = as recorded. Moving it switches the stereo-width stage on. | preset |
-| **Bass frequency** | 40 .. 250 Hz | Where "bass" ends for the three sliders above: the colour's bass corner and, within their own ranges, the enhancer's frequency (60-160 Hz) and the width stage's bass split. Each can be set separately in the preset and colour windows. | both |
+| **Bass level** | -12 .. +12 dB | More or less bass below the bass frequency (the colour's bass shelf). The leveller keeps the loudness, so this changes the balance, not the volume. 0 dB = off. | colour |
+| **Bass enhancer** | 0 .. 100 % | Strength of the bass overtones, so the bass is heard on small speakers. 0 % switches the enhancer off; more switches it on. | loudness preset |
+| **Bass width** | 0 .. 100 % | Stereo width of the bass: 0 % = bass in mono (tighter in a club, safe on mono systems), 100 % = as recorded. Moving it switches the stereo-width stage on. | loudness preset |
+| **Bass frequency** | 40 .. 250 Hz | Where "bass" ends for the three sliders above: the colour's bass corner and, within their own ranges, the enhancer's frequency (60-160 Hz) and the width stage's bass split. Each can be set separately in the loudness preset and colour windows. | both |
 
 ### 4.3 The meter panel
 
-The dark panel under the sliders shows what the deck is doing.
+The dark panel under the Loudness and Colour lists shows what the deck is doing.
 
-**LED bars, left.** *In L / R* is the input level (sample peak in dBFS, including the preset's input gain); *Out L /
+**LED bars, left.** *In L / R* is the input level (sample peak in dBFS, including the loudness preset's input gain); *Out L /
 R* is the output level (true peak in dBTP). Lit segments show the level; the zone colours show amber and red near the
 top (input: amber from -6, red from -1 dBFS; output: amber in the last 3 dB below the ceiling, red above it). A
 single LED holds the peak for 1.5 s. Across each pair a **white** line shows the momentary loudness and a **yellow**
@@ -261,15 +263,16 @@ white line can be compared with the bars and with the target directly.
 
 - **Leveller** - its gain, up (right of 0) or down (left), over its range.
 - **Compressor**, **De-esser**, **Clipper**, **Limiter** - gain reduction, 0 to 12 dB.
-- **Density** - one small bar per band (with the band's frequency range under it), up or down by up to 12 dB.
 
-A stage that is switched off in the preset is shown greyed out.
+A stage that is switched off in the loudness preset is shown greyed out.
 
 **Spectrum.** The frequency content of the input (**original**, orange) and the output (**processed**, turquoise),
-20 Hz to 20 kHz. The dotted lines are the density stage's band splits, with the band numbers at the top.
+20 Hz to 20 kHz. The density stage is drawn in it: its bands (dotted lines at the splits, band numbers at the top)
+and each band's gain now as a line over the band's range, up (blue) or down (red) by up to 12 dB.
 
-**Clicking in the panel** opens the setting behind it: a stage row opens the preset window on that stage's tab, the
-In bars open the General tab (input gain, target), the Out bars the Limiter tab (ceiling).
+**Clicking in the panel** opens the setting behind it: a stage row opens the loudness window on that stage's tab, the
+In bars open the General tab (input gain, target), the Out bars the Limiter tab (ceiling), the spectrum the spectrum
+window (8.2).
 
 ### 4.4 The status bar
 
@@ -280,8 +283,8 @@ the processing adds.
 
 ### 4.5 Linked presets
 
-With "Deck A and deck B use the same preset" on (Setup window), the main window shows one set of controls - deck A's
-preset, colour, sliders, Edit buttons and Bypass - and they count for both decks. Deck B's strip shows only its route
+With "Deck A and deck B use the same loudness preset and colour" on (Setup window), the main window shows one set of controls - deck A's
+loudness preset, colour, sliders, Edit buttons and Bypass - and they count for both decks. Deck B's strip shows only its route
 and its meters.
 
 ## 5. The Setup window
@@ -296,7 +299,7 @@ the audio again (a short fade-out and fade-in).
 
 | Row | What it does |
 |---|---|
-| **Processing** | *Two decks* (deck A and deck B, each its own input, output and preset) or *One channel* (one stereo processor, for example for what Windows plays). |
+| **Processing** | *Two decks* (deck A and deck B, each its own input, output and loudness preset) or *One channel* (one stereo processor, for example for what Windows plays). |
 | **Audio API** | ASIO, WASAPI, DirectSound or MME (see 3.3). Choosing another API stops the audio. **Exclusive** (WASAPI only): lower latency, but the devices are taken from other programs while the audio runs. |
 | **Deck inputs** / **Input from** (ASIO only) | Where the decks' inputs come from: *ASIO input pairs*, or devices of WASAPI, DirectSound or MME (drift-corrected; adds a buffer of about 10-20 ms). The outputs stay ASIO. |
 | **ASIO driver** | The installed ASIO drivers. **Open driver** opens it (DJAP asks first: it may take the interface from other programs); **Close driver** releases it; **Control panel** opens the driver's own settings (buffer size, clock source). Under it: the driver's state. |
@@ -307,13 +310,15 @@ the audio again (a short fade-out and fade-in).
 
 ### 5.2 Options
 
-- **Deck A and deck B use the same preset** - linked presets (4.5).
+- **Deck A and deck B use the same loudness preset and colour** - linked presets (4.5).
 - **The outputs follow the Windows volume (volume keys, taskbar) and mute.** The volume of Windows' default playback
   device turns DJAP's outputs down after the processing (never up: the ceiling holds). The meters show the level
   before this volume. If the default playback device is the virtual cable DJAP reads, and Windows turns that cable
   down in software, DJAP undoes that at its input, so the processing still sees the music's own level. One choice per
   mode: on by default with one channel, off with two decks (a key on the keyboard should not move a DJ's outputs).
 - **Start DJAP when Windows starts** (2.5). Stored in Windows' list of startup programs, not in the settings file.
+- **Show tooltips** - on (the default): every control explains itself when the mouse rests on it. Off: no tooltips
+  in any window. The plug-in follows the setting the next time it is loaded.
 
 ### 5.3 Updates
 
@@ -335,14 +340,14 @@ the audio again (a short fade-out and fade-in).
 
 Counters that show whether the computer keeps up with the audio (chapter 10). **Reset counters** sets them to 0.
 
-## 6. Presets and the preset window
+## 6. Loudness presets and the loudness window
 
-### 6.1 The shipped presets
+### 6.1 The shipped loudness presets
 
-A preset holds the target loudness and every value of every stage. Five presets are named by strength, three by the
-medium they imitate. In the preset lists they appear from the quietest output to the loudest:
+A loudness preset holds the target loudness and every value of every stage. Five loudness presets are named by strength, three by the
+medium they imitate. In the loudness preset lists they appear from the quietest output to the loudest:
 
-| Preset | Output | Character |
+| Loudness preset | Output | Character |
 |---|---|---|
 | **DAB+** | -23 LUFS | Digital radio the EBU R 128 way: the music keeps its dynamics; songs are moved to the target slowly instead of squashed; only passages above -18 LUFS are compressed; no density, clipping or exciter. Quiet next to the others: turn the amplifier up. |
 | **Gentle** | -18 LUFS | Easy listening: songs are brought to one loudness slowly and gently, most of the dynamics stay. Light compression, 3 density bands, no clipping. For background music and quiet rooms. |
@@ -353,11 +358,11 @@ medium they imitate. In the preset lists they appear from the quietest output to
 | **Loud** | -12 LUFS | Dense and punchy: earlier and harder compression, 6 density bands, bass enhancer and exciter, more clipping. For parties and noisy rooms. |
 | **Very Loud** | -10 LUFS | Close to modern club masters: very dense and loud, little dynamics left. 7 density bands, the strongest compression and clipping. For loud venues; on long listening it can tire. |
 
-All presets have a limiter ceiling of -1.0 dBTP except Web Stream (-2.0 dBTP).
+All loudness presets have a limiter ceiling of -1.0 dBTP except Web Stream (-2.0 dBTP).
 
-The main values (`DJAPCmd --presets` lists them for the presets on your computer, including your own):
+The main values (`DJAPCmd --presets` lists them for the loudness presets on your computer, including your own):
 
-| Preset | Target LUFS | Leveller range / speed | Compressor threshold / ratio | Density bands | Clipper drive | Ceiling dBTP |
+| Loudness preset | Target LUFS | Leveller range / speed | Compressor threshold / ratio | Density bands | Clipper drive | Ceiling dBTP |
 |---|---|---|---|---|---|---|
 | DAB+ | -23 | 15 dB / 0.5 dB/s | +5 LU / 2.0 | off | off | -1.0 |
 | Gentle | -18 | 12 dB / 0.5 dB/s | +6 LU / 1.5 | 3 | off | -1.0 |
@@ -370,17 +375,17 @@ The main values (`DJAPCmd --presets` lists them for the presets on your computer
 
 These values are starting points; change them to taste.
 
-### 6.2 The preset window
+### 6.2 The loudness window
 
-![The preset window](images/preset.jpg)
+![The loudness window](images/preset.jpg)
 
-Click **Edit...** next to a deck's preset. At the top:
+Click **Edit...** next to a deck's loudness preset. At the top:
 
-- **Preset** - the preset shown; choosing another one here also moves the deck it was opened from to it.
-- **Save as...** saves the current values under a new name; the deck moves to the new preset.
-- **Rename...** and **Delete** - for your own presets only. Deleting a preset moves the decks that used it to Medium.
-- **Reset preset** - back to the shipped values (for an own preset: to the general defaults).
-- Under it, what the preset does to the sound, and "Some values are changed" when they differ from the shipped ones.
+- **Loudness** - the loudness preset shown; choosing another one here also moves the deck it was opened from to it.
+- **Save as...** saves the current values under a new name; the deck moves to the new loudness preset.
+- **Rename...** and **Delete** - for your own loudness presets only. Deleting a loudness preset moves the decks that used it to Medium.
+- **Reset loudness** - back to the shipped values (for an own preset: to the general defaults).
+- Under it, what the loudness preset does to the sound, and "Some values are changed" when they differ from the shipped ones.
 
 Below that, a **tab per stage**. A stage that is switched off says "(off)" on its tab. On each tab:
 
@@ -391,11 +396,14 @@ Below that, a **tab per stage**. A stage that is switched off says "(off)" on it
   value. The row's tooltip has the full explanation and the range.
 - Under the rows, what the stage does to the sound and what more or less of its values sounds like.
 
+The window can be made as large as you like; it cannot be made smaller than the size that shows every row of the
+largest tab and all texts in full (a narrower window is taller, because its texts take more lines).
+
 Every change is heard at once; a dragged slider is saved when it is let go. Values outside the range are limited to
 it; text that is not a value gives a warning. Times and frequencies that span a wide range move on a logarithmic
 scale.
 
-### 6.3 All preset values
+### 6.3 All values of a loudness preset
 
 Defaults below are those of Medium (the general defaults of a new own preset).
 
@@ -415,7 +423,7 @@ Defaults below are those of Medium (the general defaults of a new own preset).
 | Range | dB | 0 .. 15 | 9 | The largest boost or cut. Larger evens out bigger differences between songs. |
 | Speed | dB/s | 0.1 .. 6 | 1.0 | How fast the gain may move. Higher reaches a new song's level sooner but can be heard as the volume drifting within a song. |
 | Fast down | dB/s | 0 .. 20 | 10 | How fast the gain comes down when a song comes in clearly too loud (after a quiet intro or a break). 0 = the normal speed. |
-| Hold below | LU | 5 .. 20 | 10 | Holds the gain while the music is this far under the target: fades, breakdowns and pauses are not pumped up. |
+| Hold below | LU | 5 .. 20 | 10 | Holds the gain while the music is this far under the target: fades and pauses are not pumped up. A quiet part that stays this low for 3 s without fading (a soft verse, a breakdown) is levelled like the rest. |
 | Catch up after a pause | on / off | | on | After 2 s of silence (a stopped deck) the gain moves to the new song's level within about half a second. |
 
 **Compressor** - evens out the loud parts within a song.
@@ -444,7 +452,7 @@ Defaults below are those of Medium (the general defaults of a new own preset).
 | Attack | ms | 1 .. 200 | 20 | Time to turn a band down. |
 | Release | ms | 20 .. 2000 | 300 | Time to turn a band back up. |
 | Split 1 .. 6 | Hz | 20 .. 16000 | per band count | The frequencies between the bands. Only the splits of the band count in use are shown; they always rise, at least 1.25x apart (moving one past its neighbour moves the neighbour). A new band count loads its default splits. |
-| Band 1 .. 7 gain | dB | -6 .. +6 | 0 | A fixed gain per band: a multiband tone control. |
+| Band 1 .. 7 gain | dB | -12 .. +12 | 0 | A fixed gain per band: a multiband tone control. |
 
 Default splits per band count: 2 bands 200 Hz; 3: 200 / 2500; 4: 120 / 600 / 4000; 5: 60 / 200 / 2500 / 6000; 6: 60
 / 200 / 800 / 2500 / 6000; 7: 60 / 150 / 400 / 1000 / 2500 / 6000 Hz.
@@ -504,7 +512,7 @@ Switching the limiter off removes the ceiling guarantee; the output is still cla
 
 - Start with **Medium** and compare one step up or down; judge at the same listening volume.
 - For mixed old and new music, a **colour** with auto tone (Oldies or Auto) usually does more for the balance than
-  changing the preset.
+  changing the loudness preset.
 - If the volume seems to drift within songs, lower the leveller **Speed**; if new songs take too long to settle,
   raise it (or rely on catch-up after pauses).
 - If the sound "breathes" or pumps, lengthen the compressor and density **Release**, or lower the density **Amount**.
@@ -528,13 +536,13 @@ volume.
 | **Vocal** | bass -1, low-mid -2, presence +2.5 dB | Voices forward: speech, vocals, karaoke. |
 | **Oldies** | auto tone 70 %, sub bass 20 %, bass +1, treble +1 dB | Thin, flat old recordings of the 60s and 70s. |
 | **Auto** | auto tone 100 % | Each song pulled towards a well-balanced production, up to 6 dB (treble 3 dB). |
-| **Quiet** | loudness contour 60 % | Listening at a low volume: deep bass and highs added so the music stays full. |
+| **Quiet** | contour 60 % | Listening at a low volume: deep bass and highs added so the music stays full. |
 
 ### 7.2 The colour window
 
 ![The colour window](images/colour.jpg)
 
-Click **Edit...** next to a deck's colour. It works like the preset window (6.2): Save as, Rename, Delete (own
+Click **Edit...** next to a deck's colour. It works like the loudness window (6.2): Save as, Rename, Delete (own
 colours; deleting moves its decks to Neutral), Reset colour, and a tab per part. The colour window has no on / off
 switches: a part with all its amounts at 0 is off.
 
@@ -542,24 +550,26 @@ switches: a part with all its amounts at 0 is off.
 
 | Tab | Value | Unit | Range | Default | What it does |
 |---|---|---|---|---|---|
-| Tone | Bass | dB | -12 .. +9 | 0 | Low shelf: more or less bass below its corner (0 = off). |
+| Tone | Bass | dB | -12 .. +12 | 0 | Low shelf: more or less bass below its corner (0 = off). |
 | | Bass corner | Hz | 40 .. 250 | 100 | Where the bass shelf starts. |
-| | Low-mid | dB | -9 .. +6 | 0 | Bell: less takes out boom and mud. |
+| | Low-mid | dB | -12 .. +12 | 0 | Bell: less takes out boom and mud. |
 | | Low-mid frequency | Hz | 150 .. 1000 | 350 | Centre of the low-mid bell. |
-| | Presence | dB | -9 .. +6 | 0 | Bell: voices and leads forward or back. |
+| | Presence | dB | -12 .. +12 | 0 | Bell: voices and leads forward or back. |
 | | Presence frequency | Hz | 1000 .. 6000 | 3000 | Centre of the presence bell. |
-| | Treble | dB | -9 .. +9 | 0 | High shelf: more or less highs above its corner. |
+| | Treble | dB | -12 .. +12 | 0 | High shelf: more or less highs above its corner. |
 | | Treble corner | Hz | 3000 .. 16000 | 8000 | Where the treble shelf starts. |
 | Auto tone | Amount | % | 0 .. 100 | 0 | How far each song's balance is pulled towards the reference (0 = off). |
 | | Maximum | dB | 0 .. 9 | 6 | The largest correction of a band (treble: half of it - the top of an old recording is often its hiss). |
 | | Time | s | 2 .. 60 | 10 | How long a band is measured before it is corrected; faster for the first seconds of a song. |
 | Sub bass | Amount | % | 0 .. 100 | 0 | Adds a tone an octave below the bass. Use little: it is felt on large speakers and takes headroom. |
 | | Frequency | Hz | 40 .. 120 | 80 | Bass below this is followed an octave lower. |
-| Loudness | Amount | % | 0 .. 100 | 0 | Equal-loudness contour for quiet listening: up to +9 dB deep bass and +4 dB highs. Leave it off at normal volume. |
+| Contour | Amount | % | 0 .. 100 | 0 | Equal-loudness contour for quiet listening: up to +9 dB deep bass and +4 dB highs. Leave it off at normal volume. |
 
 The auto tone holds still during breakdowns and fades, so a quiet part does not change the sound.
 
-## 8. The analysis window
+## 8. The analysis and spectrum windows
+
+### 8.1 The analysis window
 
 ![The analysis window](images/analysis.png)
 
@@ -570,9 +580,9 @@ Click **Graphs** on a deck strip. The window has a row per deck with five panels
    (a square-root scale, so small changes are visible). The compressor, de-esser, clipper and limiter show their own
    gain reduction; the other steps show the level after the step against the level before it. *Input* and *Output*
    show the momentary loudness as a bar (-40 .. 0 LUFS) and the peak as a white mark; the output's target is the
-   yellow mark. A step that is switched off says "off". **Click a row** to open that step's settings (the preset
+   yellow mark. A step that is switched off says "off". **Click a row** to open that step's settings (the loudness
    window on its tab, or the colour window).
-2. **Compressor** - the compressor's static curve for the preset: output against input, in LU relative to the target
+2. **Compressor** - the compressor's static curve for the loudness preset: output against input, in LU relative to the target
    (the dashed line is 1:1). The white dot is where the detector is now; amber dots show the last 3 seconds.
 3. **Loudness** - the momentary loudness of the input (original, orange) and output (processed, turquoise) over the
    last 60 seconds, relative to the target.
@@ -583,12 +593,47 @@ Click **Graphs** on a deck strip. The window has a row per deck with five panels
 
 The history is cleared at every start of the audio.
 
+### 8.2 The spectrum window
+
+![The spectrum window](images/spectrum.jpg)
+
+Click the **spectrum** in a deck's meter panel. The big graph shows, for one deck:
+
+- The **spectrum** of the input (orange) and the output (turquoise), with its dB scale on the left.
+- The **density bands** and their gains now: a line per band at its gain on the right-hand scale (blue = lifted,
+  red = turned down), with the gain in dB.
+- The deck's **colour as an EQ curve** (yellow, the right-hand scale in dB): thick - what the colour does now,
+  including the auto tone's correction for this song; dashed - the same without the auto tone (only while it
+  corrects); thin - each tone section on its own. A shaded block marks the sub bass's range.
+- A **point per tone section**: bass (blue), low-mid (purple), presence (orange), treble (green). **Drag** a point:
+  left and right change its frequency, up and down its gain, in the same steps as the colour window's sliders.
+  **Double-click** a point to set its gain back to 0 dB. This changes the colour itself - every deck using it
+  - is heard at once and saved when you let go of the mouse. The colour window and the bass sliders follow.
+- A **purple handle per density band**: the band's fixed gain (*Band N gain* in the loudness preset's Density tab, -12 to
+  +12 dB, right-hand scale), lying exactly over the band. **Drag** it up or down; **double-click** sets it back to
+  0 dB. This changes the deck's loudness preset (every deck using it). So the density bands work as an EQ of their own, next
+  to the colour's four tone sections.
+- **Reset loudness** and **Reset colour** set every value of the deck's loudness preset or colour back, as the buttons in the
+  loudness and colour windows do: a shipped one to its shipped values, your own to the defaults (asks first).
+- **Snap to bands** (lit = on, remembered): a colour point dragged near a band split sits exactly on it (the split
+  lights up), so a tone section can start where a density band does. A split outside a section's range is skipped.
+- With two decks, **Deck A / B** switches between them. **Loudness** and **Colour** choose the deck's loudness preset
+  and colour, as the lists in the main window do (both decks when they are linked).
+- The **four bass sliders** (4.2) - bass level, enhancer, width and frequency - in a second row,
+  for the deck shown, and the curve shows the change at once.
+- The bass level and frequency **in the graph**: the blue bass point is the bass level (drag up or down) and the
+  bass frequency (drag left or right; as the slider, it moves the enhancer's and the width's frequency too). The
+  sliders at the top follow.
+- The left scale (spectrum, dB) and the right one (colour, density, -12 to +12 dB) share the same grid lines.
+- At the top right of the graph the window shows what is under the mouse: the frequency with the input, output and
+  colour levels there, or the point's frequency and gain.
+
 ## 9. The plug-in for DJ software
 
 ![The plug-in's window](images/plugin.jpg)
 
 The plug-in brings DJAP's processing into DJ software (or any other program that loads plug-ins): one deck per
-plug-in, stereo in and stereo out, with exactly the same chain, presets and colours as the program. The DJ software
+plug-in, stereo in and stereo out, with exactly the same chain, loudness presets and colours as the program. The DJ software
 keeps the audio interface; DJAP only processes what passes through it.
 
 ### 9.1 Installing and finding it
@@ -610,24 +655,29 @@ The window is one deck strip of the program:
 
 - **Look-ahead** - the limiter's look-ahead, 0 to 5 ms (see 5.1); the DJ software is told the new delay.
 - **Bypass** - lit: the input goes out unchanged, delayed by the same look-ahead.
-- **Preset** and **Colour** - the lists of the program (see 9.3).
-- **The four bass sliders** - as in the main window (4.2).
-- **The meter panel** - LED bars, the gain of each stage and the spectrum, as in the main window (4.3). Clicking it
-  does nothing here: every value is in the DJ software's parameter list instead.
+- **Loudness** and **Colour** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
+  and colour windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
+- **The four bass sliders** (4.2).
+- **The meter panel** - LED bars, the gain of each stage and the spectrum with the density bands, as in the main
+  window (4.3). Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
+  program; clicking the spectrum opens its Density tab.
 
-### 9.3 Presets, colours and values
+### 9.3 Loudness presets, colours and values
 
-- The preset and colour lists come from the program's settings file (`%APPDATA%\DJAP\DJAP.ini`): the shipped
-  presets and colours, and your own. Make and change presets in the program; the plug-in only reads them, when it
-  is loaded. Without the program's settings the plug-in has the shipped ones.
-- Choosing a preset or colour loads its values. Choosing the one that is already chosen loads its values again -
-  back to the preset after changes. "(other values)" means the values match no preset in the list (for example a
+- The loudness preset and colour lists come from the program's settings file (`%APPDATA%\DJAP\DJAP.ini`): the shipped
+  loudness presets and colours, and your own. Without the program the plug-in has the shipped ones, and works just the same.
+- Loudness presets and colours made or changed in the plug-in's loudness window are saved in that same file, so the program
+  and every plug-in share them. Program and plug-ins never overwrite each other's loudness presets: each saves only its own
+  changes into the file as it is at that moment. The plug-in never changes the program's other settings. A loudness preset
+  made in the program appears in the plug-in when its loudness window is opened (or when it is loaded).
+- Choosing a loudness preset or colour loads its values. Choosing the one that is already chosen loads its values again -
+  back to the loudness preset after changes. "(other values)" means the values match no loudness preset in the list (for example a
   project made on another computer).
-- **Every value is a parameter** the DJ software can show and automate: the 71 values of the preset and colour
-  (named "Stage: value", for example "Compressor: Threshold", grouped by stage), the preset and colour lists, Bypass
+- **Every value is a parameter** the DJ software can show and automate: the 71 values of the loudness preset and colour
+  (named "Stage: value", for example "Compressor: Threshold", grouped by stage), the loudness preset and colour lists, Bypass
   and the look-ahead. They move in the same steps as the program's sliders.
-- A **project** (or a preset of the DJ software) stores the values themselves, not only the preset's name: it
-  sounds the same on a computer where that preset does not exist or was changed.
+- A **project** (or a preset of the DJ software) stores the values themselves, not only the loudness preset's name: it
+  sounds the same on a computer where that loudness preset does not exist or was changed.
 
 ### 9.4 Updates
 
@@ -688,7 +738,7 @@ never plays audio and never changes the settings. Open a command prompt in the i
 path.
 
 ```
-DJAPCmd --render <in> <out.wav> [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--keep-delay] [--pcm24]
+DJAPCmd --render <in> <out.wav> [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--keep-delay] [--pcm24] [--trace <file.csv>]
 DJAPCmd --presets
 DJAPCmd --measure <file.wav> [more files]
 DJAPCmd --tone <file> [more files]
@@ -699,17 +749,20 @@ DJAPCmd --version | --help
 
 - **--render** processes a file. Input: WAV, or MP3 / M4A / WMA / FLAC through Windows Media Foundation (mono plays
   on both channels). A 2-channel file is deck A; a 4-channel file is deck A (channels 1-2) and deck B (3-4). Each deck
-  uses its preset and colour from the settings unless `--a` / `--b` (preset, or `off` for unprocessed) and `--ca` /
+  uses its loudness preset and colour from the settings unless `--a` / `--b` (loudness preset, or `off` for unprocessed) and `--ca` /
   `--cb` (colour) say otherwise. The output is 32-bit float WAV (or 24-bit PCM with `--pcm24`), with the look-ahead
   delay removed (kept with `--keep-delay`). After rendering it prints a report of input and output loudness.
-- **--presets** lists all presets and colours with their main values and which deck uses them.
+  `--trace <file.csv>` also writes deck A every 100 ms: loudness in and out (momentary and short-term), the
+  leveller's gain and whether it holds, and what the compressor, density bands, de-esser, clipper and limiter do -
+  to see why a song comes out uneven.
+- **--presets** lists all loudness presets and colours with their main values and which deck uses them.
 - **--measure** prints the integrated loudness, loudness range, maximum momentary and short-term loudness, sample
   peak and true peak of WAV files (per deck for 4-channel files).
 - **--tone** prints each file's long-term tone balance (60 Hz, 250 Hz, 3 kHz and 10 kHz against 1 kHz) and what the
   auto tone would correct at 100 %.
 - **--devices** lists the ASIO drivers and the WASAPI / DirectSound / MME devices without opening any of them.
 
-Example - process a song with the Loud preset and the Oldies colour into a 24-bit file:
+Example - process a song with the Loud loudness preset and the Oldies colour into a 24-bit file:
 
 ```
 DJAPCmd --render song.mp3 song-loud.wav --a Loud --ca Oldies --pcm24
@@ -730,14 +783,14 @@ The About window shows which file is in use. DJAP saves it after every change. I
 | Section | Holds |
 |---|---|
 | `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume |
-| `[Decks]` | Each deck's preset, colour and processing switch, linked presets |
-| `[Window]` | The main window's position |
+| `[Decks]` | Each deck's loudness preset, colour and processing switch, linked presets |
+| `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |
-| `[Preset <name>]` | The values of a preset that differ from its shipped values (own presets: all values) |
+| `[Preset <name>]` | The values of a loudness preset that differ from its shipped values (own loudness presets: all values) |
 | `[Colour <name>]` | The same for a colour |
 
-To start over, close DJAP and delete (or rename) the file; DJAP starts with the shipped presets and opens the Setup
-window. Back the file up to keep your own presets.
+To start over, close DJAP and delete (or rename) the file; DJAP starts with the shipped loudness presets and opens the Setup
+window. Back the file up to keep your own loudness presets.
 
 Settings of versions up to 0.1.57 (which had another program name) are copied once at the first start of DJAP; the
 old file stays.
@@ -751,15 +804,16 @@ old file stays.
 | **A device shows "(not found)"** | The saved device is not connected, or it was chosen under another API (each API names devices differently). Choose it again. |
 | **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer density bands. With an input on another clock, underruns in the status bar mean the input fell behind: its buffer grows by itself. |
 | **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window. |
-| **The sound pumps or breathes** | Lower the density amount or the compressor ratio, lengthen their release, or choose a gentler preset. |
+| **The sound pumps or breathes** | Lower the density amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
 | **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Fast down" (Leveller tab) brings it down within about a second. Raise it if needed. |
-| **Quiet passages come up too much** | Raise "Hold below" or lower the leveller range. |
+| **Quiet passages come up too much** | A quiet part that stays is levelled after a few seconds. To keep more of the difference, lower the leveller range or its speed. |
+| **A soft verse after a loud chorus stays too soft** | The leveller waits until the music has stopped falling (about 2-4 s) and then comes up faster than its normal speed ("fast up": 2-4 dB/s, depending on the loudness preset). A larger range lets it come up further. |
 | **Everything sounds too dull / too sharp** | Try another colour (Bright, Warm), or lower the exciter / de-esser. |
-| **Limiter works hard all the time** | Lower the input gain, the clipper drive or the target, or use a quieter preset. |
+| **Limiter works hard all the time** | Lower the input gain, the clipper drive or the target, or use a quieter loudness preset. |
 | **DJAP does not start with Windows** | Check the option in the Setup window and Windows' startup apps list. |
 | **The update failed** | The Setup window says why; `%TEMP%\DJAP-update\setup.log` has the setup's log. The setup can always be downloaded from the GitHub page and run by hand. |
 | **The DJ software does not list the plug-in** | Was "Plug-in for DJ software" chosen in the setup, in an installation for all users? Is `C:\Program Files\Common Files\VST3\DJAP\DJAP.vst3` there? Let the DJ software scan its plug-ins again and restart it. The DJ software must be 64-bit. |
-| **The plug-in's preset list lacks my own presets** | The plug-in reads the program's settings in `%APPDATA%\DJAP\DJAP.ini` when it is loaded: make the preset in the program, then load the plug-in again. A portable program (settings next to `DJAP.exe`) is not seen. |
+| **The plug-in's loudness preset list lacks my own loudness presets** | The plug-in reads the program's settings in `%APPDATA%\DJAP\DJAP.ini` when it is loaded and when its loudness window is opened: click Edit... once, or load the plug-in again. A portable program (settings next to `DJAP.exe`) is not seen. |
 | **DJAP closed unexpectedly** | Start `DJAP.exe --diag <file.txt>` from a command prompt; when it happens again, the file holds a report that helps to find the cause. |
 
 ## 15. Glossary

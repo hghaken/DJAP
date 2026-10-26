@@ -66,7 +66,13 @@ void checkSame(const Settings& a, const Settings& b) {
                         a.colours[i].values[static_cast<size_t>(diff)], b.colours[i].values[static_cast<size_t>(diff)]);
         CHECK(same);
     }
-    CHECK(a.windowX == b.windowX && a.windowY == b.windowY && a.trayHintShown == b.trayHintShown);
+    CHECK(a.windows.size() == b.windows.size() && a.trayHintShown == b.trayHintShown);
+    for (const auto& [name, p] : a.windows) {
+        auto it = b.windows.find(name);
+        CHECK(it != b.windows.end() && it->second.x == p.x && it->second.y == p.y && it->second.w == p.w &&
+              it->second.h == p.h && it->second.maximised == p.maximised);
+    }
+    CHECK(a.snapToBands == b.snapToBands && a.showTooltips == b.showTooltips);
     CHECK(a.checkUpdates == b.checkUpdates && a.updateUrl == b.updateUrl);
     CHECK(a.presets.size() == b.presets.size());
     for (size_t i = 0; i < a.presets.size() && i < b.presets.size(); ++i) {
@@ -166,8 +172,10 @@ Settings busy() {
     s.decks = 1;
     s.asioInputDevice[0] = "";
     s.asioInputDevice[1] = "Line In (Realtek(R) Audio)";
-    s.windowX = 120;
-    s.windowY = -40;
+    s.windows["Main"] = WindowPlace{120, -40, 1200, 700, false};
+    s.windows["Spectrum"] = WindowPlace{-1500, 30, 1180, 640, true}; // a monitor left of the main one, maximised
+    s.snapToBands = true;
+    s.showTooltips = false;
     s.trayHintShown = true;
     s.checkUpdates = false;
     s.updateUrl = "http://127.0.0.1:8765/latest.json";
@@ -393,6 +401,16 @@ void handEdited() {
     Settings l2;
     l2.fromText(l.toText());
     checkSame(l, l2);
+
+    // the main window's position of versions up to 0.1.132 (X / Y) becomes its place, size unknown; a bad line is
+    // ignored (the window then opens centred)
+    Settings w;
+    w.fromText("[Window]\r\nX=200\r\nY=-30\r\nSpectrum=10,20,abc\r\nAbout=5,6,0,0,0\r\n");
+    CHECK(w.windows.count("Main") && w.windows["Main"].x == 200 && w.windows["Main"].y == -30 && w.windows["Main"].w == 0);
+    CHECK(!w.windows.count("Spectrum") && w.windows.count("About"));
+    Settings w2;
+    w2.fromText("[Window]\r\nX=-1\r\nY=-1\r\n"); // never moved
+    CHECK(w2.windows.empty());
 }
 
 // The positions of every parameter (the GUI's sliders, the plug-in's host steps): the ends are the range (or "auto" /
@@ -417,6 +435,85 @@ void positions() {
     }
 }
 
+// The program and the plug-in in one settings file: neither loses the other's presets or colours, the plug-in never
+// writes the program's other settings, and a preset a deck uses stays.
+void merged(const fs::path& dir) {
+    std::printf("-- program and plug-in saving the same file\n");
+    const fs::path file = dir / "shared.ini";
+    std::string err;
+    Settings program;
+    program.driver = "Test ASIO";
+    CHECK(program.saveAs("Club", defaultValues(), err));
+    CHECK(program.save(file));
+    Settings programBase = program;
+
+    Settings plugin;
+    CHECK(plugin.load(file));
+    Settings pluginBase = plugin;
+    plugin.driver = "something else"; // the plug-in's copy of a setting it does not own
+    PresetValues v = defaultValues();
+    v[pTarget] = -11.0;
+    CHECK(plugin.saveAs("Plug", v, err));
+    CHECK(plugin.saveAs("Bright plug", shippedColourValues(shippedColourIndex("Bright")), err, PresetKind::Colour));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+
+    // the program, unaware, changes its own preset and deletes nothing of the plug-in's
+    program.find("Club")->values[pTarget] = -12.5;
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(program.find("Plug") != nullptr);                          // the plug-in's preset came in
+    CHECK(program.find("Bright plug", PresetKind::Colour) != nullptr);
+    Settings check;
+    CHECK(check.load(file));
+    CHECK(check.driver == "Test ASIO");                              // the plug-in did not write it
+    CHECK(check.find("Club") && check.find("Club")->values[pTarget] == -12.5);
+    CHECK(check.find("Plug") && check.find("Plug")->values[pTarget] == -11.0);
+
+    // the windows' places are the program's: a guest keeps them
+    program.windows["Spectrum"] = WindowPlace{40, 50, 900, 600, false};
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.saveAs("Plug b", v, err));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(check.load(file));
+    CHECK(check.windows.count("Spectrum") && check.windows["Spectrum"].w == 900);
+
+    // the plug-in renames its preset and deletes its colour; the program meanwhile deletes Club
+    CHECK(plugin.rename("Plug", "Plug 2", err));
+    CHECK(plugin.remove("Bright plug", err, PresetKind::Colour));
+    CHECK(program.remove("Club", err));
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(check.load(file));
+    CHECK(!check.find("Club"));
+    CHECK(!check.find("Plug") && check.find("Plug 2"));
+    CHECK(!check.find("Bright plug", PresetKind::Colour));
+    CHECK(check.driver == "Test ASIO");
+    CHECK(plugin.find("Club") == nullptr); // the plug-in sees the program's deletion after its save
+
+    // a preset a deck uses stays, even when the other deleted it
+    CHECK(program.saveAs("Live", defaultValues(), err));
+    program.deck[0].preset = "Live";
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest)); // takes Live in
+    CHECK(plugin.remove("Live", err));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest)); // deletes it from the file
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner)); // deck A uses it: back
+    CHECK(check.load(file));
+    CHECK(check.find("Live") != nullptr);
+
+    // a guest with nothing new (the plug-in opening its preset window) only reads: the file stays as it was
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    std::error_code ec;
+    const auto stamp = fs::last_write_time(file, ec);
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(fs::last_write_time(file, ec) == stamp);
+    CHECK(plugin.find("Live") != nullptr);
+    const fs::path none = dir / "none.ini"; // and no file is made for it
+    Settings fresh, freshBase;
+    CHECK(fresh.saveMerged(none, freshBase, Settings::SaveRole::Guest));
+    CHECK(!fs::exists(none, ec));
+    std::printf("   both kept each other's presets and colours; the program's settings untouched by the plug-in\n");
+}
+
 } // namespace
 
 int main() {
@@ -426,6 +523,7 @@ int main() {
     roundTrip(dir);
     presetRules();
     handEdited();
+    merged(dir);
     std::error_code ec;
     fs::remove_all(dir, ec);
     return test::finish("settings_test");

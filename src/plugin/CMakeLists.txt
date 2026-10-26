@@ -12,16 +12,20 @@ set(SMTG_PACKAGE_ICON_PATH "${CMAKE_SOURCE_DIR}/assets/DJAP.ico")
 
 smtg_add_vst3plugin(DJAPPlugin PACKAGE_NAME "DJAP" SOURCES_LIST
     plugin.cpp
-    plugindiag.cpp
     pluginview.cpp
     pluginentry.cpp
     plugin.rc
     plugin.manifest
     ${VST3SDK}/public.sdk/source/vst/vstsinglecomponenteffect.cpp
-    # the program's window parts: the brushed metal, the meter panel, the tooltips
+    # the program's window parts: the brushed metal, the meter panel, the tooltips, the preset window (with the
+    # settings file's place and centred message boxes)
     ${CMAKE_SOURCE_DIR}/src/app/theme.cpp
     ${CMAKE_SOURCE_DIR}/src/app/meterview.cpp
-    ${CMAKE_SOURCE_DIR}/src/app/tooltips.cpp)
+    ${CMAKE_SOURCE_DIR}/src/app/spectrumdraw.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/tooltips.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/editwnd.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/placement.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/appstate.cpp)
 target_include_directories(DJAPPlugin PRIVATE ${CMAKE_SOURCE_DIR}/src/app "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(DJAPPlugin PRIVATE sdk apcore comctl32 gdi32 gdiplus user32 uxtheme shell32 ole32)
 # the window parts use common controls 6 from the DLL's own manifest (whatever the host's says)

@@ -7,12 +7,13 @@
 namespace ap {
 
 namespace {
-void drain(DeckProcessor& deck, RenderStats& s, double& limSum, double& levSum) {
+void drain(DeckProcessor& deck, int d, RenderStats& s, double& limSum, double& levSum, const RecordSink& onRecord) {
     MeterRecord recs[64];
     int n;
     while ((n = deck.meters().pop(recs, 64)) > 0) {
         for (int i = 0; i < n; ++i) {
             const MeterRecord& r = recs[i];
+            if (onRecord) onRecord(d, r);
             s.in.addRecord(r.energyIn, r.frames);
             s.out.addRecord(r.energyOut, r.frames);
             s.maxTruePeakDb = std::max(s.maxTruePeakDb, linToDb(std::max(r.tpOut[0], r.tpOut[1])));
@@ -27,7 +28,7 @@ void drain(DeckProcessor& deck, RenderStats& s, double& limSum, double& levSum) 
 } // namespace
 
 bool renderOffline(const WavData& in, const RenderDeck decks[2], bool align, int chunkFrames, WavData& out,
-                   RenderResult& result, std::string& error) {
+                   RenderResult& result, std::string& error, const RecordSink& onRecord) {
     if (in.channels != 2 && in.channels != 4) {
         error = "the input needs 2 channels (deck A) or 4 channels (deck A + deck B)";
         return false;
@@ -82,7 +83,7 @@ bool renderOffline(const WavData& in, const RenderDeck decks[2], bool align, int
                 out.samples[static_cast<size_t>(f) * in.channels + 2 * d] = l[static_cast<size_t>(i)];
                 out.samples[static_cast<size_t>(f) * in.channels + 2 * d + 1] = r[static_cast<size_t>(i)];
             }
-            drain(*proc[d], result.deck[d], limSum[d], levSum[d]);
+            drain(*proc[d], d, result.deck[d], limSum[d], levSum[d], onRecord);
         }
     }
     for (int d = 0; d < deckCount; ++d) {

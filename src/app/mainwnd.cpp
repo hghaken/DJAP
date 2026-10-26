@@ -27,35 +27,19 @@ const UINT kStartRetryMs = 5000;
 const int kStartTries = 24; // 2 minutes
 
 // control ids: deck d uses 1000 + 100 d + item
-enum Item { iPreset = 1, iProcessing, iEdit = 5, iColour, iEditColour, iGraphs, iSlider0 = 10, iMeter = 30 };
+enum Item { iPreset = 1, iProcessing, iEdit = 5, iColour, iEditColour, iGraphs, iMeter = 30 };
 int idOf(int d, int item) { return 1000 + 100 * d + item; }
 
 // commands of the right-click and notification-area menus (also sent by GUI tests: 100 setup, 102 exit, 103
 // analysis, 104 open)
-enum MenuId { mAudio = 100, mAbout, mExit, mAnalysis, mOpen };
-
-// The bass sliders: integer positions of the trackbar <-> preset values.
-enum Slider { slLevel, slEnhancer, slWidth, slFreq, kSliders };
-const wchar_t* const kSliderName[kSliders] = {L"Bass level", L"Bass enhancer", L"Bass width", L"Bass frequency"};
-const int kSliderMin[kSliders] = {-24, 0, 0, 8}, kSliderMax[kSliders] = {18, 20, 20, 50}; // 0.5 dB / 5 % / 5 Hz
-const wchar_t* const kSliderTip[kSliders] = {
-    L"More or less bass, -12 .. +9 dB: the colour's bass shelf below the bass frequency. The leveller keeps the "
-    L"loudness on target, so this changes the balance, not the volume; the limiter keeps the ceiling. 0 dB = off.\n"
-    L"Belongs to the colour preset.",
-    L"Strength of the bass enhancer, 0 .. 100 %: overtones of the bass below its frequency, so the bass is heard on "
-    L"small speakers too. 0 % switches the enhancer off, more switches it on.\nBelongs to the preset.",
-    L"Stereo width of the bass below the bass frequency, 0 .. 100 %: 0 % = bass in mono (tighter in a club, safe "
-    L"for mono systems), 100 % = as recorded. Moving it switches the width stage on.\nBelongs to the preset.",
-    L"Where 'bass' ends, 40 .. 250 Hz: the colour's bass corner, and in the preset the enhancer's frequency (60 .. "
-    L"160 Hz) and the width stage's bass split, all at once (each can be set apart in Edit colour / Edit preset).",
-};
+enum MenuId { mAudio = 100, mAbout, mExit, mAnalysis, mOpen, mSpectrum }; // 103 / 105: GUI tests open the windows
 
 std::wstring deckName(int d) { return d == 0 ? L"Deck A" : L"Deck B"; }
 
 } // namespace
 
 MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioIO& audio)
-    : settings_(settings), ini_(std::move(iniFile)), audio_(audio),
+    : settings_(settings), ini_(std::move(iniFile)), base_(settings), audio_(audio),
       editor_(settings, [this](bool listChanged, bool save) { presetsChanged(listChanged, save); }),
       colourEditor_(settings, [this](bool listChanged, bool save) { presetsChanged(listChanged, save); },
                     PresetKind::Colour),
@@ -65,7 +49,14 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
           editor_.refresh();
           colourEditor_.refresh();
       }),
-      analysisWindow_(settings, audio) {
+      analysisWindow_(settings, audio),
+      spectrumWindow_(settings, audio, [this](bool saveNow) { // a colour point or band handle dragged, snap switched
+          presetsChanged(false, saveNow);
+          refreshStrip(0);
+          refreshStrip(1);
+          editor_.refresh();
+          colourEditor_.refresh();
+      }) {
     // a click on a step in the analysis window: that deck's preset (or colour) window on the step's tab
     analysisWindow_.onOpenStage([this](int d, const std::string& stage, bool colour) {
         if (colour) colourEditor_.show(hwnd_, settings_.deck[d].colour, d, stage);
@@ -84,6 +75,7 @@ void MainWindow::presetsChanged(bool listChanged, bool saveNow) {
 
 bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     testRun_ = testRun;
+    Tooltips::setEnabled(settings_.showTooltips); // before the first window makes its tooltips
     audioWindow_.setTestRun(testRun);
     audioWindow_.onAbout([this](HWND owner) { about_.show(owner, ini_); }); // centred on the Setup window
     registerMeterView(instance);
@@ -96,28 +88,22 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     wc.lpszClassName = kClass;
     wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(IDI_APP));
     wc.hIconSm = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON,
-                                               GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0));    RegisterClassExW(&wc);
+                                               GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0));
+    RegisterClassExW(&wc);
     const std::wstring title = L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING);
-    const int x = settings_.windowX >= 0 ? settings_.windowX : CW_USEDEFAULT;
-    const int y = settings_.windowX >= 0 ? settings_.windowY : CW_USEDEFAULT;
-    hwnd_ = CreateWindowExW(0, kClass, title.c_str(), WS_OVERLAPPEDWINDOW, x, y, CW_USEDEFAULT, CW_USEDEFAULT, nullptr,
-                            nullptr, instance, this);
+    // every window remembers its place in the settings, saved at each change (placement.h)
+    placement::setStore(&settings_.windows, [this] { save(); });
+    hwnd_ = CreateWindowExW(0, kClass, title.c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                            CW_USEDEFAULT, nullptr, nullptr, instance, this);
     if (!hwnd_) return false;
-    // initial size for the window's DPI (the position comes from the settings)
+    // the first size for the window's DPI; then its remembered place (or centred on the screen)
     RECT r{0, 0, px(1180), px(640)};
     AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_); // no menu bar
     SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
-    // keep the window on a monitor (the settings may come from another screen layout)
-    RECT wr;
-    GetWindowRect(hwnd_, &wr);
-    HMONITOR mon = MonitorFromRect(&wr, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi{sizeof mi};
-    GetMonitorInfoW(mon, &mi);
-    if (wr.left < mi.rcWork.left || wr.top < mi.rcWork.top || wr.left > mi.rcWork.right - px(100) ||
-        wr.top > mi.rcWork.bottom - px(100))
-        SetWindowPos(hwnd_, nullptr, mi.rcWork.left + px(40), mi.rcWork.top + px(40), 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+    placement::remember(hwnd_, "Main", nullptr);
     applyAll();
-    ShowWindow(hwnd_, hidden ? SW_HIDE : SW_SHOWNORMAL); // hidden: the icon in the notification area opens it
+    // hidden: the icon in the notification area opens it
+    ShowWindow(hwnd_, hidden ? SW_HIDE : placement::showCommand(hwnd_));
     SetTimer(hwnd_, kTimer, kTimerMs, nullptr);
     // the icon in the notification area: the small size for this screen (16 px at 100 %, 24 at 150 %, ...)
     if (FAILED(LoadIconMetric(instance, MAKEINTRESOURCEW(IDI_APP), LIM_SMALL, &iconSmall_))) iconSmall_ = nullptr;
@@ -226,8 +212,19 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     case WM_GETMINMAXINFO: {
+        // the smallest window that still shows every stage row and a readable spectrum (client, 2026-10-26); one
+        // channel narrower than two decks; larger is always allowed
         MINMAXINFO* mm = reinterpret_cast<MINMAXINFO*>(lp);
-        mm->ptMinTrackSize = {px(900), px(520)};
+        int statusH = px(22);
+        if (status_) {
+            RECT sr;
+            GetWindowRect(status_, &sr);
+            statusH = sr.bottom - sr.top;
+        }
+        RECT r{0, 0, settings_.decks == 1 ? px(kMinWidthOne) : px(kMinWidthTwo),
+               meterTop() + meterViewMinHeight(dpi_) + px(12) + statusH};
+        AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_);
+        mm->ptMinTrackSize = {r.right - r.left, r.bottom - r.top};
         return 0;
     }
     case WM_DPICHANGED: {
@@ -242,9 +239,6 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_COMMAND:
         command(LOWORD(wp), HIWORD(wp));
         return 0;
-    case WM_HSCROLL:
-        if (lp) slider(reinterpret_cast<HWND>(lp), LOWORD(wp));
-        return 0;
     case WM_TIMER:
         if (wp == kStartTimer) {
             startSavedAudio();
@@ -255,6 +249,7 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             updateVolume();
             updateMeters();
             analysisWindow_.refresh();
+            spectrumWindow_.refresh();
             if (ticks_++ % 10 == 0) {
                 updateStatus();
                 audioWindow_.refresh();
@@ -265,19 +260,11 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         return 0;
-    case WM_MOVE: {
-        RECT r;
-        if (!IsIconic(hwnd_) && !IsZoomed(hwnd_) && GetWindowRect(hwnd_, &r)) {
-            settings_.windowX = r.left;
-            settings_.windowY = r.top;
-        }
-        return 0;
-    }
-    case WM_CLOSE: // the close box hides the window, the audio goes on; Exit really closes
+    case WM_CLOSE: // the close box hides the window, the audio goes on; Shutdown really closes
         if (quitting_) DestroyWindow(hwnd_);
         else toTray();
         return 0;
-    case WM_CONTEXTMENU: { // a right-click anywhere on the window (its controls pass it up): Setup, Exit
+    case WM_CONTEXTMENU: { // a right-click anywhere on the window (its controls pass it up): Setup, Shutdown
         POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         if (pt.x == -1 && pt.y == -1) { // from the keyboard: at the window's top left
             pt = {px(40), px(40)};
@@ -327,23 +314,12 @@ void MainWindow::createControls() {
         // checked = bypassed
         s.processing = make(L"BUTTON", L"Bypass", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iProcessing));
         s.graphs = make(L"BUTTON", L"Graphs", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iGraphs));
-        s.presetLabel = make(L"STATIC", L"Preset", SS_LEFT | SS_CENTERIMAGE, 0);
+        s.presetLabel = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
         s.preset = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iPreset));
         s.edit = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iEdit));
         s.colourLabel = make(L"STATIC", L"Colour", SS_LEFT | SS_CENTERIMAGE, 0);
         s.colour = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iColour));
         s.editColour = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iEditColour));
-        for (int k = 0; k < kSliders; ++k) {
-            s.sliderLabel[k] = make(L"STATIC", kSliderName[k], SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0);
-            s.slider[k] = make(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_AUTOTICKS | TBS_BOTTOM | WS_TABSTOP,
-                               idOf(d, iSlider0 + k));
-            SendMessageW(s.slider[k], TBM_SETRANGEMIN, FALSE, kSliderMin[k]);
-            SendMessageW(s.slider[k], TBM_SETRANGEMAX, FALSE, kSliderMax[k]);
-            SendMessageW(s.slider[k], TBM_SETTICFREQ, k == slLevel ? 4 : 2, 0);
-            SendMessageW(s.slider[k], TBM_SETLINESIZE, 0, 1);
-            SendMessageW(s.slider[k], TBM_SETPAGESIZE, 0, k == slLevel ? 4 : 2);
-            s.sliderValue[k] = make(L"STATIC", L"", SS_RIGHT | SS_CENTERIMAGE | SS_NOTIFY, 0);
-        }
         for (HWND b : {s.processing, s.graphs, s.edit, s.editColour}) theme::makeButton(b);
         for (HWND c : {s.preset, s.colour}) theme::makeCombo(c);
         s.meter = createMeterView(hwnd_, idOf(d, iMeter));
@@ -358,9 +334,9 @@ void MainWindow::createControls() {
         tips_.add(s.route, L"Where this deck's audio comes from and where it goes. Change it in Setup (right-click "
                            L"the window). With linked presets (Setup) deck A's controls count for both decks.");
         tips_.add(s.preset,
-                  L"The preset this deck uses: the target loudness and every stage's values. Shipped: Gentle -18, "
+                  L"The loudness preset this deck uses: the target loudness and every stage's values. Shipped: Gentle -18, "
                   L"Light -16, Medium -14, Loud -12, Very Loud -10 LUFS; FM Station -13 (dense, the sound of FM radio), DAB+ "
-                  L"-23 (EBU R 128, wide dynamics), Web Stream -16 (-2 dBTP for MP3 / AAC); your own presets follow. A new choice is "
+                  L"-23 (EBU R 128, wide dynamics), Web Stream -16 (-2 dBTP for MP3 / AAC); your own follow. A new choice is "
                   L"heard at once, without a click. With linked presets (Setup) both decks change.");
         tips_.add(s.processing,
                   L"Bypass (lit): the input goes out unchanged (bit-exact), delayed by the same limiter look-ahead, "
@@ -371,20 +347,14 @@ void MainWindow::createControls() {
                   L"by step, the compressor's curve, loudness and gains of the last 60 s, the goniometer with "
                   L"correlation and stereo width.");
         tips_.add(s.colour,
-                  L"The colour this deck uses, on top of its preset: tone (bass, low-mid, presence, treble), auto "
-                  L"tone (each song's balance pulled towards a modern reference), sub bass and a loudness contour. "
+                  L"The colour this deck uses, on top of its loudness preset: tone (bass, low-mid, presence, treble), auto "
+                  L"tone (each song's balance pulled towards a modern reference), sub bass and a contour (more bass and highs for quiet listening). "
                   L"Neutral changes nothing; Warm, Bass+, Less mid, Bright, Vocal: a fixed tone; Oldies: auto tone "
-                  L"and a little sub bass for thin old recordings; Auto: only the auto tone; Quiet: the loudness "
-                  L"contour for quiet listening. Your own colours follow.");
+                  L"and a little sub bass for thin old recordings; Auto: only the auto tone; Quiet: the contour "
+                  L"for quiet listening. Your own colours follow.");
         tips_.add(s.editColour, L"Opens the colour window: every value of this deck's colour; Save as, Rename, Delete "
                                 L"and Reset.");
-        const std::wstring sliderEnd = L"\n\nEvery deck that uses the same preset or colour changes too. Arrow keys "
-                                       L"and Page Up / Down step; changes glide without clicks.";
-        for (int k = 0; k < kSliders; ++k) {
-            const std::wstring t = kSliderTip[k] + sliderEnd;
-            for (HWND h : {s.sliderLabel[k], s.slider[k], s.sliderValue[k]}) tips_.add(h, t.c_str());
-        }
-        tips_.add(s.edit, L"Opens the preset window: the nine stage switches and every value of this deck's preset "
+        tips_.add(s.edit, L"Opens the loudness window: the nine stage switches and every value of this deck's loudness preset "
                           L"with its unit, range and meaning; Save as, Rename, Delete and Reset.");
     }
 }
@@ -408,10 +378,6 @@ void MainWindow::setFonts() {
         for (HWND h : {s.route, s.presetLabel, s.preset, s.colourLabel, s.colour, s.processing, s.graphs, s.edit,
                        s.editColour})
             set(h, font_);
-        for (int k = 0; k < kSliders; ++k) {
-            set(s.sliderLabel[k], font_);
-            set(s.sliderValue[k], font_);
-        }
     }
     set(status_, font_);
 }
@@ -454,20 +420,14 @@ void MainWindow::layout() {
         MoveWindow(s.colour, x, y, colourW, px(300), TRUE);
         x += colourW + gap;
         MoveWindow(s.editColour, x, y, editW, rowH, TRUE);
-        y += rowH + gap;
-        // bass sliders: two columns of label, slider, value
-        const int colW = (stripW - px(16)) / 2, nameW = px(96), valueW = px(70);
-        for (int k = 0; k < kSliders; ++k) {
-            const int cx = x0 + (k % 2) * (colW + px(16)), cy = y + (k / 2) * (rowH + px(4));
-            MoveWindow(s.sliderLabel[k], cx, cy, nameW, rowH, TRUE);
-            MoveWindow(s.slider[k], cx + nameW, cy, colW - nameW - valueW, rowH, TRUE);
-            MoveWindow(s.sliderValue[k], cx + colW - valueW, cy, valueW, rowH, TRUE);
-        }
-        y += 2 * (rowH + px(4)) + px(2);
+        y += rowH + gap; // = meterTop()
         MoveWindow(s.meter, x0, y, stripW, rc.bottom - statusH - m - y, TRUE);
     }
     const int parts[2] = {(rc.right * 62) / 100, -1};
     SendMessageW(status_, SB_SETPARTS, 2, reinterpret_cast<LPARAM>(parts));
+    // the whole window again: the metal is drawn for the new size, and a moved button leaves no piece of itself
+    // behind (client, 2026-10-26: after a resize part of the old Bypass button stayed beside the new one)
+    RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 }
 
 void MainWindow::fillPresets(int d) {
@@ -502,6 +462,10 @@ void MainWindow::command(int id, int code) {
         analysisWindow_.show(hwnd_);
         return;
     }
+    if (id == mSpectrum) {
+        spectrumWindow_.show(hwnd_, 0);
+        return;
+    }
     if (id < 1000) return;
     const int d = (id - 1000) / 100, item = (id - 1000) % 100;
     if (d < 0 || d > 1) return;
@@ -532,6 +496,8 @@ void MainWindow::command(int id, int code) {
         settings_.deck[d].processing = !settings_.deck[d].processing; // lit = bypassed
         save();
         applyAll(); // linked: deck A's switch counts for both decks
+    } else if (item == iMeter && code == kMeterOpenRow + kMeterSpectrum) { // the spectrum: the spectrum window
+        spectrumWindow_.show(hwnd_, d);
     } else if (item == iMeter && code >= kMeterOpenRow && code < kMeterOpenRow + kMeterTargets) { // a row or bar clicked
         editor_.show(hwnd_, settings_.deck[d].preset, d, meterStage(code - kMeterOpenRow));
     } else if (item == iEdit && code == BN_CLICKED) {
@@ -539,50 +505,15 @@ void MainWindow::command(int id, int code) {
     }
 }
 
-void MainWindow::slider(HWND bar, int code) {
-    for (int d = 0; d < 2; ++d)
-        for (int k = 0; k < kSliders; ++k) {
-            if (strips_[d].slider[k] != bar) continue;
-            // bass level in the colour, enhancer and width in the preset, the frequency in both: every deck using
-            // them changes
-            Preset* p = settings_.find(settings_.deck[d].preset);
-            Preset* c = settings_.find(settings_.deck[d].colour, PresetKind::Colour);
-            if (!p || !c) return;
-            PresetValues& v = p->values;
-            PresetValues& cv = c->values;
-            const int pos = static_cast<int>(SendMessageW(bar, TBM_GETPOS, 0, 0));
-            switch (k) {
-            case slLevel:
-                cv[pToneBass] = pos * 0.5;
-                break;
-            case slEnhancer:
-                v[pBassAmount] = pos * 5.0;
-                v[pBassOn] = pos > 0 ? 1.0 : 0.0;
-                break;
-            case slWidth:
-                v[pBassWidth] = pos * 5.0;
-                v[pWidthOn] = 1.0;
-                break;
-            default: // the bass frequency of all three
-                cv[pToneBassFreq] = pos * 5.0;
-                v[pBassFreq] = pos * 5.0; // clamped to 60 .. 160 Hz
-                v[pWidthSplit] = pos * 5.0;
-                break;
-            }
-            normaliseValues(v);
-            normaliseValues(cv);
-            applyAll(); // heard at once while dragging
-            if (code != TB_THUMBTRACK) { // saved (and the windows updated) once a drag ends; keys, wheel
-                save();
-                editor_.refresh();
-                colourEditor_.refresh();
-            }
-            return;
-        }
-}
-
 void MainWindow::applyAll() {
-    if (layoutDecks_ != settings_.decks) layout(); // two decks <-> one channel
+    if (layoutDecks_ != settings_.decks) { // two decks <-> one channel: the minimum size changed too
+        RECT w;
+        GetWindowRect(hwnd_, &w);
+        if (!IsZoomed(hwnd_))
+            SetWindowPos(hwnd_, nullptr, 0, 0, w.right - w.left, w.bottom - w.top,
+                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+        layout();
+    }
     if (linked()) { // one set of controls, deck A's: deck B follows its colour and processing switch
         settings_.deck[1].colour = settings_.deck[0].colour;
         settings_.deck[1].processing = settings_.deck[0].processing;
@@ -607,33 +538,13 @@ void MainWindow::refreshStrip(int d) {
         if (settings_.presets[i].name == name) SendMessageW(s.preset, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
     for (size_t i = 0; i < settings_.colours.size(); ++i)
         if (settings_.colours[i].name == settings_.deck[d].colour) SendMessageW(s.colour, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
-    const PresetValues v = settings_.deckValues(d); // the preset's values with the colour's
     theme::setChecked(s.processing, !settings_.deck[d].processing);
     // one channel: deck B's strip is not there; linked presets: one set of controls, on deck A
     const bool gone = d == 1 && settings_.decks == 1, single = gone || (d == 1 && linked());
     for (HWND h : {s.presetLabel, s.preset, s.colourLabel, s.colour, s.edit, s.editColour, s.processing, s.graphs})
         ShowWindow(h, single ? SW_HIDE : SW_SHOW);
-    for (int k = 0; k < kSliders; ++k)
-        for (HWND h : {s.sliderLabel[k], s.slider[k], s.sliderValue[k]}) ShowWindow(h, single ? SW_HIDE : SW_SHOW);
     for (HWND h : {s.title, s.route, s.meter}) ShowWindow(h, gone ? SW_HIDE : SW_SHOW);
     if (d == 0) SetWindowTextW(s.title, settings_.decks == 1 ? L"Channel" : L"Deck A");
-    // bass sliders (positions from the preset's and the colour's values)
-    const int pos[kSliders] = {static_cast<int>(std::lround(v[pToneBass] * 2.0)),
-                               v[pBassOn] >= 0.5 ? static_cast<int>(std::lround(v[pBassAmount] / 5.0)) : 0,
-                               static_cast<int>(std::lround(v[pBassWidth] / 5.0)),
-                               static_cast<int>(std::lround(v[pToneBassFreq] / 5.0))};
-    wchar_t t[kSliders][40];
-    if (v[pToneBass] == 0.0) swprintf(t[slLevel], 40, L"0 dB (off)");
-    else swprintf(t[slLevel], 40, L"%+.1f dB", v[pToneBass]);
-    if (v[pBassOn] >= 0.5) swprintf(t[slEnhancer], 40, L"%.0f %%", v[pBassAmount]);
-    else swprintf(t[slEnhancer], 40, L"off");
-    if (v[pWidthOn] >= 0.5) swprintf(t[slWidth], 40, v[pBassWidth] == 0.0 ? L"mono" : L"%.0f %%", v[pBassWidth]);
-    else swprintf(t[slWidth], 40, L"%.0f %% (off)", v[pBassWidth]);
-    swprintf(t[slFreq], 40, L"%.0f Hz", v[pToneBassFreq]);
-    for (int k = 0; k < kSliders; ++k) {
-        if (SendMessageW(s.slider[k], TBM_GETPOS, 0, 0) != pos[k]) SendMessageW(s.slider[k], TBM_SETPOS, TRUE, pos[k]);
-        SetWindowTextW(s.sliderValue[k], t[k]);
-    }
     if (settings_.api == "ASIO") {
         const int in = d == 0 ? settings_.inputA : settings_.inputB, out = d == 0 ? settings_.outputA : settings_.outputB;
         const SysInputs sysIn = sysInputsFrom(settings_);
@@ -747,7 +658,7 @@ void MainWindow::updateTrayTip() {
     const int decks = settings_.decks == 1 ? 1 : 2;
     for (int d = 0; d < decks; ++d) {
         const DeckSettings& k = settings_.deck[d];
-        t += L"\n" + (decks == 1 ? std::wstring(L"Preset") : deckName(d)) + L": ";
+        t += L"\n" + (decks == 1 ? std::wstring(L"Loudness") : deckName(d)) + L": ";
         if (!k.processing) t += L"bypass";
         else t += fromUtf8(k.preset) + (k.colour == "Neutral" ? L"" : L", " + fromUtf8(k.colour));
     }
@@ -759,14 +670,14 @@ void MainWindow::toTray() {
     ShowWindow(hwnd_, SW_HIDE);
     if (!settings_.trayHintShown) { // once: where the program went
         tray_.balloon(L"DJAP keeps running",
-                      L"The audio goes on. Click the icon here to open the window; right-click it to exit.");
+                      L"The audio goes on. Click the icon here to open the window; right-click it to shut DJAP down.");
         settings_.trayHintShown = true;
         save();
     }
 }
 
 void MainWindow::fromTray() {
-    ShowWindow(hwnd_, IsIconic(hwnd_) ? SW_RESTORE : SW_SHOW);
+    ShowWindow(hwnd_, placement::showCommand(hwnd_));
     ShowOwnedPopups(hwnd_, TRUE);
     SetForegroundWindow(hwnd_);
 }
@@ -813,12 +724,13 @@ void MainWindow::updateEvent(WPARAM what) {
     }
 }
 
-// The main window's right-click menu (client, 2026-10-25: no menu bar; "Exit and Setup").
+// The main window's right-click menu (client, 2026-10-25: no menu bar; "Exit and Setup"; 2026-10-26: Exit is
+// called Shutdown).
 void MainWindow::windowMenu(int x, int y) {
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, mAudio, L"&Setup...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, mExit, L"E&xit");
+    AppendMenuW(m, MF_STRING, mExit, L"Shut&down");
     TrackPopupMenuEx(m, TPM_RIGHTBUTTON, x, y, hwnd_, nullptr);
     DestroyMenu(m);
 }
@@ -828,7 +740,7 @@ void MainWindow::trayMenu(int x, int y) {
     AppendMenuW(m, MF_STRING, mOpen, L"&Open DJAP");
     AppendMenuW(m, MF_STRING, mAudio, L"&Setup...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, mExit, L"E&xit");
+    AppendMenuW(m, MF_STRING, mExit, L"Shut&down");
     SetMenuDefaultItem(m, mOpen, FALSE);
     SetForegroundWindow(hwnd_); // else the menu does not close when clicked elsewhere
     const UINT align = GetSystemMetrics(SM_MENUDROPALIGNMENT) ? TPM_RIGHTALIGN : TPM_LEFTALIGN;
@@ -869,7 +781,25 @@ void MainWindow::setMessage(const std::string& text) {
 }
 
 void MainWindow::save() {
-    saveError_ = settings_.save(ini_) ? std::string() : "settings not saved: " + toUtf8(ini_.wstring());
+    // merged with what a plug-in saved in the same file meanwhile (its own presets and colours)
+    auto names = [this] {
+        std::vector<std::string> n;
+        for (const Preset& p : settings_.presets) n.push_back(p.name);
+        for (const Preset& p : settings_.colours) n.push_back("\x01" + p.name);
+        return n;
+    };
+    const std::vector<std::string> before = names();
+    saveError_ = settings_.saveMerged(ini_, base_, Settings::SaveRole::Owner)
+                     ? std::string()
+                     : "settings not saved: " + toUtf8(ini_.wstring());
+    if (names() != before) { // a plug-in's new, renamed or deleted presets: the lists show them
+        fillPresets(0);
+        fillPresets(1);
+        refreshStrip(0);
+        refreshStrip(1);
+        editor_.refresh();
+        colourEditor_.refresh();
+    }
     updateStatus();
 }
 

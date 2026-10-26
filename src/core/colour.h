@@ -77,6 +77,13 @@ private:
     SvfState subSt_[4];
 };
 
+// The colour's frequency response in dB at hz: the four tone sections (each with the auto tone's correction
+// `autoDb[0..3]`, dB; nullptr = none) and the loudness contour, as the processing designs them. The sub bass is a
+// generated tone, not a filter: not in the curve. For the spectrum window's EQ curve.
+double colourCurveDb(const PresetValues& v, const double* autoDb, double fs, double hz);
+// The same for one section s (0 bass, 1 low-mid, 2 presence, 3 treble, 4 / 5 the loudness contour's bass / treble).
+double colourSectionDb(const PresetValues& v, int s, double autoDb, double fs, double hz);
+
 // Long-term balance of a mono signal in the auto tone's bands: each band's mean power against the 1 kHz band, in dB
 // (silent stretches left out). For calibrating the reference and checking it (DJAPCmd --tone).
 void toneBalance(const float* mono, size_t n, double fs, double out[kToneBands]);

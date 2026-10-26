@@ -1,0 +1,28 @@
+// The four bass sliders (client, 2026-10-25; on the main window's strips until 2026-10-26, now in the spectrum
+// window - its sliders and its graph's bass point): bass level (the colour's bass shelf), bass enhancer
+// and bass width (the loudness preset), bass frequency (both). One rule: the trackbar's positions, the value text,
+// and what a position changes.
+#pragma once
+
+#include "settings.h"
+
+#include <windows.h>
+
+#include <string>
+
+namespace ap::bass {
+
+enum Slider { kLevel, kEnhancer, kWidth, kFreq, kSliders };
+extern const wchar_t* const kName[kSliders];
+extern const wchar_t* const kTip[kSliders];
+
+// A trackbar for slider k: range (0.5 dB / 5 % / 5 Hz steps), ticks, arrow-key and page steps.
+void setup(HWND bar, int k);
+// The position and the value text of slider k for a deck's values (Settings::deckValues).
+int position(const PresetValues& v, int k);
+std::wstring text(const PresetValues& v, int k);
+// Sets the deck's loudness preset and / or colour from slider k at `pos` (every deck using them changes). False when
+// the deck has no such preset or colour.
+bool apply(Settings& s, int deck, int k, int pos);
+
+} // namespace ap::bass

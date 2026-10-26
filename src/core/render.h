@@ -5,6 +5,7 @@
 #include "loudness.h"
 #include "wavfile.h"
 
+#include <functional>
 #include <string>
 
 namespace ap {
@@ -30,10 +31,13 @@ struct RenderResult {
     double audioSeconds = 0;
 };
 
+// Every meter record of a deck as it comes (DJAPCmd --trace: the stages' gains over time).
+using RecordSink = std::function<void(int deck, const MeterRecord& record)>;
+
 // Input: 2 channels = deck A; 4 channels = deck A (1-2) and deck B (3-4). A deck that is not `used` passes through
 // unprocessed (bypassed, delayed like the other). align = true removes the look-ahead delay from the output (same
 // length as the input); false keeps it like a live device (output = input length, delayed).
 bool renderOffline(const WavData& in, const RenderDeck decks[2], bool align, int chunkFrames, WavData& out,
-                   RenderResult& result, std::string& error);
+                   RenderResult& result, std::string& error, const RecordSink& onRecord = {});
 
 } // namespace ap

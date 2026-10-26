@@ -1,7 +1,8 @@
 // The meter panel of a deck strip: LED bars of the input's and output's peak per channel (In L / R, Out L / R) with
 // the loudness of each (momentary LUFS) and the target as lines across them, a dB and a LUFS scale; the gain of each
-// stage (leveller up / down, compressor, density per band, de-esser, clipper, limiter) and the spectrum of input and
-// output under them with the density splits. No buttons: the R (reset meters) and F (freeze leveller) buttons were
+// stage (leveller up / down, compressor, de-esser, clipper, limiter) and under them the spectrum of input and output
+// with the density bands and their gains (spectrumdraw.h; client, 2026-10-26: the density row went into the spectrum,
+// which got its room). No buttons: the R (reset meters) and F (freeze leveller) buttons were
 // removed at the client's request (2026-10-25: "not needed").
 // Custom-drawn, double-buffered, sized by the window's DPI.
 #pragma once
@@ -28,10 +29,11 @@ struct MeterViewData {
 };
 
 // A click on a stage row or a LED bar (client, 2026-10-25: "open its settings") tells the parent with WM_COMMAND:
-// its control id, code kMeterOpenRow + the target (0 leveller, 1 compressor, 2 density, 3 de-esser, 4 clipper,
-// 5 limiter; 6 the In bars: General - input gain, target; 7 the Out bars: Limiter - their ceiling; meterStage()).
+// its control id, code kMeterOpenRow + the target (0 leveller, 1 compressor, 2 density - no row of its own since
+// 2026-10-26, 3 de-esser, 4 clipper, 5 limiter; 6 the In bars: General - input gain, target; 7 the Out bars: Limiter -
+// their ceiling; 8 the spectrum: the program opens its spectrum window, the plug-in the Density tab; meterStage()).
 constexpr int kMeterOpenRow = 10;
-constexpr int kMeterRows = 6, kMeterTargets = 8;
+constexpr int kMeterRows = 6, kMeterTargets = 9, kMeterSpectrum = 8;
 const char* meterStage(int target); // the preset window's tab of a target ("Leveller", ...)
 
 void registerMeterView(HINSTANCE instance);
@@ -39,5 +41,8 @@ void unregisterMeterView(); // a plug-in DLL, before it is unloaded (the class w
 // The panel has its own tooltips, one per part (bars, stage rows, numbers).
 HWND createMeterView(HWND parent, int id);
 void setMeterView(HWND view, const MeterViewData& data); // copies and repaints
+// The smallest panel height at `dpi` that shows every stage row in full and a readable spectrum (client, 2026-10-26:
+// the smallest window that still shows the spectrum is the window's minimum).
+int meterViewMinHeight(UINT dpi);
 
 } // namespace ap

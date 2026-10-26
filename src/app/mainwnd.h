@@ -1,9 +1,9 @@
-// Main window: two deck strips side by side (preset and four bass sliders that change the preset - one set, on
-// deck A, when the presets are linked -, processing / bypass, Graphs, meters), no menu bar (a right-click opens Setup / Exit)
+// Main window: two deck strips side by side (loudness preset and colour - one set, on deck A, when the presets are
+// linked -, processing / bypass, Graphs, meters), no menu bar (a right-click opens Setup / Shutdown)
 // and a status bar (audio state, latency added by the processing). The stage switches are in the preset window.
 // Every control has a tooltip that says what it does. Every change is heard at once and saved at once.
 // The program lives in the notification area: closing or minimising the window hides it there and the audio goes
-// on; Exit in the icon's menu or the window's right-click menu ends the program.
+// on; Shutdown in the icon's menu or the window's right-click menu ends the program.
 #pragma once
 
 #include "aboutwnd.h"
@@ -12,6 +12,7 @@
 #include "audioio.h"
 #include "editwnd.h"
 #include "settings.h"
+#include "spectrumwnd.h"
 #include "theme.h"
 #include "tooltips.h"
 #include "tray.h"
@@ -49,7 +50,6 @@ private:
         HWND title = nullptr, route = nullptr, presetLabel = nullptr, preset = nullptr, processing = nullptr, // bypass
              edit = nullptr, meter = nullptr, graphs = nullptr; // graphs: opens the analysis window
         HWND colourLabel = nullptr, colour = nullptr, editColour = nullptr;          // the deck's colour preset
-        HWND sliderLabel[4] = {}, slider[4] = {}, sliderValue[4] = {}; // bass level, enhancer, width, frequency
     };
 
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -58,7 +58,6 @@ private:
     void setFonts();
     void layout();
     void command(int id, int code);
-    void slider(HWND bar, int code); // WM_HSCROLL of a bass slider
     void fillPresets(int d); // and colours
     void presetsChanged(bool listChanged, bool saveNow); // from a preset or colour window
     void applyDeck(int d);
@@ -70,15 +69,21 @@ private:
     void toTray();       // hide the window (and its own windows); the icon stays
     void fromTray();     // show it again in front
     void trayMenu(int x, int y);
-    void windowMenu(int x, int y); // right-click: Setup, Exit
+    void windowMenu(int x, int y); // right-click: Setup, Shutdown
     void checkForUpdate();          // asks GitHub (the daily check, or Check now)
     void installUpdate();           // Install update: download, check, start the setup, end the program
     void updateEvent(WPARAM what);  // a check (0) or a download (1) of the updater ended
     void save();
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
+    // where layout() puts the meter panels: under the title row and the preset row (the bass sliders moved to the
+    // spectrum window, client 2026-10-26)
+    int meterTop() const { return px(12) + 2 * (px(28) + px(6)); }
+    // the smallest client widths at 96 DPI (the height follows from the meter panel: WM_GETMINMAXINFO)
+    static constexpr int kMinWidthOne = 600, kMinWidthTwo = 900;
 
     Settings& settings_;
     std::filesystem::path ini_;
+    Settings base_; // the preset lists as last read or written (the plug-in may add its own: Settings::saveMerged)
     AudioIO& audio_;
     HWND hwnd_ = nullptr, status_ = nullptr;
     HFONT font_ = nullptr, bold_ = nullptr;
@@ -92,6 +97,7 @@ private:
     EditWindow editor_, colourEditor_;
     AudioWindow audioWindow_;
     AnalysisWindow analysisWindow_;
+    SpectrumWindow spectrumWindow_;
     AboutWindow about_;
     std::string saveError_, message_;
     int ticks_ = 0;
@@ -99,7 +105,7 @@ private:
     double shownVolume_ = -3.0; // the volume in the status bar (-2 not following, -1 muted)
     TrayIcon tray_;
     HICON iconSmall_ = nullptr;
-    bool quitting_ = false; // Exit chosen (or Windows ends the session): WM_CLOSE really closes
+    bool quitting_ = false; // Shutdown chosen (or Windows ends the session): WM_CLOSE really closes
     bool testRun_ = false;
     int startTries_ = 0; // attempts of startSavedAudio() so far
     Updater updater_;

@@ -3,7 +3,6 @@
 #include "meterview.h"
 #include "plugin.h"
 #include "pluginids.h"
-#include "plugindiag.h"
 #include "stages.h"
 #include "version.h"
 
@@ -28,12 +27,12 @@ namespace {
 
 const wchar_t* const kClass = L"DJAPPluginView";
 const double kLooks[] = {0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0}; // the Setup window's choices (ms)
-enum Id { idPreset = 1, idColour, idLook, idBypass, idSlider0 = 10, idMeter = 20 };
+enum Id { idPreset = 1, idColour, idLook, idBypass, idEdit, idEditColour, idSlider0 = 10, idMeter = 20 };
 enum Slider { slLevel, slEnhancer, slWidth, slFreq, kSliders };
 const wchar_t* const kSliderName[kSliders] = {L"Bass level", L"Bass enhancer", L"Bass width", L"Bass frequency"};
-const int kSliderMin[kSliders] = {-24, 0, 0, 8}, kSliderMax[kSliders] = {18, 20, 20, 50}; // 0.5 dB / 5 % / 5 Hz
+const int kSliderMin[kSliders] = {-24, 0, 0, 8}, kSliderMax[kSliders] = {24, 20, 20, 50}; // 0.5 dB / 5 % / 5 Hz
 const wchar_t* const kSliderTip[kSliders] = {
-    L"More or less bass, -12 .. +9 dB: the colour's bass shelf below the bass frequency. The leveller keeps the "
+    L"More or less bass, -12 .. +12 dB: the colour's bass shelf below the bass frequency. The leveller keeps the "
     L"loudness on target, so this changes the balance, not the volume. 0 dB = off.",
     L"Strength of the bass enhancer, 0 .. 100 %: overtones of the bass below its frequency, so the bass is heard on "
     L"small speakers too. 0 % switches the enhancer off.",
@@ -77,11 +76,13 @@ void PluginView::registerClasses(HINSTANCE instance) {
     wc.lpszClassName = kClass;
     RegisterClassW(&wc);
     registerMeterView(instance);
+    EditWindow::setModule(instance); // the preset window registers its classes when it is first opened
     INITCOMMONCONTROLSEX icc{sizeof icc, ICC_BAR_CLASSES | ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES};
     InitCommonControlsEx(&icc);
 }
 
 void PluginView::unregisterClasses() {
+    EditWindow::unregisterClasses();
     unregisterMeterView();
     UnregisterClassW(kClass, ghInst);
     theme::shutdown();
@@ -94,6 +95,7 @@ tresult PLUGIN_API PluginView::isPlatformTypeSupported(FIDString type) {
 tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
     if (isPlatformTypeSupported(type) != kResultTrue || !parent) return kResultFalse;
     if (g_views++ == 0) registerClasses(ghInst);
+    Tooltips::setEnabled(plugin_->tooltips()); // the program's Setup switch
     const tresult r = CPluginView::attached(parent, type);
     dpi_ = GetDpiForWindow(static_cast<HWND>(parent));
     if (dpi_ == 0) dpi_ = 96;
@@ -113,6 +115,7 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
 }
 
 tresult PLUGIN_API PluginView::removed() {
+    plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
     if (hwnd_) {
         KillTimer(hwnd_, 1);
         DestroyWindow(hwnd_);
@@ -145,7 +148,6 @@ LRESULT PluginView::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_TIMER:
         if (dirty_) fill();
         meters();
-        if (++ticks_ % 10 == 0) status(); // twice a second
         return 0;
     case WM_HSCROLL:
         if (lp) slider(reinterpret_cast<HWND>(lp), LOWORD(wp));
@@ -174,10 +176,12 @@ void PluginView::create() {
     lookLabel_ = make(L"STATIC", L"Look-ahead", SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0);
     look_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idLook);
     bypass_ = make(L"BUTTON", L"Bypass", BS_OWNERDRAW | WS_TABSTOP, idBypass);
-    presetLabel_ = make(L"STATIC", L"Preset", SS_LEFT | SS_CENTERIMAGE, 0);
+    presetLabel_ = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
     preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
     colourLabel_ = make(L"STATIC", L"Colour", SS_LEFT | SS_CENTERIMAGE, 0);
     colour_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idColour);
+    edit_ = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idEdit);
+    editColour_ = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idEditColour);
     for (int k = 0; k < kSliders; ++k) {
         sliderLabel_[k] = make(L"STATIC", kSliderName[k], SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0);
         slider_[k] = make(TRACKBAR_CLASSW, L"", TBS_HORZ | TBS_AUTOTICKS | TBS_BOTTOM | WS_TABSTOP, idSlider0 + k);
@@ -189,17 +193,10 @@ void PluginView::create() {
         sliderValue_[k] = make(L"STATIC", L"", SS_RIGHT | SS_CENTERIMAGE | SS_NOTIFY, 0);
     }
     meter_ = createMeterView(hwnd_, idMeter);
-    status_ = make(L"STATIC", L"", SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY | SS_ENDELLIPSIS, 0);
-    theme::makeButton(bypass_);
+    for (HWND b : {bypass_, edit_, editColour_}) theme::makeButton(b);
     for (HWND c : {preset_, colour_, look_}) theme::makeCombo(c);
 
-    // the lists: the program's presets and colours (its settings file), and one for values that match none
-    for (const Preset& p : plugin_->presets())
-        SendMessageW(preset_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(wide(p.name).c_str()));
-    SendMessageW(preset_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"(other values)"));
-    for (const Preset& p : plugin_->colours())
-        SendMessageW(colour_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(wide(p.name).c_str()));
-    SendMessageW(colour_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"(other values)"));
+    fillLists();
     for (double l : kLooks) {
         wchar_t t[48];
         swprintf(t, 48, l == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", l);
@@ -207,18 +204,18 @@ void PluginView::create() {
     }
 
     tips_.create(hwnd_);
-    tips_.add(status_, L"What the host does with this plug-in: which instance this is of how many, the host's sample "
-                       L"rate and block size, whether it hands over the same buffers for input and output, how often it "
-                       L"calls the processing, how many parameter changes reached it, and the peak level going in and "
-                       L"coming out. Every host call is also written to DJAP-plugin.log in the TEMP folder.");
     tips_.add(version_, L"DJAP processes this channel like one deck of the program, with the same presets and "
                         L"colours. Every value is also a parameter in the host's own list, and can be automated.");
-    tips_.add(preset_, L"The preset: the target loudness and every stage's values. The list holds the program's "
-                       L"presets (also your own, from its settings file). The project keeps the values themselves, "
-                       L"so it sounds the same on a computer without that preset; \"(other values)\" = values that "
-                       L"match no preset in the list.");
-    tips_.add(colour_, L"The colour, on top of the preset: tone, auto tone, sub bass and a loudness contour. "
+    tips_.add(preset_, L"The loudness preset: the target loudness and every stage's values. The list holds the program's "
+                       L"loudness presets and your own (from the settings file the program and the plug-in share). The "
+                       L"project keeps the values themselves, so it sounds the same on a computer without that "
+                       L"preset; \"(other values)\" = values that match no preset in the list.");
+    tips_.add(colour_, L"The colour, on top of the loudness preset: tone, auto tone, sub bass and a contour. "
                        L"Neutral changes nothing.");
+    tips_.add(edit_, L"Opens the loudness window: the nine stage switches and every value of the loudness preset with its unit, "
+                     L"range and meaning; Save as, Rename, Delete and Reset. Your presets are saved in the settings "
+                     L"file the program uses too.");
+    tips_.add(editColour_, L"Opens the colour window: every value of the colour; Save as, Rename, Delete and Reset.");
     tips_.add(look_, L"The limiter's look-ahead: the only delay the processing adds (the host is told, so it can "
                      L"keep this channel in time with the others). Longer handles peaks more gently; true-peak "
                      L"limiting needs at least 1.0 ms; 0 ms = no delay, sample peaks only.");
@@ -257,18 +254,22 @@ void PluginView::layout() {
     MoveWindow(look_, m + W - bypassW - lookW - gap, y, lookW, px(300), TRUE);
     MoveWindow(bypass_, m + W - bypassW, y, bypassW, rowH, TRUE);
     y += rowH + gap;
-    // Preset [....]  Colour [....]
-    const int labelW = px(48), colourLabelW = px(50);
-    const int combos = W - labelW - colourLabelW - 3 * gap - px(10);
+    // Preset [....] [Edit...]  Colour [....] [Edit...]
+    const int labelW = px(48), colourLabelW = px(50), editW = px(64);
+    const int combos = W - labelW - colourLabelW - 2 * editW - 5 * gap - px(10);
     const int presetW = combos / 2, colourW = combos - presetW;
     int x = m;
     MoveWindow(presetLabel_, x, y, labelW, rowH, TRUE);
     x += labelW + gap;
     MoveWindow(preset_, x, y, presetW, px(300), TRUE);
-    x += presetW + gap + px(10);
+    x += presetW + gap;
+    MoveWindow(edit_, x, y, editW, rowH, TRUE);
+    x += editW + gap + px(10);
     MoveWindow(colourLabel_, x, y, colourLabelW, rowH, TRUE);
     x += colourLabelW + gap;
     MoveWindow(colour_, x, y, colourW, px(300), TRUE);
+    x += colourW + gap;
+    MoveWindow(editColour_, x, y, editW, rowH, TRUE);
     y += rowH + gap;
     // bass sliders: two columns of label, slider, value
     const int colW = (W - px(16)) / 2, nameW = px(96), valueW = px(70);
@@ -279,9 +280,25 @@ void PluginView::layout() {
         MoveWindow(sliderValue_[k], cx + colW - valueW, cy, valueW, rowH, TRUE);
     }
     y += 2 * (rowH + px(4)) + px(2);
-    MoveWindow(meter_, m, y, W, rc.bottom - m - y - px(22), TRUE);
-    MoveWindow(status_, m, rc.bottom - m - px(20), W, px(20), TRUE);
+    MoveWindow(meter_, m, y, W, rc.bottom - m - y, TRUE);
     RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+}
+
+void PluginView::listsChanged() {
+    if (!hwnd_) return;
+    fillLists();
+    fill();
+}
+
+void PluginView::fillLists() {
+    // the presets and colours of the shared settings file, and one entry for values that match none
+    for (const bool colour : {false, true}) {
+        HWND box = colour ? colour_ : preset_;
+        SendMessageW(box, CB_RESETCONTENT, 0, 0);
+        for (const Preset& p : colour ? plugin_->colours() : plugin_->presets())
+            SendMessageW(box, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(wide(p.name).c_str()));
+        SendMessageW(box, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"(other values)"));
+    }
 }
 
 void PluginView::fill() {
@@ -339,26 +356,6 @@ void PluginView::meters() {
     setMeterView(meter_, data);
 }
 
-void PluginView::status() {
-    if (!status_) return;
-    const ProcessStats& s = plugin_->stats();
-    const uint64_t calls = s.calls.load(), changes = s.changes.load();
-    auto db = [](float x) { return x > 0 ? 20.0 * std::log10(static_cast<double>(x)) : -150.0; };
-    wchar_t t[512];
-    swprintf(t, 512,
-             L"Instance #%d of %d   |   %hs   |   %.1f kHz, %d frames, %hs, %hs   |   %.0f calls/s   |   changes: %llu from the "
-             L"host, %llu from the window   |"
-             L"   in %.1f / out %.1f dBFS",
-             plugin_->id(), diagLiveInstances(), plugin_->hostName().empty() ? "host?" : plugin_->hostName().c_str(),
-             plugin_->sampleRate() / 1000.0, s.frames.load(), sampleSizeName(s.sampleSize.load()),
-             s.inPlace.load() == 1 ? "in place" : s.inPlace.load() == 0 ? "separate buffers" : "no audio yet",
-             static_cast<double>(calls - lastCalls_) / 0.5, static_cast<unsigned long long>(changes),
-             static_cast<unsigned long long>(s.updates.load()),
-             db(s.inPeak.load()), db(s.outPeak.load()));
-    lastCalls_ = calls;
-    SetWindowTextW(status_, t);
-}
-
 void PluginView::slider(HWND bar, int code) {
     (void)code; // every move is sent to the host (it records automation while the slider is dragged)
     for (int k = 0; k < kSliders; ++k) {
@@ -401,6 +398,10 @@ void PluginView::command(int id, int code) {
     } else if (id == idBypass && code == BN_CLICKED) {
         plugin_->edit(kBypassId, plugin_->plainOf(kBypassId) >= 0.5 ? 0.0 : 1.0);
         fill();
+    } else if ((id == idEdit || id == idEditColour) && code == BN_CLICKED) {
+        plugin_->openEditor(id == idEditColour, GetAncestor(hwnd_, GA_ROOT));
+    } else if (id == idMeter && code >= kMeterOpenRow && code < kMeterOpenRow + kMeterTargets) { // a row or bar
+        plugin_->openEditor(false, GetAncestor(hwnd_, GA_ROOT), meterStage(code - kMeterOpenRow));
     }
 }
 

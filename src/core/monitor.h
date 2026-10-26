@@ -24,6 +24,7 @@ struct DeckMeters {
     double levellerDb = 0, compressorDb = 0, deEsserDb = 0, clipperDb = 0, limiterDb = 0;
     double densityDb[kMaxBands] = {};
     int bands = 0;
+    double autoToneDb[4] = {};            // the auto tone's corrections now (bass, low-mid, presence, treble)
     uint8_t flags = 0;                    // MeterFlag bits of the newest record
     double seconds = 0;                   // measured since the last reset
     double compressorIn = kFloorDb;       // compressor detector level (same scale as its threshold)

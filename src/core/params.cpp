@@ -25,7 +25,8 @@ const ParamInfo kInfo[kParamCount] = {
      "How fast the gain comes down while the music is clearly too loud (the gain more than 3 dB above what the 3 s "
      "level needs: a loud start after a quiet intro or a break); 0 = the normal speed"},
     {"LevellerHold", "Leveller", "Hold below", "LU", 5, 20, 10, 1, 0, false,
-     "Holds the gain while the music is this far under the target (fades, breakdowns, pauses)"},
+     "Holds the gain while the music is this far under the target (fades, pauses); a quiet part that stays is "
+     "levelled after 3 s"},
     {"LevellerCatchUp", "Leveller", "Catch up after a pause", "", 0, 1, 1, 1, 0, true,
      "After 2 s of silence (deck stopped) the gain jumps to the new song's level within about half a second"},
 
@@ -58,13 +59,13 @@ const ParamInfo kInfo[kParamCount] = {
     {"DensitySplit4", "Density", "Split 4", "Hz", 20, 16000, 6000, 50, 0, false, "Between band 4 and band 5"},
     {"DensitySplit5", "Density", "Split 5", "Hz", 20, 16000, 9000, 50, 0, false, "Between band 5 and band 6"},
     {"DensitySplit6", "Density", "Split 6", "Hz", 20, 16000, 12000, 50, 0, false, "Between band 6 and band 7"},
-    {"DensityGain1", "Density", "Band 1 gain", "dB", -6, 6, 0, 0.5, 1, false, "Fixed gain of band 1"},
-    {"DensityGain2", "Density", "Band 2 gain", "dB", -6, 6, 0, 0.5, 1, false, "Fixed gain of band 2"},
-    {"DensityGain3", "Density", "Band 3 gain", "dB", -6, 6, 0, 0.5, 1, false, "Fixed gain of band 3"},
-    {"DensityGain4", "Density", "Band 4 gain", "dB", -6, 6, 0, 0.5, 1, false, "Fixed gain of band 4"},
-    {"DensityGain5", "Density", "Band 5 gain", "dB", -6, 6, 0, 0.5, 1, false, "Fixed gain of band 5"},
-    {"DensityGain6", "Density", "Band 6 gain", "dB", -6, 6, 0, 0.5, 1, false, "Fixed gain of band 6"},
-    {"DensityGain7", "Density", "Band 7 gain", "dB", -6, 6, 0, 0.5, 1, false, "Fixed gain of band 7"},
+    {"DensityGain1", "Density", "Band 1 gain", "dB", -12, 12, 0, 0.5, 1, false, "Fixed gain of band 1"},
+    {"DensityGain2", "Density", "Band 2 gain", "dB", -12, 12, 0, 0.5, 1, false, "Fixed gain of band 2"},
+    {"DensityGain3", "Density", "Band 3 gain", "dB", -12, 12, 0, 0.5, 1, false, "Fixed gain of band 3"},
+    {"DensityGain4", "Density", "Band 4 gain", "dB", -12, 12, 0, 0.5, 1, false, "Fixed gain of band 4"},
+    {"DensityGain5", "Density", "Band 5 gain", "dB", -12, 12, 0, 0.5, 1, false, "Fixed gain of band 5"},
+    {"DensityGain6", "Density", "Band 6 gain", "dB", -12, 12, 0, 0.5, 1, false, "Fixed gain of band 6"},
+    {"DensityGain7", "Density", "Band 7 gain", "dB", -12, 12, 0, 0.5, 1, false, "Fixed gain of band 7"},
 
     {"BassOn", "Bass enhancer", "On", "", 0, 1, 0, 1, 0, true,
      "Adds overtones of the lowest bass so small speakers seem to play deeper"},
@@ -95,17 +96,17 @@ const ParamInfo kInfo[kParamCount] = {
     {"LimiterCeiling", "Limiter", "Ceiling", "dBTP", -6, 0, -1.0, 0.1, 1, false, "Highest true-peak level of the output"},
     {"LimiterRelease", "Limiter", "Release", "ms", 10, 500, 80, 5, 0, false, "Time to let go after a peak"},
 
-    {"Bass", "Tone", "Bass", "dB", -12, 9, 0, 0.5, 1, false,
+    {"Bass", "Tone", "Bass", "dB", -12, 12, 0, 0.5, 1, false,
      "Low shelf: more or less bass below its corner; the leveller keeps the loudness, the balance changes (0 = off)"},
     {"BassCorner", "Tone", "Bass corner", "Hz", 40, 250, 100, 5, 0, false, "Where the bass shelf starts"},
-    {"LowMid", "Tone", "Low-mid", "dB", -9, 6, 0, 0.5, 1, false,
+    {"LowMid", "Tone", "Low-mid", "dB", -12, 12, 0, 0.5, 1, false,
      "Bell around its frequency: less of it takes out boom and mud (0 = off)"},
     {"LowMidFrequency", "Tone", "Low-mid frequency", "Hz", 150, 1000, 350, 10, 0, false, "Centre of the low-mid bell"},
-    {"Presence", "Tone", "Presence", "dB", -9, 6, 0, 0.5, 1, false,
+    {"Presence", "Tone", "Presence", "dB", -12, 12, 0, 0.5, 1, false,
      "Bell around its frequency: voices and leads forward or back (0 = off)"},
     {"PresenceFrequency", "Tone", "Presence frequency", "Hz", 1000, 6000, 3000, 100, 0, false,
      "Centre of the presence bell"},
-    {"Treble", "Tone", "Treble", "dB", -9, 9, 0, 0.5, 1, false, "High shelf: more or less highs above its corner (0 = off)"},
+    {"Treble", "Tone", "Treble", "dB", -12, 12, 0, 0.5, 1, false, "High shelf: more or less highs above its corner (0 = off)"},
     {"TrebleCorner", "Tone", "Treble corner", "Hz", 3000, 16000, 8000, 100, 0, false, "Where the treble shelf starts"},
     {"AutoTone", "Auto tone", "Amount", "%", 0, 100, 0, 5, 0, false,
      "Pulls each song's balance (bass, low-mid, presence, treble against the mids) towards that of late-80s dance "
@@ -118,7 +119,7 @@ const ParamInfo kInfo[kParamCount] = {
      "Adds a tone an octave under the bass - bass a recording does not have (0 = off; use sparingly)"},
     {"SubBassFrequency", "Sub bass", "Frequency", "Hz", 40, 120, 80, 5, 0, false,
      "Bass below this is followed an octave lower"},
-    {"Loudness", "Loudness", "Amount", "%", 0, 100, 0, 5, 0, false,
+    {"Loudness", "Contour", "Amount", "%", 0, 100, 0, 5, 0, false,
      "Equal-loudness contour for quiet listening: up to +9 dB of deep bass and +4 dB of highs (0 = off)"},
 };
 

@@ -4,6 +4,7 @@
 #include "params.h"
 
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -25,6 +26,13 @@ struct DeckSettings {
 // colour values used, docs/design.md 3.3). Both hold a whole PresetValues array.
 enum class PresetKind { Dynamics, Colour };
 inline PresetKind kindOf(int param) { return isColourParam(param) ? PresetKind::Colour : PresetKind::Dynamics; }
+
+// Where a window was last (placement.h): its normal - not maximised - rectangle in screen pixels (width and height 0:
+// not known, the window keeps its own size), and whether it was maximised.
+struct WindowPlace {
+    int x = 0, y = 0, w = 0, h = 0;
+    bool maximised = false;
+};
 
 class Settings {
 public:
@@ -51,7 +59,11 @@ public:
     bool followsVolume() const { return followVolume[decks == 1 ? 0 : 1]; }
     DeckSettings deck[2];
     bool linkPresets = false;    // deck B always uses deck A's preset (choosing one on either deck sets both)
-    int windowX = -1, windowY = -1;
+    // every window's last place, by its name (Main, Setup, Loudness, Colour, Analysis, Spectrum, About); a window
+    // without one opens centred on the screen (client, 2026-10-26)
+    std::map<std::string, WindowPlace> windows;
+    bool snapToBands = false; // the spectrum window: a dragged colour point snaps to the density bands' splits
+    bool showTooltips = true; // the explanations when the mouse rests on a control (all windows, the plug-in too)
     bool trayHintShown = false;  // the "still running in the notification area" balloon was shown once
     bool checkUpdates = true;    // ask GitHub once a day for a newer version (Setup window)
     std::string updateUrl;       // where to ask instead of the public repository (tests); empty = GitHub
@@ -65,6 +77,15 @@ public:
 
     bool load(const std::filesystem::path& file);
     bool save(const std::filesystem::path& file) const;
+
+    // The program and the plug-in share one settings file (client, 2026-10-26): each saves without losing the
+    // other's presets and colours. The lists in the file as it is now are taken, and the changes this object made
+    // since `base` (its lists as last read or written) are applied to them: presets it added or changed are written,
+    // presets it deleted (or renamed away) are removed, everything else in the file stays. The program (Owner) writes
+    // its other settings; the plug-in (Guest) keeps the file's. Afterwards this object holds the merged lists (the
+    // other's new presets included) and `base` is set to them. False when the file could not be written.
+    enum class SaveRole { Owner, Guest };
+    bool saveMerged(const std::filesystem::path& file, Settings& base, SaveRole role);
     std::string toText() const;
     void fromText(const std::string& text);
 

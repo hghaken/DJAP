@@ -209,12 +209,40 @@ void subBass() {
     CHECK(peak == 0.0);
 }
 
-} // namespace
+// The spectrum window's EQ curve (colourCurveDb) against the processing itself: a colour with every tone section
+// and the loudness contour, measured with steady sines.
+void curve() {
+    std::printf("-- colour curve (spectrum window) against the processing\n");
+    PresetValues v = allOff();
+    v[pToneBass] = 6;
+    v[pToneBassFreq] = 120;
+    v[pToneLowMid] = -4;
+    v[pToneLowMidFreq] = 400;
+    v[pTonePresence] = 3;
+    v[pTonePresenceFreq] = 2500;
+    v[pToneTreble] = -5;
+    v[pToneTrebleFreq] = 9000;
+    v[pLoudness] = 50;
+    double worst = 0;
+    for (double f : {40.0, 100.0, 250.0, 400.0, 1000.0, 2500.0, 6000.0, 12000.0, 18000.0}) {
+        const double want = colourCurveDb(v, nullptr, fs, f), got = gainAt(v, f);
+        std::printf("   %6.0f Hz: curve %+6.2f dB, processing %+6.2f dB\n", f, want, got);
+        worst = std::max(worst, std::fabs(want - got));
+    }
+    CHECK(worst < 0.05);
+    PresetValues flat = allOff();
+    CHECK_NEAR(colourCurveDb(flat, nullptr, fs, 1000), 0.0, 1e-12);
+    const double autoDb[4] = {3, 0, 0, 0}; // the auto tone's bass correction adds to the bass section
+    flat[pToneBassFreq] = 100;
+    CHECK_NEAR(colourCurveDb(flat, autoDb, fs, 20), 3.0, 0.1);
+}
 
+} // namespace
 int main() {
     sections();
     neutralAgain();
     autoTone();
     subBass();
+    curve();
     return test::finish("colour_test");
 }

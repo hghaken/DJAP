@@ -12,7 +12,9 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -33,14 +35,16 @@ const char* const kUsage =
     "        Processes an audio file offline through the same code as the live program (WAV; MP3, M4A, WMA, FLAC\n"
     "        through Windows Media Foundation; mono is played on both channels). The output is always WAV.\n"
     "        2 channels = deck A; 4 channels = deck A (1-2) and deck B (3-4).\n"
-    "        --a <preset|off>   preset of deck A, or off (unprocessed); default: deck A's preset in the settings\n"
+    "        --a <preset|off>   loudness preset of deck A, or off (unprocessed); default: the settings' choice\n"
     "        --b <preset|off>   the same for deck B (4-channel files)\n"
-    "        --ca <colour>      colour preset of deck A (tone, auto tone, sub bass, loudness); default: the settings\n"
+    "        --ca <colour>      colour of deck A (tone, auto tone, sub bass, contour); default: the settings' choice\n"
     "        --cb <colour>      the same for deck B\n"
     "        --look <ms>        limiter look-ahead 0..5 ms; default: the settings (1.5 ms)\n"
     "        --keep-delay       keep the look-ahead delay in the output, like a live device (default: removed)\n"
     "        --pcm24            write 24-bit PCM (default: 32-bit float, lossless)\n"
-    "  --presets            lists the presets and colour presets (shipped and own) with their main values\n"
+    "        --trace <file.csv> deck A every 100 ms: loudness in / out (momentary, short-term), the leveller's gain\n"
+    "                           and state, compressor, density bands, de-esser, clipper and limiter (dB)\n"
+    "  --presets            lists the loudness presets and colours (shipped and own) with their main values\n"
     "  --tone <file> [more files]\n"
     "        Long-term tone balance (60 Hz, 250 Hz, 3 kHz, 10 kHz against 1 kHz) and what the auto tone would\n"
     "        correct at 100 % (6 dB at most, treble 3 dB).\n"
@@ -183,7 +187,7 @@ std::string padded(const std::string& s, size_t width) {
 
 int presets(const Settings& s, const fs::path& ini, bool iniFound) {
     std::printf("Settings: %s%s\n\n", pathText(ini).c_str(), iniFound ? "" : " (not there yet: shipped presets only)");
-    std::printf("  %-24s %-8s %7s %9s %11s %6s %6s %8s  %s\n", "preset", "kind", "target", "lev range", "comp thr/r",
+    std::printf("  %-24s %-8s %7s %9s %11s %6s %6s %8s  %s\n", "loudness", "kind", "target", "lev range", "comp thr/r",
                 "bands", "clip", "ceiling", "used by");
     for (const Preset& p : s.presets) {
         const PresetValues& v = p.values;
@@ -207,7 +211,7 @@ int presets(const Settings& s, const fs::path& ini, bool iniFound) {
     }
     std::printf("\n  target LUFS, compressor threshold LU re target / ratio, clipper drive dB, limiter ceiling dBTP\n\n");
     std::printf("  %-24s %-8s %6s %8s %9s %7s %6s %5s %9s  %s\n", "colour", "kind", "bass", "low-mid", "presence",
-                "treble", "auto", "sub", "loudness", "used by");
+                "treble", "auto", "sub", "contour", "used by");
     for (const Preset& p : s.colours) {
         const PresetValues& v = p.values;
         std::string kind = "own";
@@ -279,18 +283,69 @@ bool chooseDeck(const Settings& s, int d, const std::string& choice, const std::
     }
     const Preset* p = s.find(name);
     if (!p) {
-        err = "there is no preset \"" + name + "\" (see --presets)";
+        err = "there is no loudness preset \"" + name + "\" (see --presets)";
         return false;
     }
     const std::string colourName = colourChoice.empty() ? s.deck[d].colour : colourChoice;
     const Preset* c = s.find(colourName, PresetKind::Colour);
     if (!c) {
-        err = "there is no colour preset \"" + colourName + "\" (see --presets)";
+        err = "there is no colour \"" + colourName + "\" (see --presets)";
         return false;
     }
     out.used = true;
     out.values = withColour(p->values, c->values);
     label = "\"" + p->name + "\", colour \"" + c->name + "\"";
+    return true;
+}
+
+// --trace: deck A's meter records summed to rows of 100 ms. Loudness per BS.1770 from the records' K-weighted energy
+// (momentary = last 400 ms, short-term = last 3 s, ungated); gains are the row's last value (leveller) or its largest
+// reduction (the others); state: quiet (the leveller holds), frozen, warm (catching up after a pause).
+bool writeTrace(const fs::path& file, const std::vector<MeterRecord>& recs, double fs, std::string& err) {
+    std::FILE* f = _wfopen(file.c_str(), L"wb");
+    if (!f) {
+        err = "cannot write the trace";
+        return false;
+    }
+    std::fprintf(f, "time_s,in_M,in_S,out_M,out_S,leveller_dB,state,compressor_dB,compressor_in,");
+    for (int b = 0; b < kMaxBands; ++b) std::fprintf(f, "density%d_dB,", b + 1);
+    std::fprintf(f, "deesser_dB,clipper_dB,limiter_dB\n");
+    struct Slice { double frames, in, out; };
+    std::vector<Slice> hist; // one per record, for the sliding windows
+    auto lufsOver = [&](double seconds, bool out) {
+        double e = 0, n = 0;
+        for (size_t i = hist.size(); i-- > 0 && n < seconds * fs;) {
+            e += out ? hist[i].out : hist[i].in;
+            n += hist[i].frames;
+        }
+        return n > 0 && e > 0 ? -0.691 + 10.0 * std::log10(e / n) : -99.0;
+    };
+    const double rowFrames = 0.1 * fs;
+    double t = 0, inRow = 0;
+    float comp = 0, deess = 0, clip = 0, lim = 0, dens[kMaxBands] = {};
+    for (const MeterRecord& r : recs) {
+        hist.push_back({static_cast<double>(r.frames), r.energyIn, r.energyOut});
+        comp = std::max(comp, r.compressorDb);
+        deess = std::max(deess, r.deEsserDb);
+        clip = std::max(clip, r.clipperDb);
+        lim = std::max(lim, r.limiterDb);
+        for (int b = 0; b < kMaxBands; ++b)
+            if (std::fabs(r.densityDb[b]) > std::fabs(dens[b])) dens[b] = r.densityDb[b];
+        inRow += r.frames;
+        t += r.frames / fs;
+        if (inRow < rowFrames) continue;
+        inRow = 0;
+        const std::string state = std::string(r.flags & mfQuiet ? "quiet " : "") + (r.flags & mfFrozen ? "frozen " : "") +
+                                  (r.flags & mfWarm ? "warm" : "");
+        std::fprintf(f, "%.1f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,", t, lufsOver(0.4, false), lufsOver(3.0, false),
+                     lufsOver(0.4, true), lufsOver(3.0, true), r.levellerDb, state.c_str(), comp, r.compressorIn);
+        for (int b = 0; b < kMaxBands; ++b) std::fprintf(f, "%.2f,", b < r.bands ? dens[b] : 0.0f);
+        std::fprintf(f, "%.2f,%.2f,%.2f\n", deess, clip, lim);
+        comp = deess = clip = lim = 0;
+        for (float& d : dens) d = 0;
+        if (hist.size() > 4096) hist.erase(hist.begin(), hist.begin() + 2048); // > 3 s kept
+    }
+    std::fclose(f);
     return true;
 }
 
@@ -306,7 +361,8 @@ void report(const char* deck, const std::string& label, const RenderStats& st, b
 }
 
 int render(const Settings& s, const fs::path& in, const fs::path& out, const std::string& a, const std::string& b,
-           const std::string& ca, const std::string& cb, double lookMs, bool keepDelay, bool pcm24) {
+           const std::string& ca, const std::string& cb, double lookMs, bool keepDelay, bool pcm24,
+           const fs::path& trace) {
     std::error_code ec;
     if (fs::exists(out, ec) && fs::equivalent(in, out, ec)) return usageError("the output file is the input file");
     WavData w;
@@ -333,7 +389,10 @@ int render(const Settings& s, const fs::path& in, const fs::path& out, const std
                 w.channels == 4 ? "deck A + deck B" : "deck A", duration(static_cast<double>(w.frames()) / w.sampleRate).c_str());
     WavData o;
     RenderResult res;
-    if (!renderOffline(w, decks, !keepDelay, 256, o, res, err)) {
+    std::vector<MeterRecord> recs;
+    RecordSink sink;
+    if (!trace.empty()) sink = [&recs](int d, const MeterRecord& r) { if (d == 0) recs.push_back(r); };
+    if (!renderOffline(w, decks, !keepDelay, 256, o, res, err, sink)) {
         std::fprintf(stderr, "render: %s\n", err.c_str());
         return 2;
     }
@@ -347,6 +406,13 @@ int render(const Settings& s, const fs::path& in, const fs::path& out, const std
         return 2;
     }
     std::printf("Wrote %s (%s)\n", pathText(out).c_str(), pcm24 ? "24-bit PCM" : "32-bit float");
+    if (!trace.empty()) {
+        if (!writeTrace(trace, recs, w.sampleRate, err)) {
+            std::fprintf(stderr, "%s: %s\n", pathText(trace).c_str(), err.c_str());
+            return 2;
+        }
+        std::printf("Wrote %s (deck A every 100 ms)\n", pathText(trace).c_str());
+    }
     return 0;
 }
 
@@ -364,7 +430,7 @@ int wmain(int argc, wchar_t** argv) {
     std::string command;
     std::vector<fs::path> files;
     std::string deckA, deckB, colourA, colourB;
-    fs::path ini;
+    fs::path ini, trace;
     double lookMs = -1.0;
     bool keepDelay = false, pcm24 = false;
     for (size_t i = 0; i < args.size(); ++i) {
@@ -382,13 +448,13 @@ int wmain(int argc, wchar_t** argv) {
             return 0;
         } else if (a == "--ca" || a == "--cb") {
             std::string& target = a == "--ca" ? colourA : colourB;
-            if (!value(target) || target.empty()) return usageError(a + " needs a colour preset name");
+            if (!value(target) || target.empty()) return usageError(a + " needs a colour name");
         } else if (a == "--render" || a == "--presets" || a == "--measure" || a == "--devices" || a == "--tone") {
             if (!command.empty()) return usageError("one command at a time (" + command + " and " + a + ")");
             command = a;
         } else if (a == "--a" || a == "--b") {
             std::string& target = a == "--a" ? deckA : deckB;
-            if (!value(target) || target.empty()) return usageError(a + " needs a preset name or off");
+            if (!value(target) || target.empty()) return usageError(a + " needs a loudness preset name or off");
         } else if (a == "--look") {
             std::string v;
             if (!value(v)) return usageError("--look needs a value in ms");
@@ -404,6 +470,10 @@ int wmain(int argc, wchar_t** argv) {
             std::string v;
             if (!value(v)) return usageError("--ini needs a file");
             ini = fs::path(args[i]);
+        } else if (a == "--trace") {
+            std::string v;
+            if (!value(v)) return usageError("--trace needs a file");
+            trace = fs::path(args[i]);
         } else if (a == "--keep-delay") {
             keepDelay = true;
         } else if (a == "--pcm24") {
@@ -432,10 +502,11 @@ int wmain(int argc, wchar_t** argv) {
 
     if (command == "--render") {
         if (files.size() != 2) return usageError("--render needs an input and an output file");
-        return render(s, files[0], files[1], deckA, deckB, colourA, colourB, lookMs, keepDelay, pcm24);
+        return render(s, files[0], files[1], deckA, deckB, colourA, colourB, lookMs, keepDelay, pcm24, trace);
     }
-    if (!deckA.empty() || !deckB.empty() || !colourA.empty() || !colourB.empty() || lookGiven || keepDelay || pcm24)
-        return usageError("--a, --b, --ca, --cb, --look, --keep-delay and --pcm24 belong to --render");
+    if (!deckA.empty() || !deckB.empty() || !colourA.empty() || !colourB.empty() || lookGiven || keepDelay || pcm24 ||
+        !trace.empty())
+        return usageError("--a, --b, --ca, --cb, --look, --keep-delay, --pcm24 and --trace belong to --render");
     if (command == "--measure") {
         if (files.empty()) return usageError("--measure needs at least one file");
         return measure(files);

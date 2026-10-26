@@ -52,10 +52,11 @@ struct DeckConfig {
     double inputGain = 1.0, outputGain = 1.0;
     double switchStep = 0.0, gainSmooth = 0.0;
     // leveller (control rate)
-    double aim = -14.0, levRange = 9.0, levStep = 0.0, levFastStep = 0.0, holdLufs = -24.0, catchStep = 0.0;
+    double aim = -14.0, levRange = 9.0, levStep = 0.0, levFastStep = 0.0, levFastUpStep = 0.0, holdLufs = -24.0,
+           catchStep = 0.0;
     double levDetMax = 1e30; // the most power one control block may add to the leveller detector
     bool catchUp = true;
-    double aFast = 0.0, aSlow = 0.0;
+    double aFast = 0.0, aMid = 0.0, aSlow = 0.0;
     // compressor (per sample)
     BiquadCoeffs compHpf;
     bool compHpfOn = true;
@@ -124,6 +125,7 @@ struct MeterRecord {
     float compressorDb = 0;            // largest compressor reduction (dB, >= 0)
     float compressorIn = -120;         // compressor detector level at the record's end (same scale as compThr)
     float densityDb[kMaxBands] = {};   // density band gains (dynamic part)
+    float autoToneDb[4] = {};          // the auto tone's corrections now: bass, low-mid, presence, treble
     float deEsserDb = 0;               // largest de-esser reduction
     float clipperDb = 0;               // largest clipper reduction
     float limiterDb = 0;               // largest limiter reduction
@@ -224,11 +226,20 @@ private:
 
     // control state
     int ctrlPos_ = 0;
-    double fastIn_ = 0.0;            // incoming K-weighted power, 0.4 s
-    double postFast_ = 0.0, postSlow_ = 0.0;
+    double fastIn_ = 0.0, midIn_ = 0.0; // incoming K-weighted power, 0.4 s and 1.5 s
+    double postFast_ = 0.0, postMid_ = 0.0, postSlow_ = 0.0; // the leveller detector: 0.4 s, 1.5 s, 3 s
+    double postGated_ = 0.0; // 0.4 s, blocks far under the 1.5 s level left out: the trend (falling, steady)
     double quietTime_ = 1e9, silenceTime_ = 1e9, musicTime_ = 0.0;
     bool quiet_ = true, longSilence_ = true, catchPending_ = false, catching_ = false;
+    bool pauseSeen_ = true; // the quiet time so far held at least 1 s of silence (a pause: warm start after it)
     bool fastDown_ = false; // the leveller comes down at the fast speed until it reaches the wanted gain
+    bool fastUp_ = false;   // ... or goes up at the fast-up speed (clearly too soft, not falling)
+    bool fell_ = false;     // the level fell (or a quiet section was released): the 3 s level restarts after it
+    double quietSteady_ = 0.0; // seconds the music has stayed under the hold level, steady (a quiet section)
+    static constexpr int kLevHist = 24;
+    double midHist_[kLevHist] = {}; // the gated level (LUFS) every 0.25 s for the last 6 s
+    double fallTime_ = 0.0;         // seconds a detected fall still counts
+    int histIdx_ = 0, histBlocks_ = 0;
     double catchTime_ = 0.0; // seconds since the catch-up started
     double riseHist_[4] = {kFloorDb, kFloorDb, kFloorDb, kFloorDb}; // 0.4 s level (LUFS) every 0.25 s
     int riseIdx_ = 0, riseBlocks_ = 0;

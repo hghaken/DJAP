@@ -1,26 +1,28 @@
 #include "placement.h"
 
+#include <commctrl.h>
+
 #include <algorithm>
 
 namespace ap::placement {
 namespace {
 
-// The owner's rectangle on screen as it is when shown: a minimised window reports its normal position in workspace
-// coordinates (relative to the work area of its monitor), turned into screen coordinates here.
-RECT shownRect(HWND owner) {
+// A window's normal rectangle on screen: as shown, or - minimised or maximised - its normal position, which Windows
+// reports in workspace coordinates (relative to the work area of its monitor), turned into screen coordinates here.
+RECT normalRect(HWND wnd) {
     RECT r{};
-    if (!IsIconic(owner)) {
-        GetWindowRect(owner, &r);
+    if (!IsIconic(wnd) && !IsZoomed(wnd)) {
+        GetWindowRect(wnd, &r);
         return r;
     }
     WINDOWPLACEMENT wp{};
     wp.length = sizeof wp;
-    GetWindowPlacement(owner, &wp);
+    GetWindowPlacement(wnd, &wp);
     r = wp.rcNormalPosition;
     MONITORINFO mi{};
     mi.cbSize = sizeof mi;
     if (GetMonitorInfoW(MonitorFromRect(&r, MONITOR_DEFAULTTONEAREST), &mi) &&
-        !(GetWindowLongW(owner, GWL_EXSTYLE) & WS_EX_TOOLWINDOW))
+        !(GetWindowLongW(wnd, GWL_EXSTYLE) & WS_EX_TOOLWINDOW))
         OffsetRect(&r, mi.rcWork.left - mi.rcMonitor.left, mi.rcWork.top - mi.rcMonitor.top);
     return r;
 }
@@ -39,11 +41,98 @@ LRESULT CALLBACK cbtProc(int code, WPARAM wp, LPARAM lp) {
     return CallNextHookEx(hook, code, wp, lp);
 }
 
+// ---- remembered places ----
+std::map<std::string, WindowPlace>* g_places = nullptr;
+std::function<void()> g_save;
+const UINT_PTR kSubclass = 0x4A50; // the tracking subclass's id
+
+struct Tracked {
+    std::string name;
+    bool maximiseFirst = false; // shown maximised the first time (it was maximised last)
+    bool moving = false;        // the user drags or sizes it now: saved when that ends
+};
+
+// The window's place now into the store, and the file saved when it changed. A hidden or minimised window is not
+// remembered (hiding into the notification area changes nothing).
+void store(HWND wnd, const Tracked& t) {
+    if (!g_places || !IsWindowVisible(wnd) || IsIconic(wnd)) return;
+    const RECT r = normalRect(wnd);
+    const WindowPlace p{r.left, r.top, r.right - r.left, r.bottom - r.top, IsZoomed(wnd) != FALSE};
+    WindowPlace& slot = (*g_places)[t.name];
+    if (slot.x == p.x && slot.y == p.y && slot.w == p.w && slot.h == p.h && slot.maximised == p.maximised) return;
+    slot = p;
+    if (g_save) g_save();
+}
+
+LRESULT CALLBACK trackProc(HWND wnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR ref) {
+    Tracked* t = reinterpret_cast<Tracked*>(ref);
+    const LRESULT result = DefSubclassProc(wnd, msg, wp, lp);
+    switch (msg) {
+    case WM_ENTERSIZEMOVE:
+        t->moving = true;
+        break;
+    case WM_EXITSIZEMOVE:
+        t->moving = false;
+        store(wnd, *t);
+        break;
+    case WM_WINDOWPOSCHANGED: { // maximise, restore, snap, Win + arrow keys, a window that fits its content
+        const WINDOWPOS* p = reinterpret_cast<const WINDOWPOS*>(lp);
+        if (!t->moving && (p->flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE)) store(wnd, *t);
+        break;
+    }
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(wnd, trackProc, kSubclass);
+        delete t;
+        break;
+    default:
+        break;
+    }
+    return result;
+}
+
+// Centred on the work area of the owner's monitor (the main monitor without an owner).
+void centreOnScreen(HWND wnd, HWND owner) {
+    HMONITOR mon = nullptr;
+    if (owner && IsWindow(owner)) {
+        const RECT o = normalRect(owner);
+        mon = MonitorFromRect(&o, MONITOR_DEFAULTTONEAREST);
+    } else {
+        mon = MonitorFromPoint(POINT{0, 0}, MONITOR_DEFAULTTOPRIMARY);
+    }
+    MONITORINFO mi{};
+    mi.cbSize = sizeof mi;
+    if (!GetMonitorInfoW(mon, &mi)) return;
+    const RECT& a = mi.rcWork;
+    RECT w;
+    GetWindowRect(wnd, &w);
+    const int cx = w.right - w.left, cy = w.bottom - w.top;
+    const int x = std::max<int>(a.left, (a.left + a.right - cx) / 2), y = std::max<int>(a.top, (a.top + a.bottom - cy) / 2);
+    SetWindowPos(wnd, nullptr, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+// The remembered place, if its title bar is still on a monitor (the screens may have changed since).
+bool restore(HWND wnd, const WindowPlace& p) {
+    RECT w;
+    GetWindowRect(wnd, &w);
+    const bool sizable = (GetWindowLongW(wnd, GWL_STYLE) & WS_THICKFRAME) != 0;
+    const int cx = sizable && p.w > 0 ? p.w : w.right - w.left, cy = sizable && p.h > 0 ? p.h : w.bottom - w.top;
+    const POINT title{p.x + cx / 2, p.y + GetSystemMetricsForDpi(SM_CYCAPTION, GetDpiForWindow(wnd)) / 2 + 4};
+    HMONITOR mon = MonitorFromPoint(title, MONITOR_DEFAULTTONULL);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof mi;
+    if (!mon || !GetMonitorInfoW(mon, &mi)) return false;
+    const int y = std::max<int>(p.y, mi.rcWork.top); // the title bar stays reachable
+    SetWindowPos(wnd, nullptr, p.x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+    // on a monitor of another scale the window got that monitor's DPI on the way (and a scaled size): once more
+    SetWindowPos(wnd, nullptr, p.x, y, cx, cy, SWP_NOZORDER | SWP_NOACTIVATE);
+    return true;
+}
+
 } // namespace
 
 void centreOn(HWND wnd, HWND owner) {
     if (!wnd || !owner || !IsWindow(owner)) return;
-    const RECT o = shownRect(owner);
+    const RECT o = normalRect(owner);
     RECT w;
     GetWindowRect(wnd, &w);
     const int cx = w.right - w.left, cy = w.bottom - w.top;
@@ -69,6 +158,39 @@ int messageBox(HWND owner, const wchar_t* text, const wchar_t* caption, UINT typ
         g_hook = nullptr;
     }
     return result;
+}
+
+void setStore(std::map<std::string, WindowPlace>* places, std::function<void()> save) {
+    g_places = places;
+    g_save = std::move(save);
+}
+
+void remember(HWND wnd, const char* name, HWND owner) {
+    if (!wnd) return;
+    const WindowPlace* p = nullptr;
+    if (g_places) {
+        auto it = g_places->find(name);
+        if (it != g_places->end()) p = &it->second;
+    }
+    if (!p || !restore(wnd, *p)) centreOnScreen(wnd, owner);
+    if (!g_places) return;
+    Tracked* t = new Tracked{name, p && p->maximised, false};
+    if (!SetWindowSubclass(wnd, trackProc, kSubclass, reinterpret_cast<DWORD_PTR>(t))) delete t;
+}
+
+int showCommand(HWND wnd) {
+    if (IsIconic(wnd)) return SW_RESTORE;
+    if (IsWindowVisible(wnd)) return SW_SHOW;
+    if (IsZoomed(wnd)) return SW_SHOWMAXIMIZED; // hidden while maximised
+    DWORD_PTR ref = 0;
+    if (GetWindowSubclass(wnd, trackProc, kSubclass, &ref) && ref) {
+        Tracked* t = reinterpret_cast<Tracked*>(ref);
+        if (t->maximiseFirst && (GetWindowLongW(wnd, GWL_STYLE) & WS_MAXIMIZEBOX)) {
+            t->maximiseFirst = false;
+            return SW_SHOWMAXIMIZED;
+        }
+    }
+    return SW_SHOWNORMAL;
 }
 
 } // namespace ap::placement

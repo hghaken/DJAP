@@ -26,11 +26,11 @@ const COLORREF kBack = RGB(28, 30, 33), kPanel = RGB(20, 22, 25), kEdge = RGB(55
                kTarget = RGB(250, 220, 90), kWell = RGB(44, 47, 52);
 
 const wchar_t* const kTips[7] = {
-    L"The compressor's curve for this deck's preset: output against input level, both in LU to the target (dashed: "
+    L"The compressor's curve for this deck's loudness preset: output against input level, both in LU to the target (dashed: "
     L"1:1, no compression). Above the threshold the line bends by the ratio, with a soft knee; make-up lifts it "
     L"back. The white dot is where the compressor works now, the amber dots where it worked in the last 3 s (the "
     L"fainter, the older): the further up the bend, the more it compresses.",
-    L"Loudness of the last 60 s, momentary (400 ms), in LU to the preset's target: orange = original (the deck's "
+    L"Loudness of the last 60 s, momentary (400 ms), in LU to the loudness preset's target: orange = original (the deck's "
     L"input), turquoise = processed (the output). The processed line should stay close to the target line; the "
     L"original shows how much the songs' levels differ.",
     L"Gains of the last 60 s: leveller (blue; up = lifted), compressor (turquoise; its reduction, 0 or down) and "
@@ -58,13 +58,13 @@ struct ChainRow {
 };
 const ChainRow kChain[13] = {
     {L"Input", RowKind::level, -1, 0, 0,
-     L"Input: the deck's loudness as it enters the processing - after the preset's input gain (blue bar: momentary, "
+     L"Input: the deck's loudness as it enters the processing - after the loudness preset's input gain (blue bar: momentary, "
      L"400 ms, LUFS) - and its peak (white mark: sample peak in dBFS, held and falling 20 dB/s). Scale -40 .. 0."},
     {L"Leveller", RowKind::change, sLeveller, ctInput, ctLeveller,
      L"Leveller: how much the slow automatic gain turns the song up or down now, in dB. Turquoise = louder, orange = "
      L"quieter."},
     {L"Colour", RowKind::change, kChainColourBit, ctLeveller, ctColour,
-     L"Colour: what the tone EQ, auto tone, sub bass and loudness contour of the deck's colour do to the level (dB, "
+     L"Colour: what the tone EQ, auto tone, sub bass and contour of the deck's colour do to the level (dB, "
      L"over 0.4 s). 'off' = a neutral colour."},
     {L"Compressor", RowKind::reduction, sCompressor, 0, 0,
      L"Compressor: its gain reduction now (dB). Bars only when the music is over its threshold."},
@@ -81,16 +81,16 @@ const ChainRow kChain[13] = {
      L"Stereo width: the level change from making the sound wider (turquoise: more side) or narrower / the bass "
      L"mono (orange), dB over 0.4 s."},
     {L"Soft clipper", RowKind::reduction, sClipper, 0, 0,
-     L"Soft clipper: how much it rounds off the highest peaks now (dB). Its drive is part of the preset's level "
+     L"Soft clipper: how much it rounds off the highest peaks now (dB). Its drive is part of the loudness preset's level "
      L"plan: the leveller aims that much lower and the clipper adds it back."},
     {L"Limiter", RowKind::reduction, sLimiter, 0, 0,
      L"Limiter: its gain reduction now (dB), keeping the true peak under the ceiling."},
     {L"Output gain", RowKind::change, -1, ctLimiter, ctOutput,
-     L"Output gain: the preset's last trim after the limiter (only down), dB. Also shows a bypass (the output is "
+     L"Output gain: the loudness preset's last trim after the limiter (only down), dB. Also shows a bypass (the output is "
      L"then the input)."},
     {L"Output", RowKind::level, -1, 0, 0,
      L"Output: the deck's loudness as it leaves (blue bar: momentary, 400 ms, LUFS) and its peak (white mark: true "
-     L"peak in dBTP, held and falling 20 dB/s, never over the limiter's ceiling); the yellow mark is the preset's "
+     L"peak in dBTP, held and falling 20 dB/s, never over the limiter's ceiling); the yellow mark is the loudness preset's "
      L"target (after its output gain). Scale -40 .. 0."},
 };
 
@@ -189,9 +189,9 @@ void AnalysisWindow::show(HWND owner) {
         RECT r{0, 0, px(1560), px(640)};
         AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_);
         SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
-        placement::centreOn(hwnd_, owner);
+        placement::remember(hwnd_, "Analysis", owner);
     }
-    ShowWindow(hwnd_, SW_SHOWNORMAL);
+    ShowWindow(hwnd_, placement::showCommand(hwnd_));
     SetForegroundWindow(hwnd_);
 }
 
@@ -641,7 +641,7 @@ void AnalysisWindow::paintChain(HDC dc, int d, const RECT& p, bool live) {
         const bool on = row.bit < 0 || (live ? (met.active >> row.bit & 1) != 0
                                              : row.bit == kChainColourBit ? makeColourConfig(v, 48000, 3000).any()
                                                                           : v[kStageParam[row.bit]] >= 0.5);
-        // the value: LUFS for a level row, dB for the others. The input is shown after the preset's input gain
+        // the value: LUFS for a level row, dB for the others. The input is shown after the loudness preset's input gain
         // (what enters the processing); the measured points around the leveller include that gain, so the
         // leveller's row takes it out (nothing is applied while bypassed)
         const double inGain = settings_.deck[d].processing ? v[pInputGain] : 0.0;

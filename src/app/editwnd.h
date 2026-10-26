@@ -2,7 +2,7 @@
 // parameter - name, slider, value (typed values are taken too), unit, a small reset button (back to its reset value)
 // and what it does. Save as, rename, delete, reset preset. Every change is heard at once on each deck using the
 // preset and saved at once (a slider when it is let go). Tooltips on the buttons and on every row. One modeless
-// window, owned by the main window; the same window edits colour presets (tabs Tone, Auto tone, Sub bass, Loudness).
+// window, owned by the main window; the same window edits colour presets (tabs Tone, Auto tone, Sub bass, Contour).
 #pragma once
 
 #include "settings.h"
@@ -33,6 +33,12 @@ public:
     // Values or presets changed elsewhere (the main window's bass sliders).
     void refresh();
     HWND hwnd() const { return hwnd_; }
+    // What the window calls deck A (the plug-in: "this plug-in").
+    void setDeckName(const std::wstring& name) { deckA_ = name; }
+    // The module whose window classes these are: the program (by default), or the plug-in DLL - which removes them
+    // before it is unloaded (a class left behind would point into freed code).
+    static void setModule(HINSTANCE instance);
+    static void unregisterClasses();
 
 private:
     // The controls of one parameter's row (created once for every parameter of the kind; a tab shows its own).
@@ -49,6 +55,9 @@ private:
     void createRows();
     void setFonts();
     void layout();
+    int place(int cw, int ch, const std::string& stage, bool move); // lays out (move) or measures
+    int neededHeight(int cw);                                        // the tallest tab's height at this width
+    void fit();                                                      // grow to the minimum size if smaller
     void fillPresets();
     void fillTabs();       // tab labels (a stage that is off says so)
     void showRows();       // the current tab's rows (the band count decides which density rows exist), laid out
@@ -65,6 +74,8 @@ private:
     void command(int id, int code);
     int rowOf(HWND control) const;
     bool shown(size_t r) const;
+    bool shownOn(size_t r, const std::string& stage) const;
+    std::wstring nameOf(size_t r) const;
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
     bool colour() const { return kind_ == PresetKind::Colour; }
     // the preset (or colour) deck d uses
@@ -78,8 +89,9 @@ private:
          resetPreset_ = nullptr, note_ = nullptr, tabs_ = nullptr;
     HWND soundTitle_ = nullptr, sound_ = nullptr; // under the rows: what the stage does to the sound
     HWND about_ = nullptr;                         // under the choice: what the chosen preset or colour does
-    std::wstring aboutText_;
-    int aboutH_ = 0;
+    std::wstring aboutText_, noteText_;
+    int aboutH_ = 0, noteH_ = 0;
+    static constexpr int kMinClientWidth = 800; // at 96 DPI: the buttons beside the choice, the rows' columns
     // the line above it, painted by the window itself (an etched static control left old pixels in its rect)
     RECT soundLine_ = {};
     HFONT font_ = nullptr, bold_ = nullptr, symbol_ = nullptr; // symbol_: the reset buttons' arrow
@@ -88,6 +100,7 @@ private:
     theme::Metal metal_;
     std::string current_;
     int deck_ = 0;
+    std::wstring deckA_ = L"deck A";
     std::vector<std::string> tabStages_; // the stage of each tab
     std::string tab_;                    // the stage shown
     std::vector<Row> rows_;

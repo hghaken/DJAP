@@ -2,6 +2,9 @@
 #include "check.h"
 #include "deckrun.h"
 
+#include <cmath>
+#include <functional>
+
 using namespace ap;
 using sig::Buffer;
 using tdeck::allOff;
@@ -212,6 +215,81 @@ void levellerFastDown() {
     CHECK_NEAR(chorus[1], chorus[0], 0.5);
 }
 
+// Quiet sections inside a song (client, 2026-10-26: a song whose spoken verses lie 10 LU under its choruses stayed
+// 6-8 LU under the target for 10-19 s after each chorus). Target -14, range 12 dB, 1 dB/s, hold 10 LU, fast down
+// 10 dB/s. A verse with gaps between its phrases is levelled within seconds; a steady breakdown keeps its drop for
+// its first seconds; a slow fade (1 dB/s) is never turned up.
+void levellerQuietSections() {
+    std::printf("-- leveller and quiet sections (target -14 LUFS, range 12 dB, 1 dB/s, hold 10 LU)\n");
+    PresetValues v = allOff();
+    v[pLevOn] = 1;
+    v[pLevCatchUp] = 1;
+    v[pTarget] = -14;
+    v[pLevRange] = 12;
+    v[pLevSpeed] = 1;
+    v[pLevHold] = 10;
+    v[pLevFastDown] = 10;
+    auto gainAt = [](const tdeck::Stereo& o, const Buffer& in, double from, double to) {
+        const size_t a = static_cast<size_t>(from * fs), n = static_cast<size_t>((to - from) * fs);
+        return tdeck::rmsDb(o.l, a, n) - tdeck::rmsDb(in, a, n);
+    };
+    auto shape = [](Buffer& l, Buffer& r, const std::function<double(double)>& db) {
+        for (size_t i = 0; i < l.size(); ++i) {
+            const float g = static_cast<float>(dbToLin(db(static_cast<double>(i) / fs)));
+            l[i] *= g;
+            r[i] *= g;
+        }
+    };
+
+    // chorus -12 LUFS (0-20 s), verse 10 LU softer with a 0.8 s gap every 3 s (20-45 s), chorus again
+    Buffer l = sig::beatMusic(fs, 60, 124, 11), r = sig::beatMusic(fs, 60, 124, 12);
+    tdeck::setLoudness(fs, l, r, -12);
+    shape(l, r, [](double t) {
+        if (t < 20 || t >= 45) return 0.0;
+        return std::fmod(t - 20, 3.0) > 2.2 ? -40.0 : -10.0;
+    });
+    tdeck::Stereo o = run(fs, v, l, r);
+    const double chorus = gainAt(o, l, 17, 20), drop = gainAt(o, l, 20, 22);
+    const double verse = tdeck::loudness(fs, o.l, o.r, static_cast<size_t>(29 * fs), static_cast<size_t>(45 * fs));
+    std::printf("   verse with gaps: gain %.2f dB in the chorus, %.2f in the verse's first 2 s; verse from 9 s on %.2f LUFS; "
+                "gain per s from 18 s:", chorus, drop, verse);
+    for (double t = 18; t < 32; t += 1.0) std::printf(" %.1f", gainAt(o, l, t, t + 1));
+    std::printf("\n");
+    CHECK(drop <= chorus + 0.5);     // the drop itself is heard
+    CHECK_NEAR(verse, -14.0, 2.0);   // then the verse comes up to the target
+
+    // a steady breakdown 10 LU down for 16 s: its first 3 s keep the drop
+    l = sig::beatMusic(fs, 50, 124, 13);
+    r = sig::beatMusic(fs, 50, 124, 14);
+    tdeck::setLoudness(fs, l, r, -14);
+    shape(l, r, [](double t) { return t >= 20 && t < 36 ? -10.0 : 0.0; });
+    o = run(fs, v, l, r);
+    const double before = gainAt(o, l, 17, 20), first = gainAt(o, l, 20, 23);
+    const double back = tdeck::loudness(fs, o.l, o.r, static_cast<size_t>(39 * fs), static_cast<size_t>(50 * fs));
+    std::printf("   breakdown: gain %.2f dB before, %.2f in its first 3 s; %.2f LUFS 3-14 s after its end; gain per s from "
+                "18 s:", before, first, back);
+    for (double t = 18; t < 42; t += 1.0) std::printf(" %.1f", gainAt(o, l, t, t + 1));
+    std::printf("\n");
+    CHECK(first <= before + 1.0);
+    CHECK_NEAR(back, -14.0, 1.0);
+
+    // a slow fade-out: 1 dB/s for 40 s. It is recognised as a fall after about 4 s (two 2 s halves, each down more than
+    // 0.8 dB); until then the leveller may follow it at its own speed, so up to 2 dB here (a fast fade: 1 dB, above)
+    l = sig::beatMusic(fs, 60, 124, 15);
+    r = sig::beatMusic(fs, 60, 124, 16);
+    tdeck::setLoudness(fs, l, r, -14);
+    shape(l, r, [](double t) { return t < 15 ? 0.0 : -(t - 15); });
+    o = run(fs, v, l, r);
+    const double start = gainAt(o, l, 13, 15);
+    double worst = -100;
+    for (double t = 15; t < 50; t += 0.5) worst = std::max(worst, gainAt(o, l, t, t + 0.5));
+    std::printf("   slow fade 1 dB/s: gain %.2f dB before, highest during the fade %.2f dB; gain per 2 s from 13 s:", start,
+                worst);
+    for (double t = 13; t < 51; t += 2.0) std::printf(" %.1f", gainAt(o, l, t, t + 2));
+    std::printf("\n");
+    CHECK(worst <= start + 2.0); // before this rule: +4.7 dB (+12 with the first version of the quiet-section release)
+}
+
 double magnitudeAt(const Buffer& ir, double hz) {
     double re = 0, im = 0;
     const double w = 2 * kPi * hz / fs;
@@ -264,6 +342,19 @@ void densityBank() {
     std::printf("   band 1 at +6 dB: 1 kHz moved %.5f dB, 20 Hz %.2f dB\n", moved, magnitudeAt(ir, 20));
     CHECK(std::fabs(moved) < 0.001);
     CHECK_NEAR(magnitudeAt(ir, 20), 5.97, 0.1);
+    // the full range (client, 2026-10-26: -12 .. +12 dB, was -6 .. +6): band 3 at its ends, measured in its geometric
+    // middle (707 Hz); nearer a split the LR4 neighbours still blend in (at 1 kHz, 1.3 octaves under the 2.5 kHz split:
+    // +11.8 / -11.4 dB)
+    v[pDensGain1] = 0;
+    const double ref707 = magnitudeAt(densityImpulse(v), 707);
+    for (double g : {12.0, -12.0}) {
+        v[pDensGain3] = g;
+        const Buffer band3 = densityImpulse(v);
+        const double mid = magnitudeAt(band3, 707) - ref707, at1k = magnitudeAt(band3, 1000) - ref;
+        std::printf("   band 3 at %+.0f dB: 707 Hz %+.2f dB, 1 kHz %+.2f dB\n", g, mid, at1k);
+        CHECK_NEAR(mid, g, 0.5);
+    }
+    CHECK(paramInfo(pDensGain3).min == -12.0 && paramInfo(pDensGain3).max == 12.0);
 }
 
 void densityAction() {
@@ -436,6 +527,7 @@ int main() {
     leveller();
     levellerFadeIn();
     levellerFastDown();
+    levellerQuietSections();
     densityBank();
     densityAction();
     width();
