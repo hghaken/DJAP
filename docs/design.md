@@ -593,11 +593,13 @@ rows 6 px apart, each text block as high as its lines (driver info 2, state 3 wi
 health 3, note 2) and the window as high as its content, so it is lower with one channel than with two decks.
 
 Updates (client, 2026-10-25: "check daily, report, install after one click - not while audio runs - and an off
-switch in Setup"; `src/core/release.*`, `src/app/updater.*`): with `[Updates] CheckUpdates=1` (default; Setup ->
+switch in Setup"; 2026-10-26: "after the online update, start the audio again automatically"; `src/core/release.*`, `src/app/updater.*`): with `[Updates] CheckUpdates=1` (default; Setup ->
 Updates) the program asks GitHub's API for the latest release of the public repository 15 s after the start and then
 once a day (also Setup -> Check now). A newer version (`compareVersions`, numeric parts) is reported once per version
 by a balloon at the notification-area icon, in the status bar and in Setup; nothing is downloaded before the user
-clicks Install update, which is greyed while the audio runs (and refused with a message if it was started meanwhile).
+clicks Install update. While the audio runs it asks first (the audio stops during the update); the audio then stops
+with the program's usual fade-out, `StartAudio` stays 1, and the restarted program starts it again (`startSavedAudio`,
+retried every 5 s for 2 minutes). Not during a simulation.
 The setup asset `DJAP-Setup-<version>.exe` is downloaded into `%TEMP%\DJAP-update` and checked against the SHA-256
 GitHub publishes for it (the asset's `digest`, else a `<setup>.sha256` asset); without a checksum, or when it does
 not match, nothing is installed. Then the program starts the setup with `/SILENT /SUPPRESSMSGBOXES /NORESTART

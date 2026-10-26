@@ -282,8 +282,8 @@ void AudioWindow::createControls() {
     tips_.add(checkNow_, L"Asks GitHub now whether a newer version is there.");
     tips_.add(install_, L"Downloads the new version's setup from GitHub, checks it against the checksum GitHub "
                         L"publishes for it (a setup that does not match is never run), closes DJAP and installs it; "
-                        L"DJAP then starts again with your settings. Windows may ask for permission. Not while the "
-                        L"audio runs: stop it first (the update interrupts the sound for a few seconds).");
+                        L"DJAP then starts again with your settings. Windows may ask for permission. While the "
+                        L"audio runs it asks first: the audio stops during the update and starts again by itself.");
     tips_.add(updateInfo_, L"This version, and what the last check of GitHub found.");
 }
 
@@ -807,7 +807,7 @@ void AudioWindow::command(int id, int code) {
 void AudioWindow::refresh() {
     if (!hwnd_) return;
     const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
-    // updates: this version and what the last check found; install only while no audio runs
+    // updates: this version and what the last check found; installing while the audio runs asks first
     if (updater_) {
         const Updater::State st = updater_->state();
         const std::wstring me = fromUtf8(AP_VERSION_STRING), next = fromUtf8(updater_->release().version);
@@ -821,7 +821,7 @@ void AudioWindow::refresh() {
             break;
         case Updater::State::Available:
             text = L"DJAP " + next + L" is available (this is " + me + L")" +
-                   (running ? L" - stop the audio to install it" : L"");
+                   (running ? L" - the audio pauses while it installs" : L"");
             break;
         case Updater::State::Downloading:
             text = L"Downloading DJAP " + next + L": " + std::to_wstring(updater_->percent()) + L" %";
@@ -837,7 +837,7 @@ void AudioWindow::refresh() {
         if (text != old) SetWindowTextW(updateInfo_, text.c_str());
         const bool newer = !next.empty() && compareVersions(updater_->release().version, AP_VERSION_STRING) > 0;
         EnableWindow(checkNow_, !updater_->busy() && st != Updater::State::Ready);
-        EnableWindow(install_, newer && !running && !audio_.simulating() &&
+        EnableWindow(install_, newer && !audio_.simulating() &&
                                    (st == Updater::State::Available || st == Updater::State::Failed));
     }
     EnableWindow(close_, asio() && open);

@@ -124,9 +124,9 @@ before the first run.
 
 Updates: once a day DJAP asks GitHub whether a newer release of this repository exists and tells you (a message at
 the notification-area icon, and in Setup -> Updates; switch it off there). Nothing is downloaded until you click
-Install update, which is not possible while the audio runs. The setup is then downloaded, checked against the
-SHA-256 checksum GitHub publishes for it, installed silently into the same folder, and DJAP starts again with your
-settings.
+Install update. The setup is then downloaded, checked against the SHA-256 checksum GitHub publishes for it,
+installed silently into the same folder, and DJAP starts again with your settings; audio that ran before the update
+starts again by itself.
 
 ## Tests
 

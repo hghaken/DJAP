@@ -1,5 +1,5 @@
-// Updates (docs/design.md section 8, "Updates"; client, 2026-10-25: "check daily, report, install after one click -
-// not while audio runs - and an off switch in Setup"). Asks GitHub for the latest release, downloads its setup into
+// Updates (docs/design.md section 8, "Updates"; client, 2026-10-25: "check daily, report, install after one click
+// and an off switch in Setup"; 2026-10-26: running audio starts again after the update). Asks GitHub for the latest release, downloads its setup into
 // %TEMP%\DJAP-update, checks it against the SHA-256 GitHub publishes for it (no checksum: no install), and starts it
 // silently for the program's own folder; the program then ends and the setup starts it again. Only https from
 // GitHub (or, for tests, the host of the settings' Url); all network work on a thread of its own.

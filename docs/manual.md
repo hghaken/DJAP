@@ -324,8 +324,7 @@ the audio again (a short fade-out and fade-in).
 
 - **Check GitHub for a new version once a day** - on by default.
 - **Check now** asks at once.
-- **Install update** downloads and installs a newer version (chapter 11). Greyed while the audio runs or when there is
-  nothing newer.
+- **Install update** downloads and installs a newer version (chapter 11). Greyed when there is nothing newer.
 - The text beside the buttons shows this version and what the last check found.
 
 ### 5.4 Start, stop and state
@@ -722,11 +721,12 @@ in the Setup window. **Nothing is downloaded or installed until you click Instal
 
 Install update:
 
-1. is only possible while the audio is stopped (an update closes DJAP for a few seconds);
+1. asks first while the audio runs: the audio stops during the update (usually less than half a minute) and starts
+   again by itself with the new version;
 2. downloads the new setup and checks it against the SHA-256 checksum GitHub publishes for it - a setup that does not
    match, or has no checksum, is never run;
 3. closes DJAP (with a fade-out) and runs the setup silently for the same folder; Windows may ask for permission;
-4. starts DJAP again with your settings. "Start with Windows" stays as you set it.
+4. starts DJAP again with your settings - and the audio, when it ran before. "Start with Windows" stays as you set it.
 
 If something goes wrong the Setup window says what. The setup's log of the last update is in
 `%TEMP%\DJAP-update\setup.log`.

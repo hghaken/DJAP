@@ -689,13 +689,20 @@ void MainWindow::checkForUpdate() {
 }
 
 void MainWindow::installUpdate() {
-    // never while audio runs: the update stops the program (the Setup window's button is greyed then too)
-    if (audio_.deviceRunning() || audio_.simulating()) {
-        placement::messageBox(audioWindow_.hwnd() ? audioWindow_.hwnd() : hwnd_,
-                              L"Stop the audio first: the update closes DJAP for a few seconds.", L"Update",
+    HWND owner = audioWindow_.hwnd() ? audioWindow_.hwnd() : hwnd_;
+    if (audio_.simulating()) { // a test's simulation is never ended by an update
+        placement::messageBox(owner, L"End the simulation first: the update closes DJAP.", L"Update",
                               MB_OK | MB_ICONINFORMATION);
         return;
     }
+    // while the audio runs (client, 2026-10-26: "after the online update, start the audio again automatically"): it
+    // stops when the setup starts and the new version starts it again (StartAudio stays on, startSavedAudio)
+    if (audio_.deviceRunning() &&
+        placement::messageBox(owner,
+                              L"The audio stops while DJAP updates - usually less than half a minute - and starts again "
+                              L"by itself with the new version.\n\nInstall the update now?",
+                              L"Update", MB_YESNO | MB_ICONQUESTION) != IDYES)
+        return;
     updater_.download(hwnd_);
 }
 
@@ -712,7 +719,7 @@ void MainWindow::updateEvent(WPARAM what) {
         }
     }
     if (what == 1 && updater_.state() == Updater::State::Ready) {
-        if (audio_.deviceRunning()) return; // started in the meantime: not now (the button stays)
+        // running audio stops when the program ends (fade-out); StartAudio stays on, so the new version starts it
         std::string err;
         if (updater_.launch(testRun_ ? ini_ : std::filesystem::path(), err)) { // the setup waits for this program to end, installs, starts it again
             quitting_ = true;
