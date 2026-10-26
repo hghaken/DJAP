@@ -411,6 +411,46 @@ void handEdited() {
     Settings w2;
     w2.fromText("[Window]\r\nX=-1\r\nY=-1\r\n"); // never moved
     CHECK(w2.windows.empty());
+
+    // hand-written numbers: a decimal comma is read, "nan" is refused (the look-ahead keeps its default)
+    Settings n;
+    n.fromText("[Audio]\r\nLookAheadMs=2,5\r\n");
+    CHECK_NEAR(n.lookAheadMs, 2.5, 1e-12);
+    n.fromText("[Audio]\r\nLookAheadMs=nan\r\n");
+    CHECK_NEAR(n.lookAheadMs, 1.5, 1e-12);
+}
+
+// A settings file an editor saved as UTF-16 is read (it read as empty and the next save dropped the own presets), and
+// a file that is there but cannot be read is never overwritten.
+void unreadable(const fs::path& dir) {
+    std::printf("-- UTF-16 and unreadable settings files\n");
+    std::string err;
+    Settings s;
+    CHECK(s.saveAs("Mine", defaultValues(), err));
+    s.deck[0].preset = "Mine";
+    const std::string text = s.toText();
+    std::string utf16 = "\xFF\xFE"; // little endian with its BOM (the text is ASCII here)
+    for (char c : text) {
+        utf16 += c;
+        utf16 += '\0';
+    }
+    const fs::path file = dir / "utf16.ini";
+    {
+        std::ofstream out(file, std::ios::binary);
+        out.write(utf16.data(), static_cast<std::streamsize>(utf16.size()));
+    }
+    Settings r;
+    CHECK(r.load(file));
+    CHECK(r.find("Mine") != nullptr && r.deck[0].preset == "Mine");
+
+    // a "file" that cannot be read (here a folder of that name): saveMerged refuses and leaves it
+    const fs::path locked = dir / "locked.ini";
+    std::error_code ec;
+    fs::create_directory(locked, ec);
+    Settings base = s;
+    CHECK(!s.saveMerged(locked, base, Settings::SaveRole::Owner));
+    CHECK(fs::is_directory(locked, ec));
+    fs::remove(locked, ec);
 }
 
 // The positions of every parameter (the GUI's sliders, the plug-in's host steps): the ends are the range (or "auto" /
@@ -524,6 +564,7 @@ int main() {
     presetRules();
     handEdited();
     merged(dir);
+    unreadable(dir);
     std::error_code ec;
     fs::remove_all(dir, ec);
     return test::finish("settings_test");

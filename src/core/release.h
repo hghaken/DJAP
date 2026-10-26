@@ -27,6 +27,10 @@ bool parseLatestRelease(const std::string& json, ReleaseInfo& out, std::string& 
 // ("+dev") are ignored, missing parts count as 0. <0, 0 or >0.
 int compareVersions(const std::string& a, const std::string& b);
 
+// The checksum of `setupName` in a .sha256 file: the 64-hex word on the line that names the setup (as sha256sum
+// writes "<hash>  <name>"), or the file's only 64-hex word. Lower case; empty when it is not clear which one it is.
+std::string checksumFor(const std::string& text, const std::string& setupName);
+
 // SHA-256 (FIPS 180-4), fed in pieces.
 class Sha256 {
 public:

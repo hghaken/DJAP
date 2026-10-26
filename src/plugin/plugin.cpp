@@ -260,7 +260,7 @@ tresult PLUGIN_API Plugin::canProcessSampleSize(int32 symbolicSampleSize) {
 uint32 PLUGIN_API Plugin::getLatencySamples() { return latency_.load(); }
 
 void Plugin::setLatencyFrom(double lookMs) {
-    const auto frames = static_cast<uint32>(std::lround(std::min(kMaxLook, std::max(0.0, lookMs)) * fs_ / 1000.0));
+    const auto frames = static_cast<uint32>(lookFrames(lookMs, fs_)); // the deck's own rule
     if (latency_.exchange(frames) != frames && componentHandler) componentHandler->restartComponent(kLatencyChanged);
 }
 
@@ -360,9 +360,17 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     IBStreamer s(state, kLittleEndian);
     int32 version = 0, count = 0;
     if (!s.readInt32(version) || version < 1) return kResultFalse;
+    // writeStr8's format (length with the NUL, then the bytes), read with its length: the SDK's readStr8 leaves the
+    // text without a NUL when a project file is cut off or damaged, and a string made from it read past its end
     auto readText = [&s]() {
-        std::unique_ptr<char8[]> t(s.readStr8());
-        return std::string(t ? t.get() : "");
+        int32 length = 0;
+        if (!s.readInt32(length) || length <= 0 || length > 262144) return std::string();
+        std::string t(static_cast<size_t>(length), '\0');
+        const TSize got = s.readRaw(t.data(), length);
+        t.resize(got > 0 ? static_cast<size_t>(got) : 0);
+        const size_t end = t.find('\0');
+        if (end != std::string::npos) t.resize(end);
+        return t;
     };
     const std::string preset = readText(), colour = readText();
     double look = 1.5;

@@ -18,6 +18,7 @@
 #include "sysaudio.h"
 
 #include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <string>
 #include <thread>
@@ -79,6 +80,8 @@ public:
                      std::string& error);
     void stopDevice();
     bool driverOpen() const;
+    // The ASIO driver that is open (the name it was opened with); a start with another one chosen opens that first.
+    const std::string& driverName() const { return driver_; }
     bool deviceRunning() const; // ASIO or another API
     bool audioActive() const { return simulating() || deviceRunning(); }
     // Deck d runs with an ASIO output and an input of another API (while the device runs).
@@ -94,7 +97,8 @@ public:
     // Health of what runs (ASIO: the engine's counters; other APIs: both decks' streams).
     EngineHealth health() const { return systemRunning() ? sys_.health() : engine_.health(); }
     void resetHealth();
-    // An automatic restart (after a driver reset request) that failed; empty when all is well.
+    // An automatic restart (after a driver reset request) that is still being tried, or that failed; empty when all
+    // is well.
     const std::string& deviceError() const { return deviceError_; }
 #if AP_HAVE_ASIO
     const AsioHost& host() const { return host_; }
@@ -126,6 +130,12 @@ private:
 #endif
     void* window_ = nullptr;
     std::string driver_, deviceError_;
+    // A driver's reset request: the driver is opened (and started, when it ran) again every second for up to
+    // kResetTries - a USB interface that enumerates again, or a new rate set in its control panel, is not ready at once.
+    static constexpr int kResetTries = 60;
+    bool resetPending_ = false, resetWasRunning_ = false;
+    int resetTries_ = 0;
+    std::chrono::steady_clock::time_point resetDue_{};
     double rate_ = 0;
     long buffer_ = 0;
     AsioChannels channels_;

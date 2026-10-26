@@ -8,6 +8,7 @@
 #include <fstream>
 #include <map>
 #include <sstream>
+#include <thread>
 
 namespace ap {
 
@@ -34,11 +35,17 @@ std::string compact(double v) {
     return s == "-0" ? "0" : s;
 }
 
+// A number as written by hand too: "1,5" (a Dutch decimal comma) is 1.5; "nan" and "inf" are refused
+// (a "nan" look-ahead became 0 and switched the true-peak limiting off). Text after the number ("-14 LUFS") is ignored.
 bool parseDouble(const std::string& s, double& out) {
+    std::string t = s;
+    if (t.find('.') == std::string::npos) std::replace(t.begin(), t.end(), ',', '.');
     try {
         size_t used = 0;
-        out = std::stod(s, &used);
-        return used > 0;
+        const double d = std::stod(t, &used);
+        if (used == 0 || !std::isfinite(d)) return false;
+        out = d;
+        return true;
     } catch (...) {
         return false;
     }
@@ -46,7 +53,50 @@ bool parseDouble(const std::string& s, double& out) {
 
 int toInt(const std::string& s, int fallback) {
     double d;
-    return parseDouble(s, d) ? static_cast<int>(std::lround(d)) : fallback;
+    if (!parseDouble(s, d) || std::fabs(d) > 1e9) return fallback;
+    return static_cast<int>(std::lround(d));
+}
+
+// The text of a settings file: UTF-8 (with or without its BOM, which fromText skips), or UTF-16 with its BOM - what an
+// editor writes when the file is saved as "Unicode". Taken as UTF-8 that read as an empty file, and the next save
+// wrote the file without the user's own presets.
+std::string decodeText(const std::string& raw) {
+    if (raw.size() < 2) return raw;
+    const unsigned char b0 = static_cast<unsigned char>(raw[0]), b1 = static_cast<unsigned char>(raw[1]);
+    const bool le = b0 == 0xFF && b1 == 0xFE, be = b0 == 0xFE && b1 == 0xFF;
+    if (!le && !be) return raw;
+    std::string out;
+    auto unit = [&](size_t i) {
+        const unsigned a = static_cast<unsigned char>(raw[i]), b = static_cast<unsigned char>(raw[i + 1]);
+        return le ? (a | (b << 8)) : ((a << 8) | b);
+    };
+    for (size_t i = 2; i + 1 < raw.size(); i += 2) {
+        unsigned c = unit(i);
+        if (c >= 0xD800 && c < 0xDC00 && i + 3 < raw.size()) { // a surrogate pair
+            const unsigned lo = unit(i + 2);
+            if (lo >= 0xDC00 && lo < 0xE000) {
+                c = 0x10000 + ((c - 0xD800) << 10) + (lo - 0xDC00);
+                i += 2;
+            }
+        }
+        if (c >= 0xD800 && c < 0xE000) c = 0xFFFD; // a lone surrogate
+        if (c < 0x80) {
+            out += static_cast<char>(c);
+        } else if (c < 0x800) {
+            out += static_cast<char>(0xC0 | (c >> 6));
+            out += static_cast<char>(0x80 | (c & 0x3F));
+        } else if (c < 0x10000) {
+            out += static_cast<char>(0xE0 | (c >> 12));
+            out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (c & 0x3F));
+        } else {
+            out += static_cast<char>(0xF0 | (c >> 18));
+            out += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
+            out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
+            out += static_cast<char>(0x80 | (c & 0x3F));
+        }
+    }
+    return out;
 }
 
 const char* const kPresetPrefix = "Preset ";
@@ -359,6 +409,8 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Audio", "LookAheadMs")) {
         double d;
         if (parseDouble(*v, d)) lookAheadMs = std::min(5.0, std::max(0.0, d));
+        // the old choices 0.5 and 1.0 ms: under the true-peak minimum, they become the default (deck.h, lookFrames)
+        if (lookAheadMs > 0.0 && lookAheadMs < 1.5) lookAheadMs = 1.5;
     }
     if (auto v = get("Audio", "BufferSize")) bufferSize = std::min(8192, std::max(0, toInt(*v, 0)));
     if (auto v = get("Audio", "StartAudio")) startAudio = toInt(*v, 0) != 0;
@@ -465,7 +517,8 @@ bool Settings::load(const std::filesystem::path& file) {
     if (!in) return false;
     std::stringstream ss;
     ss << in.rdbuf();
-    fromText(ss.str());
+    if (in.bad()) return false;
+    fromText(decodeText(ss.str()));
     return true;
 }
 
@@ -475,20 +528,28 @@ bool Settings::save(const std::filesystem::path& file) const {
     tmp += "." + std::to_string((reinterpret_cast<uintptr_t>(this) >> 4) ^
                                 static_cast<uintptr_t>(std::chrono::steady_clock::now().time_since_epoch().count())) +
            ".tmp";
+    std::error_code ec;
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         if (!out) return false;
         const std::string text = toText();
         out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        if (!out) return false;
+        out.flush();
+        out.close(); // a full disk shows here, not in the destructor
+        if (!out) {
+            std::filesystem::remove(tmp, ec);
+            return false;
+        }
     }
-    std::error_code ec;
-    std::filesystem::rename(tmp, file, ec);
-    if (ec) {
-        std::filesystem::remove(tmp, ec);
-        return false;
+    // a virus scanner or the plug-in reading the file can hold it for a moment: a few tries
+    for (int attempt = 0;; ++attempt) {
+        std::filesystem::rename(tmp, file, ec);
+        if (!ec) return true;
+        if (attempt == 4) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
-    return true;
+    std::filesystem::remove(tmp, ec);
+    return false;
 }
 
 namespace {
@@ -525,7 +586,9 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
     Settings now; // the file as it is now (the shipped lists when there is none yet)
     std::error_code ec;
     const bool existed = std::filesystem::exists(file, ec);
-    if (existed) now.load(file);
+    // a file that is there but cannot be read is never overwritten: merged against the shipped lists alone, it would
+    // lose every own preset this writer did not change
+    if (existed && !now.load(file)) return false;
     Settings out = role == SaveRole::Owner ? *this : now;
     out.presets = now.presets;
     out.colours = now.colours;

@@ -88,7 +88,41 @@ double magnitudeDb(const SvfCoeffs& c, double fs, double hz) {
     return 20.0 * std::log10(std::abs(c.m0 + c.m1 * s / d + c.m2 / d));
 }
 
+void halfband(int count, double transition, double* out) {
+    // the elliptic modulus from the transition band, then each coefficient from theta-function series
+    double k = std::tan((1.0 - transition * 2.0) * kPi / 4.0);
+    k *= k;
+    const double kk = std::pow(1.0 - k * k, 0.25), e = 0.5 * (1.0 - kk) / (1.0 + kk), e2 = e * e, e4 = e2 * e2;
+    const double q = e * (1.0 + e4 * (2.0 + e4 * (15.0 + 150.0 * e4)));
+    const int order = count * 2 + 1;
+    for (int index = 0; index < count; ++index) {
+        const int c = index + 1;
+        double num = 0.0, den = 0.0, t = 0.0;
+        for (int i = 0, sign = 1;; ++i, sign = -sign) {
+            t = std::pow(q, i * (i + 1)) * std::sin((i * 2 + 1) * c * kPi / order) * sign;
+            num += t;
+            if (std::fabs(t) <= 1e-100 || i > 64) break;
+        }
+        for (int i = 1, sign = -1;; ++i, sign = -sign) {
+            t = std::pow(q, i * i) * std::cos(i * 2 * c * kPi / order) * sign;
+            den += t;
+            if (std::fabs(t) <= 1e-100 || i > 64) break;
+        }
+        const double ww = num * std::pow(q, 0.25) / (den + 0.5), wwsq = ww * ww;
+        const double x = std::sqrt((1.0 - wwsq * k) * (1.0 - wwsq / k)) / (1.0 + wwsq);
+        out[index] = (1.0 - x) / (1.0 + x);
+    }
+}
+
 } // namespace design
+
+const double* halfbandCoefs() {
+    static const struct Coefs {
+        double c[kHalfbandCoefs];
+        Coefs() { design::halfband(kHalfbandCoefs, 0.02, c); }
+    } coefs;
+    return coefs.c;
+}
 
 SvfCoeffs SvfCoeffs::design(Mode mode, double fs, double hz, double gainDb, double q) {
     SvfCoeffs c;

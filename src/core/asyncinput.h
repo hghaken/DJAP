@@ -33,6 +33,10 @@ public:
     static constexpr double kMarginMs = 3.0;         // fill held above the input block + output period
     static constexpr double kMarginStepMs = 2.0;     // added after each underrun ...
     static constexpr double kMarginMaxMs = 20.0;     // ... up to this
+    // ... and taken back by this after each such stretch without an underrun, down to kMarginMs: one stall no longer
+    // keeps the delay up until the stream starts again (the read speed glides to the smaller fill, no jump)
+    static constexpr double kMarginDecayMs = 0.5;
+    static constexpr double kMarginCalmS = 60.0;
     static constexpr double kFadeInMs = 10.0;        // reading starts (or starts again after an underrun) with a
                                                      // raised-cosine fade-in: else silence -> music is a step (a click)
 
@@ -77,6 +81,7 @@ private:
     double avgFill_ = 0.0;  // frames
     double integ_ = 0.0;    // the loop's integral part (= the drift estimate)
     double marginMs_ = kMarginMs;
+    double calmS_ = 0.0; // seconds of reading since the last underrun or margin step down
     int period_ = 0;
     double fade_ = 1.0;     // fade-in position 0..1 (1: done)
     bool active_ = false, periodOk_ = false, haveAvg_ = false;

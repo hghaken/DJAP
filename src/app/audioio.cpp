@@ -64,6 +64,7 @@ void AudioIO::resetHealth() {
 bool AudioIO::openDriver(const std::string& driver, void* window, std::string& error) {
 #if AP_HAVE_ASIO
     window_ = window;
+    resetPending_ = false; // the user's own choice ends an automatic reopening
     if (!host_.open(driver, window, error)) return false;
     driver_ = driver;
     deviceError_.clear();
@@ -78,6 +79,7 @@ bool AudioIO::openDriver(const std::string& driver, void* window, std::string& e
 
 void AudioIO::closeDriver() {
 #if AP_HAVE_ASIO
+    resetPending_ = false;
     if (host_.running()) fadeOutDecks();
     host_.close();
 #endif
@@ -159,6 +161,9 @@ void AudioIO::fadeOutDecks() {
 }
 
 void AudioIO::stopDevice() {
+#if AP_HAVE_ASIO
+    resetPending_ = false; // Stop also ends an automatic reopening
+#endif
     fadeOutDecks(); // Stop, another API, a device that stopped by itself (then nothing runs and nothing waits)
     sys_.stop();
 #if AP_HAVE_ASIO
@@ -196,13 +201,29 @@ void AudioIO::publish(int d) {
 void AudioIO::poll() {
     const double dt = 0.05; // the GUI timer's period
 #if AP_HAVE_ASIO
+    const auto now = std::chrono::steady_clock::now();
     if (host_.isOpen() && host_.poll() == AsioEvent::Reset) { // the driver asked: close, open and start again
-        const bool wasRunning = host_.running();
+        resetWasRunning_ = host_.running();
+        if (resetWasRunning_) fadeOutDecks(); // the stream may still run: no hard stop (a click)
         host_.close();
+        resetPending_ = true;
+        resetTries_ = 0;
+        resetDue_ = now;
+    }
+    if (resetPending_ && now >= resetDue_) {
         std::string err;
-        if (!host_.open(driver_, window_, err) ||
-            (wasRunning && !startDevice(rate_, buffer_, channels_, SysInputs(inputs_), err)))
+        if (host_.isOpen()) host_.close(); // the last try opened it but could not start it
+        if (host_.open(driver_, window_, err) &&
+            (!resetWasRunning_ || startDevice(rate_, buffer_, channels_, SysInputs(inputs_), err))) {
+            resetPending_ = false;
+            deviceError_.clear();
+        } else if (++resetTries_ >= kResetTries) {
+            resetPending_ = false;
             deviceError_ = "the driver asked for a reset; reopening failed: " + err;
+        } else {
+            resetDue_ = now + std::chrono::seconds(1);
+            deviceError_ = "the driver asked for a reset; trying again: " + err;
+        }
     }
 #endif
     if (sys_.running() && sys_.failed()) { // a stream stopped by itself

@@ -390,4 +390,44 @@ std::string Sha256::hex() {
     return out;
 }
 
+// The checksum of `setupName` in a .sha256 file: the 64-hex word on the line that names the setup (as sha256sum
+// writes "<hash>  <name>"), or the file's only 64-hex word. Lower case; empty when it is not clear which one it is.
+std::string checksumFor(const std::string& text, const std::string& setupName) {
+    auto lower = [](std::string s) {
+        for (char& c : s)
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+        return s;
+    };
+    auto hexWord = [](const std::string& w) {
+        if (w.size() != 64) return false;
+        for (char c : w)
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+        return true;
+    };
+    std::vector<std::string> all;
+    std::string named;
+    size_t start = 0;
+    while (start <= text.size()) {
+        size_t end = text.find('\n', start);
+        if (end == std::string::npos) end = text.size();
+        const std::string line = lower(text.substr(start, end - start));
+        std::string word;
+        for (size_t i = 0; i <= line.size(); ++i) {
+            const char c = i < line.size() ? line[i] : ' ';
+            if (c == ' ' || c == '\t' || c == '\r' || c == '*') {
+                if (hexWord(word)) {
+                    all.push_back(word);
+                    if (!setupName.empty() && line.find(lower(setupName)) != std::string::npos) named = word;
+                }
+                word.clear();
+            } else {
+                word += c;
+            }
+        }
+        start = end + 1;
+    }
+    if (!named.empty()) return named;
+    return all.size() == 1 ? all[0] : std::string();
+}
+
 } // namespace ap

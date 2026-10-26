@@ -508,7 +508,10 @@ void colour() {
     const double fa = 44100.0;
     Buffer c3 = sig::sine(fa, 3000, -1, 1.0);
     o = run(fa, v, c3, c3);
-    CHECK(sig::peak(o.l) <= dbToLin(-1.0) + 1e-6);
+    // at twice the rate the curve never passes the ceiling; back at the base rate a flattened peak rises a little over
+    // it again (its overtones above the audio band removed) - the limiter after the clipper holds the ceiling
+    std::printf("   soft clipper: peak %.4f dBFS (ceiling -1)\n", linToDb(sig::peak(o.l)));
+    CHECK(sig::peak(o.l) <= dbToLin(-1.0 + 0.5));
     double alias = -300;
     const double fund = sig::amplitudeAt(o.l, fa, 3000, from);
     for (double f = 100; f < 22000; f += 100) {
@@ -517,6 +520,17 @@ void colour() {
     }
     std::printf("   soft clipper, 3 kHz driven 6 dB in: strongest alias %.1f dB under the tone\n", -alias);
     CHECK(alias < -35);
+    // the highs: 13 kHz driven 6 dB in at 48 kHz - its 3rd overtone (39 kHz) folded back to 9 kHz at the base rate
+    // (outside review: -16..-44 dBc on 10-15 kHz tones); oversampled (and held at the ceiling) it is gone
+    // with the limiter after it, as in every shipped preset: it holds the ceiling the band-limited peaks rise over
+    v[pLimOn] = 1;
+    Buffer c13 = sig::sine(fs, 13000, -1, 1.0);
+    o = run(fs, v, c13, c13);
+    const double a9 = linToDb(sig::amplitudeAt(o.l, fs, 9000, from) / sig::amplitudeAt(o.l, fs, 13000, from));
+    std::printf("   soft clipper, 13 kHz driven 6 dB in at 48 kHz: the fold-back at 9 kHz %.1f dB under the tone, peak %.3f dBFS\n",
+                -a9, linToDb(sig::peak(o.l)));
+    CHECK(a9 < -60.0);
+    CHECK(sig::peak(o.l) <= dbToLin(-1.0) + 1e-6);
 }
 
 } // namespace

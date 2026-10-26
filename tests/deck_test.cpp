@@ -109,6 +109,109 @@ void fastMath() {
     CHECK(fastExp2(-2000.0) == 0.0 && fastLog2(0.0) == -1000.0 && fastTanh(100.0) == 1.0 && fastTanh(-100.0) == -1.0);
 }
 
+// The amplitude of frequency f (Hz) in x[from, from + n) at fs (an exact bin: whole periods in n).
+double toneAt(const std::vector<double>& x, size_t from, size_t n, double f) {
+    std::complex<double> acc = 0.0;
+    for (size_t i = 0; i < n; ++i)
+        acc += x[from + i] * std::polar(1.0, -2.0 * 3.14159265358979323846 * f * static_cast<double>(i) / fs);
+    return 2.0 * std::abs(acc) / static_cast<double>(n);
+}
+
+// The 2x oversampler of the clipper and the exciter: flat, a few frames of delay, and the overtones a nonlinearity
+// makes above the Nyquist frequency no longer fold back into the audio band.
+void oversampler() {
+    std::printf("-- 2x oversampler (polyphase IIR halfbands)\n");
+    const double* k = halfbandCoefs();
+    for (int i = 1; i < kHalfbandCoefs; ++i) CHECK(k[i] > k[i - 1] && k[i] > 0.0 && k[i] < 1.0);
+    // up and down without a stage between: gain and delay
+    const size_t n = 48000;
+    for (double f : {100.0, 1000.0, 10000.0, 18000.0, 20000.0, 22000.0}) {
+        StereoOversampler2x os;
+        std::vector<double> in(2 * n), out(2 * n);
+        for (size_t i = 0; i < 2 * n; ++i) {
+            in[i] = 0.5 * std::sin(2.0 * 3.14159265358979323846 * f * static_cast<double>(i) / fs);
+            Pair a, b;
+            os.up(makePair(in[i], in[i]), a, b);
+            out[i] = leftOf(os.down(a, b));
+        }
+        const double gainDb = 20.0 * std::log10(toneAt(out, n, n, f) / 0.5);
+        // delay from the phase (in frames)
+        std::complex<double> ci = 0.0, co = 0.0;
+        for (size_t i = n; i < 2 * n; ++i) {
+            const std::complex<double> e = std::polar(1.0, -2.0 * 3.14159265358979323846 * f * static_cast<double>(i) / fs);
+            ci += in[i] * e;
+            co += out[i] * e;
+        }
+        double ph = std::arg(ci) - std::arg(co);
+        while (ph < 0.0) ph += 2.0 * 3.14159265358979323846;
+        const double delay = ph / (2.0 * 3.14159265358979323846 * f) * fs;
+        std::printf("   %5.0f Hz: %+.5f dB, delay %.2f frames\n", f, gainDb, delay);
+        if (f <= 20000.0) CHECK(std::fabs(gainDb) < 0.001);
+        if (f <= 1000.0) CHECK(delay < 4.0);
+    }
+    // a hard-driven 13 kHz tone through tanh: its 3rd overtone (39 kHz) folds back to 9 kHz at 48 kHz without
+    // oversampling; with it, it is removed
+    auto aliasDb = [&](bool over) {
+        StereoOversampler2x os;
+        std::vector<double> out(2 * n);
+        for (size_t i = 0; i < 2 * n; ++i) {
+            const double x = 0.9 * std::sin(2.0 * 3.14159265358979323846 * 13000.0 * static_cast<double>(i) / fs);
+            if (!over) {
+                out[i] = std::tanh(3.0 * x) / 3.0;
+            } else {
+                Pair a, b;
+                os.up(makePair(x, x), a, b);
+                const Pair ya = makePair(std::tanh(3.0 * leftOf(a)) / 3.0, std::tanh(3.0 * rightOf(a)) / 3.0);
+                const Pair yb = makePair(std::tanh(3.0 * leftOf(b)) / 3.0, std::tanh(3.0 * rightOf(b)) / 3.0);
+                out[i] = leftOf(os.down(ya, yb));
+            }
+        }
+        return 20.0 * std::log10(toneAt(out, n, n, 9000.0) / toneAt(out, n, n, 13000.0));
+    };
+    const double plain = aliasDb(false), over = aliasDb(true);
+    std::printf("   tanh, 13 kHz tone: alias at 9 kHz %.1f dBc without, %.1f dBc with 2x oversampling\n", plain, over);
+    CHECK(plain > -40.0); // the fold-back the review found
+    CHECK(over < plain - 40.0);
+}
+
+// The delay the chain adds beyond the look-ahead, per frequency (informational; the docs quote it): the IIR filters
+// of the density bands, the width split and the oversampled clipper shift low frequencies later. Group delay from
+// the phase of two close tones (a quiet level: the dynamics hold still), each preset at 48 kHz.
+void groupDelay() {
+    std::printf("-- group delay beyond the look-ahead (ms; from two tones 2 %% apart, each in its own run, -30 dBFS)\n");
+    const double pi = 3.14159265358979323846;
+    const size_t n = frames(6.0), win = frames(1.0);
+    auto phaseAt = [&](const Buffer& x, size_t from, double f) {
+        std::complex<double> acc = 0.0;
+        for (size_t i = 0; i < win; ++i) acc += static_cast<double>(x[from + i]) * std::polar(1.0, -2.0 * pi * f * static_cast<double>(i) / fs);
+        return std::arg(acc);
+    };
+    auto wrap = [&](double p) {
+        while (p > pi) p -= 2.0 * pi;
+        while (p < -pi) p += 2.0 * pi;
+        return p;
+    };
+    for (int preset = 0; preset < kShippedPresetCount; ++preset) {
+        std::printf("   %-10s", shippedPresetName(preset));
+        for (double f : {50.0, 100.0, 1000.0, 5000.0}) {
+            // one steady tone per run (two at once beat, and the dynamics follow the beat)
+            auto delta = [&](double ff) {
+                Buffer l(n);
+                for (size_t i = 0; i < n; ++i) l[i] = static_cast<float>(0.0316 * std::sin(2.0 * pi * ff * static_cast<double>(i) / fs));
+                int lat = 0;
+                const Stereo o = runLive(shippedPresetValues(preset), DeckControl(), l, l, {}, 256, &lat);
+                const size_t at = n - win; // the last second, from the output's frame `at` (input frame at - lat)
+                return wrap(phaseAt(l, at - static_cast<size_t>(lat), ff) - phaseAt(o.l, at, ff));
+            };
+            const double f2 = f * 1.02;
+            const double gd = wrap(delta(f2) - delta(f)) / (2.0 * pi * (f2 - f)) * 1000.0;
+            std::printf("  %5.0f Hz %+6.2f", f, gd);
+            CHECK(gd > -0.5 && gd < 20.0);
+        }
+        std::printf("\n");
+    }
+}
+
 // ---- bit-exact paths ----
 
 void bypassExact() {
@@ -127,6 +230,19 @@ void bypassExact() {
         CHECK(bad == 0);
         CHECK(lat == static_cast<int>(std::lround(look * fs / 1000.0)));
     }
+    // a look-ahead above 0 never under the true-peak minimum (deck.h): at every rate it is true-peak limiting
+    for (double rate : {44100.0, 48000.0, 88200.0, 96000.0})
+        for (double look : {0.1, 0.5, 1.0, 1.2}) {
+            const int f = lookFrames(look, rate);
+            CHECK(f == std::max(kMinLookFrames, static_cast<int>(std::lround(look * rate / 1000.0))));
+            Limiter lim;
+            lim.prepare(f, kTpFactorLimiter, kTpTapsLimiter, kTpBetaLimiter);
+            lim.setLook(f);
+            CHECK(lim.usesTruePeak());
+        }
+    CHECK(lookFrames(0.0, fs) == 0 && lookFrames(-1.0, fs) == 0 && lookFrames(std::nan(""), fs) == 0);
+    CHECK(lookFrames(9.0, fs) == static_cast<int>(std::lround(kMaxLookMs * fs / 1000.0)));
+    std::printf("   0.1 .. 1.2 ms: at least %d frames (true peak) at 44.1 .. 96 kHz\n", kMinLookFrames);
     // processing on -> off at 1 s -> on at 2 s -> off at 2.5 s: exact again 20 ms (ramp) after each "off"
     DeckControl on, off;
     off.processing = false;
@@ -722,7 +838,7 @@ void cpuStages() {
     PresetValues one = vl;
     one[pDensBands] = 1;
     std::printf("   density 1 band: %.3f %%\n", measure(one, 1.5));
-    std::printf("   look-ahead 0.5 ms (sample-peak limiter): %.3f %%\n", measure(vl, 0.5));
+    std::printf("   look-ahead 0 ms (sample-peak limiter): %.3f %%\n", measure(vl, 0.0));
     PresetValues none = allOff();
     std::printf("   every stage off: %.3f %%\n", measure(none, 1.5));
     RenderDeck bypass[2];
@@ -878,6 +994,8 @@ int main(int argc, char** argv) {
     gVerbose = argc > 2 && std::string(argv[2]) == "--verbose";
     if (!clicksOnly) {
         fastMath();
+        oversampler();
+        groupDelay();
         bypassExact();
         neutralExact();
         volume();

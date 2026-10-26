@@ -78,6 +78,7 @@ void AsyncInput::reset(double fs) {
     ratio_ = 1.0;
     avgFill_ = integ_ = 0.0;
     marginMs_ = kMarginMs;
+    calmS_ = 0.0;
     period_ = 0;
     fade_ = 1.0;
     active_ = periodOk_ = haveAvg_ = false;
@@ -160,9 +161,15 @@ void AsyncInput::beginPeriod(int frames, double now) {
         if (written - static_cast<double>(pos_) < need) {
             active_ = false; // silence, fill up again with a larger margin
             marginMs_ = std::min(kMarginMaxMs, marginMs_ + kMarginStepMs);
+            calmS_ = 0.0;
             bump(underruns_);
         } else {
             periodOk_ = true;
+            calmS_ += frames / fs_;
+            if (calmS_ >= kMarginCalmS) {
+                calmS_ = 0.0;
+                marginMs_ = std::max(kMarginMs, marginMs_ - kMarginDecayMs);
+            }
         }
     }
     activeShown_.store(active_, std::memory_order_relaxed);

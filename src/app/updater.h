@@ -51,9 +51,9 @@ private:
     std::atomic<State> state_{State::Idle};
     std::atomic<int> percent_{0};
     std::atomic<bool> quit_{false};
-    mutable std::mutex mutex_; // release_, error_, setup_, checkedAt_, url_
+    mutable std::mutex mutex_; // release_, error_, setup_, setupSha_, checkedAt_, url_
     ReleaseInfo release_;
-    std::string error_, setup_, checkedAt_, url_;
+    std::string error_, setup_, setupSha_, checkedAt_, url_; // setupSha_: the checksum it was checked against
     std::thread worker_;
 };
 

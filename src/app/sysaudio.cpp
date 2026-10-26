@@ -247,6 +247,7 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
             c.sampleRate = static_cast<ma_uint32>(sampleRate);
             c.periodSizeInFrames = periodFrames;
             c.performanceProfile = ma_performance_profile_low_latency;
+            c.wasapi.usage = ma_wasapi_usage_pro_audio; // the stream's thread in MMCSS "Pro Audio" (WASAPI only)
             c.capture.pDeviceID = inId;
             c.capture.format = ma_format_f32;
             c.capture.channels = 2;
@@ -330,6 +331,7 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
             c.sampleRate = static_cast<ma_uint32>(sampleRate);
             c.periodSizeInFrames = periodFrames;
             c.performanceProfile = ma_performance_profile_low_latency;
+            c.wasapi.usage = ma_wasapi_usage_pro_audio;
             c.capture.pDeviceID = inId;
             c.capture.format = ma_format_f32;
             c.capture.channels = 2;

@@ -53,7 +53,7 @@ input (stereo)
  -> stereo width                                             (11)
  -> [leveller detector]                                      (4)
  -> soft clipper                                             (12)
- -> look-ahead true-peak limiter: the only delay              (13)
+ -> look-ahead true-peak limiter: the only look-ahead         (13)
  -> output gain (only down) -> bypass crossfade -> clip guard -> fades
  -> [output meter: K-weighted energy, true peak]
  -> Windows volume (only when followed)                      (14)
@@ -73,8 +73,9 @@ so they share the same latency (they are mixed after DJAP, and a difference woul
 - **Two rates.** The audio runs per sample; detectors that do not need sample rate (leveller, density, de-esser,
   auto tone) update every 16 samples (the *control block*, 0.33 ms at 48 kHz), and the gains they produce are ramped
   linearly across the next block.
-- **One delay.** Only the limiter looks ahead (default 1.5 ms, 0..5 ms). No other stage buffers, so the processing's
-  latency is exactly the look-ahead.
+- **One look-ahead.** Only the limiter looks ahead (default 1.5 ms, 0..5 ms). No other stage buffers, so the
+  latency the processing reports - and the delay of a click or a drum hit's attack - is exactly the look-ahead. The
+  filters do shift low frequencies a little later than that (their phase; 1.5).
 - **Nothing clicks.** Every change while playing is ramped or crossfaded (1.4).
 - **Bypass is exact.** The bypass path is the input delayed by the same look-ahead, bit for bit.
 
@@ -100,6 +101,30 @@ thread (16.2). There:
 | look-ahead | fade out 5 ms, change the delay, refill it, fade in 5 ms |
 
 A configuration that arrives before the first audio block is applied at once, without ramps.
+
+### 1.5 Group delay
+
+Filters that split or shape the spectrum - the density bands' crossovers, the width stage's bass split, the colour's
+shelves, the oversampled clipper - are minimum-phase IIR filters: they add no latency, but they delay low
+frequencies a little more than high ones (their group delay). Measured beyond the look-ahead at 48 kHz on a -30 dBFS
+tone (`deck_test`, each tone in its own run; outside review, client 2026-10-26: "write it honestly in the docs"):
+
+| Loudness preset | 50 Hz | 100 Hz | 1 kHz | 5 kHz |
+|---|---|---|---|---|
+| Gentle | 2.6 ms | 2.8 ms | 0.3 ms | 0.1 ms |
+| Light | 5.2 | 5.2 | 0.5 | 0.2 |
+| Medium | 11.2 | 6.1 | 0.5 | 0.2 |
+| Loud | 11.8 | 6.7 | 0.9 | 0.2 |
+| Very Loud | 13.7 | 8.8 | 1.1 | 0.2 |
+| FM Station | 14.5 | 9.8 | 0.5 | 0.2 |
+| DAB+ | 0.0 | 0.0 | 0.0 | 0.1 |
+| Web Stream | 5.2 | 5.1 | 0.5 | 0.1 |
+
+Most of it comes from the density bands (more bands, more delay at the bottom) and the width stage's bass split. A
+kick's attack and every click still come out after the look-ahead alone; the low end of the same hit follows a few
+milliseconds later, as it does in an analogue multiband processor. Both decks run the same code, so two decks on the
+same loudness preset stay aligned; two different presets differ by the difference of their rows. Linear-phase
+crossovers would remove this but add 10-20 ms of latency to everything - DJAP's latency rule wins.
 
 ## 2. Building blocks
 
@@ -427,6 +452,10 @@ Adds overtones to the highs - shine and air rather than more of the same treble:
    overtones, more on loud highs than on soft ones.
 3. That residue is high-passed again (4th order) and mixed in by the amount.
 
+The saturation runs at twice the sample rate (the oversampler of 12.1): the overtones of highs reach far above the
+Nyquist frequency (the 3rd of 10 kHz is 30 kHz) and, at the base rate, folded back into the audio band as
+inharmonic tones.
+
 Test: 5 kHz gets 15 kHz 27 dB under it; 500 Hz passes unchanged. Saturation-based enhancement of this kind is
 described in the DAFX book's chapter on nonlinear processing [7].
 
@@ -479,9 +508,29 @@ and then bends with tanh towards the ceiling - never past it, and without a corn
 
 - The drive makes the music louder and denser by up to its amount; quiet music only gets the gain. It is not
   compensated (like an input gain).
-- **No oversampling**, to keep zero latency. Because the curve has no corner, aliasing stays low: a 3 kHz tone driven
-  6 dB into the curve gives its strongest alias 42 dB under the tone. First-order antiderivative anti-aliasing was
-  considered and rejected: it acts as a two-sample average and costs up to 4 dB at 15 kHz.
+- **2x oversampling** (since 2026-10-26; before, it ran at the base rate). An outside review measured the aliases of
+  10-15 kHz tones at -16..-44 dBc at 48 kHz: a curve without a corner keeps them low for midrange tones (a 3 kHz tone
+  driven 6 dB in: 42 dB under it) but not for the highs - hi-hats and cymbals in hard-driven material. First-order
+  antiderivative anti-aliasing was rejected (it acts as a two-sample average: up to 4 dB less at 15 kHz).
+
+### 12.1 The oversampler
+
+`StereoOversampler2x` (`src/core/dsp.h`): up to twice the rate, the curve on both samples, back down. The two
+halfband filters are polyphase IIR filters - two chains of first-order allpasses in z^2 [25] - with 8 coefficients
+from the closed-form elliptic design (transition band 0.02 of the doubled rate): images and aliases 82 dB down,
+flat within 0.00001 dB to 0.46 x the sample rate (20.3 kHz at 44.1 kHz). Up and down together delay low
+frequencies by about 2.6 samples (0.05 ms at 48 kHz) and add no latency - a linear-phase FIR halfband of the same
+quality would add tens of samples. The ceiling enters the curve per doubled sample (`ceiling x curve(u / ceiling)`)
+and the filters see only the driven signal, so a change of the ceiling meets no samples of the old scale in their
+memory (a click). Measured (`deck_test`): a 13 kHz tone through tanh(3x) at 48 kHz - the alias at 9 kHz from -13.2
+dBc at the base rate to -97.4 dBc. Cost: 0.19 % of a core per deck for the clipper, 0.39 % for the exciter.
+
+At twice the rate the curve never passes the ceiling, but back at the base rate a flattened peak, its overtones
+above the audio band removed, rises over it again: 0.36 dB for a 3 kHz tone driven 6 dB in, more for the highs (a
+band-limited square wave overshoots). The limiter after the clipper holds the ceiling, as it does in every loudness
+preset; holding it in the clipper instead (a hard clamp) brought the fold-back back (-24 dBc on 13 kHz). Through
+clipper and limiter, a 13 kHz tone driven 6 dB in at 48 kHz: its fold-back at 9 kHz 94.6 dB under the tone, the peak
+at -1.2 dBFS (`dynamics_test`).
 - The meter shows how far the clipper took the deepest peak down.
 
 ## 13. Look-ahead true-peak limiter
@@ -502,15 +551,22 @@ the DAFX book [7]; DJAP's version (`src/core/limiter.h`) works per sample:
 **The exact window.** The gain applied to the sample leaving the delay line must never be above that sample's own
 wanted gain. With a sample-peak detector this gives `W = look + 1`; with a true-peak detector of delay D (48 frames
 here) the wanted gain of a sample is known D frames after it arrives (from the reports of the intervals on both sides
-of it), so `W = look - D + 1`, and the true peak is used only when `look >= D` (1.0 ms at 48 kHz). The default 1.5 ms
-is 66 frames at 44.1 kHz and 72 at 48 kHz. A first version was one or two samples off: a single peak went up to
+of it), so `W = look - D + 1`, and the true peak is used only when `look >= D`. A shorter look-ahead fell back to the
+sample peak without a word - true peaks up to 3 dB over the ceiling (outside review, 2026-10-26) - so a look-ahead
+above 0 is now never shorter than D + 15 = 63 frames (`lookFrames`, a window of at least 16 frames: 1.43 ms at 44.1
+kHz, 1.31 ms at 48 kHz); the choices are 0 (sample peak, no delay), 1.5, 2, 3 and 5 ms, and an old 0.5 or 1.0 ms
+becomes 1.5. The plug-in reports the same frames to its host. The default 1.5 ms is 66 frames at 44.1 kHz and 72
+at 48 kHz. A first version was one or two samples off: a single peak went up to
 0.4 dB over the ceiling.
 
 **Margin.** In true-peak mode the limiter aims 0.1 dB under the ceiling: with a 1.5 ms look-ahead its gain changes
 fast enough to create small inter-sample peaks of its own (full-band noise went 0.17 dB over without the margin).
 
-**Guarantee.** The sample peak never passes the ceiling. The true peak stays within the ceiling + 0.1 dB for any
-input, including full-band noise up to the Nyquist frequency, when the look-ahead is at least the detector's delay.
+**Guarantee.** The sample peak never passes the ceiling. The true peak stays within the ceiling + 0.1 dB for
+material below about 0.48 x the sample rate (all music in practice), with any look-ahead above 0. The detector rolls
+off above that: an outside review measured, against an ideal 16x reference, +0.25..+0.46 dB on clipped pink noise,
++0.5..+0.7 dB on full-band noise and up to +1.4 dB on a sine at 0.495 x the rate. At 0 ms the limiter holds the
+sample peak only.
 Tests: single +12 dBFS samples at look-aheads of 1.5, 0.2, 0.1 and 0 ms; a +6 dBFS sine; an fs/4 square wave (large
 inter-sample peaks); +9.5 dBFS full-band noise bursts - all measured with a 16x reference true-peak meter.
 
@@ -522,6 +578,15 @@ The moving-average accumulator is re-summed exactly every 8192 samples to stop f
 
 The output gain (-15..0 dB) only turns down, so the ceiling holds. A clip guard then replaces non-finite values with
 0 and clamps to [-1, 1]; it never acts on a valid signal, and it is skipped in full bypass so bypass stays bit-exact.
+
+### 14.1a Dither
+
+An ASIO output of 16, 18 or 20 bits gets TPDF dither (two uniform +-0.5 steps, so +-1 step triangular) before the
+rounding: plain rounding leaves distortion that follows the music at low levels (a fade, a reverb tail), dither a
+steady faint noise instead (about -98 dBFS at 16 bits) [26]. A value already on a step gets none, so digital silence
+stays silent and a bypassed 16-bit input leaves bit-exact. 24 bits and more are only rounded: that rounding lies
+under any converter's own noise. Measured (`engine_test`): a tone of 0.4 steps, lost to rounding, comes out at 0.399
+steps, without an offset.
 
 ### 14.2 Bypass
 
@@ -607,10 +672,14 @@ With ASIO, the driver calls DJAP once per period with all channels (`AudioEngine
 buffers from the driver's sample format (all little-endian PCM and float formats), processes deck A then deck B in
 chunks of at most 256 frames through fixed buffers, converts into the output buffers (clamped, rounded) and signals
 the driver. Only the channels in use get buffers. Driver reset requests and buffer-size changes are debounced for
-500 ms and then handled on the GUI thread by closing and reopening the driver (ASIO SDK [21]).
+500 ms and then handled on the GUI thread by closing and reopening the driver (ASIO SDK [21]): a running stream
+fades out first, and when the driver is not ready yet (a USB interface that enumerates again, a new rate set in its
+control panel) it is tried again every second for a minute; the status bar says so meanwhile.
 
 The other APIs (WASAPI, DirectSound, MME) run through miniaudio [22]: each deck is one duplex stream from its input
-device to its output device on its own thread.
+device to its output device on its own thread, registered with Windows' multimedia scheduler (MMCSS) as
+"Pro Audio" for WASAPI. DJAP also asks Windows not to throttle it for power (EcoQoS): it usually sits hidden in the
+notification area, where Windows 11 may otherwise slow a program down and coalesce its timers.
 
 ### 16.4 Health
 
@@ -642,8 +711,10 @@ into a virtual cable. The two devices run on their own crystals, so their sample
   the drift estimate following over 16 s (critically damped). With simulated clocks at -500..+500 ppm and late
   callbacks: drift found within 2 ppm, fill within 0.5 ms of its target, read-speed wobble about 15 ppm, no xruns.
 - **Target fill** = the largest capture block + the ASIO period + half the interpolator + a 3 ms margin: about 19 ms
-  for 10 ms capture blocks and 256-frame periods at 48 kHz. Each underrun adds 2 ms of margin (up to 20 ms); the
-  deck fades in over 10 ms whenever reading (re)starts.
+  for 10 ms capture blocks and 256-frame periods at 48 kHz. Each underrun adds 2 ms of margin (up to 20 ms), and
+  every minute without one takes 0.5 ms back down to the 3 ms, so one stall does not keep the delay up (the read
+  speed glides to the smaller fill: no gap; simulated, a 200 ms capture stall was back at the original 18.69 ms
+  within 400 s); the deck fades in over 10 ms whenever reading (re)starts.
 
 This is the only place where DJAP adds buffering beyond the look-ahead, and only when the user chooses such an input.
 The Setup window shows the added latency and the measured drift.
@@ -787,6 +858,8 @@ need a membership or a purchase for the full text.
 | [22] | D. Reid, miniaudio (public domain / MIT-0) - <https://miniaud.io/> | WASAPI, DirectSound and MME streams (16.3) |
 | [23] | AES Technical Council, TD1004 (2015) and TD1008 (2021), *Recommendations for loudness of internet audio streaming and on-demand distribution* (TD1008 later became the AES77 standard) - AES technical documents: <https://aes2.org/?p=50870> | streaming targets, the Web Stream loudness preset (19) |
 | [24] | Steinberg Media Technologies, plug-in SDK v3.8.1 (MIT licence; the plug-in interfaces, base classes, validator and test hosts) - <https://github.com/steinbergmedia/vst3sdk> | the plug-in (18) |
+| [25] | R. A. Valenzuela, A. G. Constantinides, *Digital signal processing schemes for efficient interpolation and decimation*, IEE Proceedings G 130(6), 1983, pp. 225-235 - doi:10.1049/ip-g-1.1983.0039 (added 2026-10-26, link not checked); the closed-form design as in L. de Soras' public hiir library | polyphase IIR halfbands of the oversampler (12.1) |
+| [26] | S. P. Lipshitz, R. A. Wannamaker, J. Vanderkooy, *Quantization and Dither: A Theoretical Survey*, J. Audio Eng. Soc. 40(5), 1992, pp. 355-375 (added 2026-10-26, link not checked) | TPDF dither (14.1a) |
 
 Besides these sources the design draws on the project's own measurements, recorded with each decision in
 `docs/design.md`.

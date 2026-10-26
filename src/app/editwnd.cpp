@@ -1069,8 +1069,13 @@ void EditWindow::command(int id, int code) {
         return;
     }
     if (code != BN_CLICKED) return;
-    Preset* p = settings_.find(current_, kind_);
+    const Preset* p = settings_.find(current_, kind_);
     if (!p) return;
+    // copies: the prompts below run their own message loop, and a save meanwhile (a window moved: its place is
+    // saved) merges the lists anew - a pointer into them would then point into freed memory
+    const PresetValues values = p->values;
+    const bool shipped = p->shipped;
+    p = nullptr;
     std::string err;
     if (id == idSaveAs) {
         std::string name = current_ + " (copy)";
@@ -1083,7 +1088,7 @@ void EditWindow::command(int id, int code) {
                 if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Save colour as" : L"Save loudness preset as", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
             }
         }
-        if (!settings_.saveAs(name, p->values, err, kind_)) {
+        if (!settings_.saveAs(name, values, err, kind_)) {
             placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Save colour as" : L"Save loudness preset as", MB_OK | MB_ICONWARNING);
             return;
         }
@@ -1117,7 +1122,7 @@ void EditWindow::command(int id, int code) {
         select(used(deck_));
     } else if (id == idResetPreset) {
         const std::wstring q = L"Set every value of \"" + fromUtf8(current_) + L"\" back to " +
-                               (p->shipped ? L"its shipped values?" : L"the generic defaults?");
+                               (shipped ? L"its shipped values?" : L"the generic defaults?");
         if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Reset colour" : L"Reset loudness",
                                   MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
             return;

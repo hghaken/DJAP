@@ -23,7 +23,9 @@ enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB,
           idCheckUpdates, idCheckNow, idInstall, idTooltips };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
-const double kLooks[] = {0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0}; // limiter look-ahead choices (ms; 1.5 the default)
+// limiter look-ahead choices (ms; 1.5 the default). Nothing between 0 and 1.5: below about 1.3 ms the true-peak
+// detector does not fit (deck.h, kMinLookFrames) - 0.5 and 1.0 limited the sample peak only, without a word
+const double kLooks[] = {0.0, 1.5, 2.0, 3.0, 5.0};
 const long kPeriods[] = {64, 128, 192, 256, 480, 512, 1024}; // frames, for WASAPI / DirectSound / MME
 const AudioApi kApis[] = {AudioApi::Asio, AudioApi::Wasapi, AudioApi::DirectSound, AudioApi::Mme};
 const LPARAM kNone = -1;                                     // "(none)" in a device list
@@ -407,7 +409,8 @@ void AudioWindow::fillAll() {
     SendMessageW(look_, CB_RESETCONTENT, 0, 0);
     for (int i = 0; i < static_cast<int>(std::size(kLooks)); ++i) {
         wchar_t t[48];
-        swprintf(t, 48, kLooks[i] == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", kLooks[i]);
+        const double l = kLooks[i];
+        swprintf(t, 48, l == 0.0 ? L"0 ms (sample peak, no delay)" : l == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", l);
         addItem(look_, t, i);
         if (std::fabs(kLooks[i] - settings_.lookAheadMs) < 1e-9) SendMessageW(look_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
     }
@@ -503,7 +506,9 @@ void AudioWindow::fillAll() {
             };
             if (st.granularity != 0) {
                 if (st.granularity > 0) offer(st.minBuffer);
-                for (long s = 16; s <= st.maxBuffer; s *= 2)
+                // at most 8192 frames (the largest the settings keep); a driver reporting a huge maximum made the
+                // doubling overflow a 32-bit long
+                for (long s = 16; s <= std::min(st.maxBuffer, 8192L); s *= 2)
                     if (s >= st.minBuffer && (st.granularity == -1 || (s - st.minBuffer) % st.granularity == 0))
                         offer(s);
                 if (st.granularity > 0) offer(st.maxBuffer);
@@ -650,6 +655,9 @@ bool AudioWindow::startAudio(bool askExclusive) {
             if (placement::messageBox(hwnd_, q.c_str(), L"Start audio", MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES)
                 return false;
         }
+        // the driver chosen in the list: an open one of another name is closed first (it played on the old one
+        // while the new name was saved)
+        if (audio_.driverOpen() && audio_.driverName() != settings_.driver) audio_.closeDriver();
         if (!audio_.driverOpen() && !openDriver()) return false;
         ok = audio_.startDevice(settings_.sampleRate, settings_.bufferSize, asioChannelsFrom(settings_), inputs, err);
     } else {
@@ -864,7 +872,7 @@ void AudioWindow::refresh() {
         }
         if (running && audio_.host().running()) {
             const AsioDeviceState& s = audio_.host().state();
-            const double ms = 1000.0 / s.sampleRate, look = settings_.lookAheadMs;
+            const double ms = 1000.0 / s.sampleRate, look = lookFrames(settings_.lookAheadMs, s.sampleRate) * ms;
             wchar_t b[480];
             swprintf(b, 480, L"Running: %s, %ld frames (%.2f ms) per period, %hs.", khz(s.sampleRate).c_str(),
                      s.bufferSize, s.bufferSize * ms, formatName(s.formats[4]));
@@ -908,7 +916,8 @@ void AudioWindow::refresh() {
                 wchar_t line[400];
                 swprintf(line, 400, L"\n%s: %s \x2192 %s; device %s, %u x %u frames; latency \x2248 %.1f ms + %.2f ms",
                          d == 0 ? L"Deck A" : L"Deck B", fromUtf8(s.input).c_str(), fromUtf8(s.output).c_str(),
-                         khz(s.deviceRate).c_str(), s.periodFrames, s.periods, s.latencyMs, settings_.lookAheadMs);
+                         khz(s.deviceRate).c_str(), s.periodFrames, s.periods, s.latencyMs,
+                         lookFrames(settings_.lookAheadMs, audio_.sampleRate()) * 1000.0 / audio_.sampleRate());
                 state += line;
             }
         }

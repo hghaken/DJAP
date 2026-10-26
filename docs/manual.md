@@ -58,7 +58,7 @@ What each step does and how much is set by the deck's **loudness preset** (the l
 
 Things to know up front:
 
-- **Low latency.** The only delay DJAP adds is the limiter's look-ahead: 1.5 ms by default (0 to 5 ms), the same for
+- **Low latency.** The only latency DJAP adds is the limiter's look-ahead: 1.5 ms by default (0 to 5 ms), the same for
   both decks so they stay in time with each other when mixed.
 - **Bypass is exact.** With a deck on Bypass its input goes out unchanged, bit for bit, delayed by the same
   look-ahead - so switching between processed and unprocessed never shifts the sound in time.
@@ -307,7 +307,7 @@ the audio again (a short fade-out and fade-in).
 | **Deck A / B input**, **output** | ASIO: a channel pair per deck, with the driver's channel names once it is open. Other APIs: an input and an output device per deck; *(none)* = the deck does not run. A saved device that is not connected shows "(not found)". |
 | **Sample rate** | 44.1, 48, 88.2 or 96 kHz. ASIO uses this rate if the driver accepts it, else the interface's own rate. Other APIs convert when a device runs at another rate. |
 | **Buffer size** | ASIO: the driver's preferred size, or a size it allows. Other APIs: the period asked of Windows. Smaller = less latency, more risk of dropouts (watch Health). |
-| **Look-ahead** | The limiter's look-ahead, 0 to 5 ms (default 1.5 ms), the same for both decks. Longer handles peaks more gently. True-peak limiting needs at least 48 samples (1.0 ms at 48 kHz, 1.1 ms at 44.1 kHz); below that, and at 0 ms, the limiter works on the sample peak and adds no delay. Changed at once with a short fade. |
+| **Look-ahead** | The limiter's look-ahead: 0, 1.5 (default), 2, 3 or 5 ms, the same for both decks. Longer handles peaks more gently. Every choice above 0 limits the true peak; at 0 ms the limiter holds only the sample peak (true peaks can pass the ceiling) and adds no delay. Changed at once with a short fade. (The former 0.5 and 1.0 ms were too short for the true-peak detector and are now 1.5 ms.) |
 
 ### 5.2 Options
 
@@ -690,7 +690,10 @@ Windows starts.
 **Latency** is the time from the input socket to the output socket. It has three parts:
 
 - the device's input buffer and output buffer (set by the buffer size; ASIO reports them exactly),
-- the processing: only the limiter look-ahead (1.5 ms by default; 66 samples at 44.1 kHz),
+- the processing: only the limiter look-ahead (1.5 ms by default; 66 samples at 44.1 kHz) - the attack of every hit
+  comes out after exactly that. The filters that split the spectrum let the lowest frequencies follow a few
+  milliseconds later (Medium: about 6 ms at 100 Hz, 11 ms at 50 Hz; the technical manual, 1.5, lists each loudness
+  preset), as in any multiband processor; both decks on the same loudness preset stay aligned.
 - with an input on another clock (an ASIO output fed from a WASAPI / DirectSound / MME input): that input's period
   plus the drift buffer, about 10-20 ms.
 
@@ -803,7 +806,7 @@ old file stays.
 | **No sound** | Is the audio started (status bar)? Are the right input and output pairs or devices chosen? Is a deck on *(none)*? Do the In bars move? If In moves and Out does not, check the output route and the amplifier. |
 | **"Open driver" fails** | Another program (DJ software) may hold the ASIO driver. Close it or use another interface. Check that the interface is connected and its driver installed. |
 | **A device shows "(not found)"** | The saved device is not connected, or it was chosen under another API (each API names devices differently). Choose it again. |
-| **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer density bands. With an input on another clock, underruns in the status bar mean the input fell behind: its buffer grows by itself. |
+| **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer density bands. With an input on another clock, underruns in the status bar mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
 | **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window. |
 | **The sound pumps or breathes** | Lower the density amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
 | **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Fast down" (Leveller tab) brings it down within about a second. Raise it if needed. |

@@ -36,6 +36,28 @@ inline int32_t quantise(float x, double scale) {
     return static_cast<int32_t>(std::llround(v));
 }
 
+// The same with TPDF dither (two uniform +-0.5 LSB, so +-1 LSB triangular): rounding alone leaves distortion that
+// follows the music at low levels - a fade or a reverb tail on a 16-bit output - where dither leaves a steady,
+// faint noise instead (16 bits: about -98 dBFS; outside review, client 2026-10-26). Only for 16, 18 and 20 bits: at
+// 24 bits the rounding already lies under any converter's own noise. A value already on a step of the format gets no
+// dither, so digital silence stays silent and a bypassed 16-bit input leaves bit-exact.
+thread_local uint32_t gDither = 0x9E3779B9u; // xorshift32 per thread (the audio thread writes the outputs)
+inline double ditherUnit() {
+    uint32_t s = gDither;
+    s ^= s << 13;
+    s ^= s >> 17;
+    s ^= s << 5;
+    gDither = s;
+    return static_cast<double>(s) * (1.0 / 4294967296.0) - 0.5; // [-0.5, 0.5)
+}
+inline int32_t quantiseDithered(float x, double scale) {
+    double v = std::isfinite(x) ? static_cast<double>(x) * scale : 0.0;
+    if (v != std::floor(v)) v += ditherUnit() + ditherUnit();
+    if (v > scale - 1.0) v = scale - 1.0;
+    if (v < -scale) v = -scale;
+    return static_cast<int32_t>(std::llround(v));
+}
+
 } // namespace
 
 int bytesPerSample(SampleFormat f) {
@@ -133,7 +155,7 @@ void fromFloat(const float* in, SampleFormat f, void* buffer, std::size_t offset
     switch (f) {
     case SampleFormat::Int16:
         for (int i = 0; i < frames; ++i) {
-            const int16_t v = static_cast<int16_t>(quantise(in[i], 32768.0));
+            const int16_t v = static_cast<int16_t>(quantiseDithered(in[i], 32768.0));
             std::memcpy(p + 2 * i, &v, 2);
         }
         return;
@@ -151,8 +173,9 @@ void fromFloat(const float* in, SampleFormat f, void* buffer, std::size_t offset
     case SampleFormat::Int32In20:
     case SampleFormat::Int32In24: {
         const double scale = std::ldexp(1.0, valueBits(f) - 1);
+        const bool dither = valueBits(f) <= 20;
         for (int i = 0; i < frames; ++i) {
-            const int32_t v = quantise(in[i], scale);
+            const int32_t v = dither ? quantiseDithered(in[i], scale) : quantise(in[i], scale);
             std::memcpy(p + 4 * i, &v, 4);
         }
         return;

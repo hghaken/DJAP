@@ -77,6 +77,13 @@ LONG CALLBACK diagHandler(EXCEPTION_POINTERS* ep) {
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     // the ASIO driver is a COM object created and called on this thread (handbook 12)
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    // No power throttling (EcoQoS): Windows 11 may slow a program that is hidden in the notification area - DJAP's
+    // usual place - and coalesce its timers; its audio must keep its pace. Ignored before Windows 10 1709.
+    PROCESS_POWER_THROTTLING_STATE power{};
+    power.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+    power.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED | PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
+    power.StateMask = 0; // both off
+    SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &power, sizeof power);
     INITCOMMONCONTROLSEX icc{sizeof icc, ICC_STANDARD_CLASSES | ICC_BAR_CLASSES};
     InitCommonControlsEx(&icc);
     theme::init();
@@ -126,35 +133,42 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     std::error_code ec;
     if (std::filesystem::exists(ini, ec)) settings.load(ini);
 
-    AudioIO audio;
-    MainWindow window(settings, ini, audio);
-    if (!window.create(instance, autostart && settings.audioConfigured(), testRun)) {
-        MessageBoxW(nullptr, L"The main window could not be created.", L"DJAP", MB_OK | MB_ICONERROR);
-        return 1;
-    }
-    if (simulate.empty()) window.startSavedAudio(); // the audio of the last session (StartAudio)
-    if (simulate.empty() && !settings.audioConfigured()) window.openAudioWindow(); // first start: choose a device
-    if (!simulate.empty()) {
-        std::string err;
-        if (audio.simulate(simulate, err)) {
-            window.applyAll(); // configurations for the file's sample rate
+    int result = 0;
+    {
+        // the audio (the ASIO driver is a COM object) and the windows end inside the COM apartment: their
+        // destructors stop and release the driver and the volume objects, so CoUninitialize comes after this block
+        AudioIO audio;
+        MainWindow window(settings, ini, audio);
+        if (!window.create(instance, autostart && settings.audioConfigured(), testRun)) {
+            MessageBoxW(nullptr, L"The main window could not be created.", L"DJAP", MB_OK | MB_ICONERROR);
+            result = 1;
         } else {
-            const std::wstring msg = L"Simulation not started: " + fromUtf8(err);
-            placement::messageBox(window.hwnd(), msg.c_str(), L"DJAP", MB_OK | MB_ICONWARNING);
-        }
-    }
+            if (simulate.empty()) window.startSavedAudio(); // the audio of the last session (StartAudio)
+            if (simulate.empty() && !settings.audioConfigured()) window.openAudioWindow(); // first start: a device
+            if (!simulate.empty()) {
+                std::string err;
+                if (audio.simulate(simulate, err)) {
+                    window.applyAll(); // configurations for the file's sample rate
+                } else {
+                    const std::wstring msg = L"Simulation not started: " + fromUtf8(err);
+                    placement::messageBox(window.hwnd(), msg.c_str(), L"DJAP", MB_OK | MB_ICONWARNING);
+                }
+            }
 
-    MSG msg;
-    while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
-        HWND active = GetActiveWindow(); // keyboard navigation in the main window and the preset window
-        if (!active || !IsDialogMessageW(active, &msg)) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+            MSG msg;
+            while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+                HWND active = GetActiveWindow(); // keyboard navigation in the main window and the preset window
+                if (!active || !IsDialogMessageW(active, &msg)) {
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+            }
+            audio.stopSimulation();
         }
     }
-    audio.stopSimulation();
     theme::shutdown();
     CoUninitialize();
+    // last: a new start of the program waits until this one has let go of the driver
     if (running) CloseHandle(running);
-    return 0;
+    return result;
 }

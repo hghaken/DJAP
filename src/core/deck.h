@@ -32,6 +32,20 @@ static_assert(kControlBlock == kColourBlock, "the colour stage ramps its coeffic
 constexpr int kTpFactorLimiter = 8;
 constexpr int kTpTapsLimiter = 96;     // taps per phase -> 48 frames of detector delay
 constexpr double kTpBetaLimiter = 5.0;
+// The shortest look-ahead above 0: the detector's delay (taps / 2 frames) plus a limiter window of kMinTpWindow frames.
+// A shorter one let the limiter fall back to the sample peak without a word - true peaks up to 3 dB over the ceiling
+// (outside review, 2026-10-26; client: "do it") - and a window of one frame lost the smoothing (+0.18 dB on noise).
+// 16 frames: 1.43 ms at 44.1 kHz, 1.31 ms at 48 kHz; the default 1.5 ms is above it at every rate.
+constexpr int kMinTpWindow = 16;
+constexpr int kMinLookFrames = kTpTapsLimiter / 2 + kMinTpWindow - 1;
+// The look-ahead in frames for `lookMs` at `fs`: 0 stays 0 (sample-peak limiting, no delay - the user's choice);
+// anything else is at least kMinLookFrames. One rule for the deck, the latency a plug-in reports and the status bar.
+inline int lookFrames(double lookMs, double fs) {
+    const double ms = lookMs >= 0.0 ? (lookMs <= kMaxLookMs ? lookMs : kMaxLookMs) : 0.0; // NaN: 0
+    if (ms <= 0.0) return 0;
+    const long f = std::lround(ms * fs / 1000.0);
+    return static_cast<int>(f > kMinLookFrames ? f : kMinLookFrames);
+}
 constexpr int kTpFactorMeter = 4;      // output meter (EBU Tech 3341 tolerance)
 constexpr int kTpTapsMeter = 32;
 
@@ -264,6 +278,7 @@ private:
     bool bassRetune_ = false; // new frequency: the stage fades out, takes the new filters, fades back in
     // exciter
     StereoBiquad2 excHp_, excHp2_;
+    StereoOversampler2x excOs_, clipOs_; // the exciter's saturation and the soft clipper run at twice the rate
     // de-esser
     StereoBiquad2 dessHp_;
     StereoBiquad dessShelf_;

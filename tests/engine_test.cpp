@@ -86,7 +86,8 @@ void formats() {
         std::printf("   %-15s %d bytes: round trip error %.3g (half step %.3g), +1 -> %.9f, -1 -> %.9f\n", formatName(f),
                     bytesPerSample(f), worst, lsb / 2, top, bottom);
         if (bits) {
-            CHECK(worst <= lsb / 2 + 1e-7);
+            // 16..20 bits are dithered (+-1 step, triangular): at most 1.5 steps from the value; else rounded
+            CHECK(worst <= (bits <= 20 ? 1.5 : 0.5) * lsb + 1e-7);
             CHECK_NEAR(top, 1.0 - lsb, 1e-7);  // the largest code: clamped one step under full scale
             CHECK(bottom == -1.0f);
             CHECK(over == top && under == bottom);
@@ -129,6 +130,29 @@ void formats() {
     int16_t s16[6] = {1, 2, 3, 4, 5, 6};
     silence(SampleFormat::Int16, s16, 2, 3);
     CHECK(s16[1] == 2 && s16[2] == 0 && s16[4] == 0 && s16[5] == 6);
+
+    // 16-bit dither: a tone of 0.4 steps is gone when rounded, but lives on under the dither noise; no offset, and
+    // silence stays silent
+    const int n = 480000;
+    std::vector<float> tone(n), zeros(n, 0.0f);
+    for (int i = 0; i < n; ++i)
+        tone[static_cast<size_t>(i)] = static_cast<float>(0.4 / 32768.0 * std::sin(2.0 * 3.14159265358979 * 1000.0 * i / 48000.0));
+    std::vector<int16_t> q(n), z(n);
+    fromFloat(tone.data(), SampleFormat::Int16, q.data(), 0, n);
+    fromFloat(zeros.data(), SampleFormat::Int16, z.data(), 0, n);
+    double corr = 0.0, mean = 0.0, ref = 0.0;
+    for (int i = 0; i < n; ++i) {
+        const double s = std::sin(2.0 * 3.14159265358979 * 1000.0 * i / 48000.0);
+        corr += q[static_cast<size_t>(i)] * s;
+        ref += s * s;
+        mean += q[static_cast<size_t>(i)];
+    }
+    const double amp = corr / ref; // in steps; rounding alone gives 0 here
+    std::printf("   16-bit dither: a 0.4-step tone comes out at %.3f steps, offset %.4f steps, silence %s\n", amp,
+                mean / n, std::all_of(z.begin(), z.end(), [](int16_t v) { return v == 0; }) ? "silent" : "NOT silent");
+    CHECK(std::fabs(amp - 0.4) < 0.02);
+    CHECK(std::fabs(mean / n) < 0.01);
+    CHECK(std::all_of(z.begin(), z.end(), [](int16_t v) { return v == 0; }));
 }
 
 // A fake driver: four input and four output channel buffers of one format, `period` frames per buffer switch.

@@ -25,7 +25,7 @@ plug-in for DJ software (section 10, since 2026-10-26). Licence GPL-3.0; all cod
 |---|---|---|
 | R1 | Deck A (in 1-2 -> out 1-2) and deck B (in 3-4 -> out 3-4), fully independent processing and profiles | client |
 | R2 | Live via ASIO; offline WAV in -> WAV out with the same code | client |
-| R3 | Low latency: only the limiter's look-ahead adds delay; no other look-ahead, no extra buffering | client (hard) |
+| R3 | Low latency: only the limiter's look-ahead adds delay; no other look-ahead, no extra buffering (the minimum-phase filters' group delay at low frequencies is documented in the technical manual, 1.5) | client (hard) |
 | R4 | Both decks always have the same latency (they are mixed after the processor) | handbook 10.11 |
 | R5 | Win32 GUI + command line | client |
 | R6 | DSP core host-independent (the plug-in format the client's DJ software loads, confirmed 2026-10-25; built 2026-10-26, section 10) | client |
@@ -100,10 +100,10 @@ analysis.
 | Exciter | frequency / amount | Hz / % | 3500 / 15 | 1500..8000 / 0..100 | 10.7 |
 | De-esser | frequency / threshold / max | Hz / LU re T / dB | 5500 / -10 / 6 | 3000..10000 / -30..0 / 0..12 | 10.8 |
 | Stereo width | width / bass width / bass split | % / % / Hz | 100 / 100 / 150 | 0..200 / 0..100 / 40..400 | 10.5 |
-| Soft clipper | drive | dB | 2 | 0..9 | 10.9 |
+| Soft clipper | drive | dB | 2 | 0..9 | 10.9; runs at 2x the rate (polyphase IIR halfbands, about 2.6 frames of phase delay, no latency) - its aliases were -16..-44 dBc on 10-15 kHz tones (outside review, client 2026-10-26); the exciter's saturation too |
 | Limiter | ceiling | dBTP | -1.0 | -6..0 | R 128 / AES |
 | | release | ms | 80 | 10..500 | 10.10 |
-| | look-ahead | ms | 1.5 | 0..5 | the only latency; one value for both decks (R4) |
+| | look-ahead | ms | 1.5 | 0, 1.5, 2, 3, 5 | the only latency; one value for both decks (R4). Above 0 never under the true-peak detector's delay + 15 frames (`lookFrames`: 63 frames; the former 0.5 and 1.0 ms fell back to the sample peak without a word, true peaks up to 3 dB over - outside review, client 2026-10-26); 0 = sample peak only |
 
 ### 3.1 Presets
 
@@ -319,7 +319,9 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
   speed; smoothed over 0.5 s; error corrected over 4 s, the drift estimate follows over 16 s (critically damped).
   Measured with simulated clocks at -500..+500 ppm and late callbacks (capture up to 2 ms, output up to 0.5 ms):
   drift found within 2 ppm, fill on target within 0.5 ms, read-speed wobble about 15 ppm (0.03 cent), no xruns.
-- Target fill = largest capture block + ASIO period + 17 frames (half the taps + 1) + margin 3 ms; about 19 ms for
+- Target fill = largest capture block + ASIO period + 17 frames (half the taps + 1) + margin 3 ms (each underrun adds
+  2 ms up to 20; each minute without one takes 0.5 ms back - 2026-10-26, after an outside review: the margin only
+  grew); about 19 ms for
   10 ms capture blocks and 256-frame periods at 48 kHz. The deck gets silence until the fill is reached (start,
   after an underrun); each underrun adds 2 ms of margin (up to 20 ms). A fill far above target (the reader stalled,
   blocks dropped) moves the read position to the target (a resync).
@@ -594,8 +596,10 @@ Start with Windows (a check mark) writes the value `DJAP` = `"<program>" --autos
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, or removes it; checked only when the value names this program
 and Windows' startup apps list has not switched it off (switching it on clears that mark). The setup offers the same
 (ticked) and its uninstall removes the value. With `--autostart` the program starts hidden in the notification area
-(the window only when no audio device has been chosen yet). Greyed out in test runs (`--ini`, `--simulate`). A driver reset request (or buffer-size change) closes, opens and starts the driver
-again with the same choices. Once the driver is open the window shows the rate the interface runs at: Start
+(the window only when no audio device has been chosen yet). Greyed out in test runs (`--ini`, `--simulate`). A driver reset request (or buffer-size change) fades a running
+stream out, closes, opens and starts the driver again with the same choices; when that fails (the driver not ready
+yet) it is tried every second for a minute, the status bar saying so. Start with another driver chosen than the one
+that is open closes the open one first (it played on the old driver while the new name was saved). Once the driver is open the window shows the rate the interface runs at: Start
 switches the rate only when another one is chosen. Compact (client, 2026-10-25: "less vertical white space"):
 rows 6 px apart, each text block as high as its lines (driver info 2, state 3 with one channel or 5 with two decks,
 health 3, note 2) and the window as high as its content, so it is lower with one channel than with two decks.
@@ -610,7 +614,10 @@ with the program's usual fade-out, `StartAudio` stays 1, and the restarted progr
 retried every 5 s for 2 minutes). Not during a simulation.
 The setup asset `DJAP-Setup-<version>.exe` is downloaded into `%TEMP%\DJAP-update` and checked against the SHA-256
 GitHub publishes for it (the asset's `digest`, else a `<setup>.sha256` asset); without a checksum, or when it does
-not match, nothing is installed. Then the program starts the setup with `/SILENT /SUPPRESSMSGBOXES /NORESTART
+not match, nothing is installed; a `.sha256` file counts only when it is clear which hash is the setup's (the line
+naming it, or its only hash), and a download not as long as GitHub says is refused. Right before starting it, the
+program checks the file once more through a handle that lets nobody change or replace it until the setup runs (the
+download folder is the user's %TEMP%). The setup is not signed (no code-signing certificate). Then the program starts the setup with `/SILENT /SUPPRESSMSGBOXES /NORESTART
 /UPDATE=1 /DIR=<its folder> /LOG=%TEMP%\DJAP-update\setup.log` (`/CURRENTUSER` when not under Program Files; Windows
 asks for permission for Program Files) and ends with the usual fade-out. In update mode the setup waits up to 30 s for
 the program's mutex to go, keeps the Run value and skips the Media Feature Pack, and starts DJAP again as the original

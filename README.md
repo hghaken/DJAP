@@ -37,7 +37,8 @@ Per deck, in this order (`docs/design.md` sections 2-4):
 - **Bass enhancer, exciter, de-esser, stereo width** - optional colour stages.
 - **Soft clipper** and **look-ahead true-peak limiter** - the output never passes the ceiling (default -1 dBTP).
 
-The limiter look-ahead (default 1.5 ms, 0-5 ms) is the only delay the processing adds; bypass is the input delayed by
+The limiter look-ahead (default 1.5 ms, 0-5 ms) is the only latency the processing adds (the multiband filters let the
+lowest frequencies follow a few milliseconds later, as in any multiband processor); bypass is the input delayed by
 the same amount, bit-exact, so switching never jumps. Five shipped loudness presets go from easy listening to very loud
 (Gentle -18, Light -16, Medium -14, Loud -12, Very Loud -10 LUFS), and three follow a medium: FM Station (the dense FM sound at about -13 LUFS), DAB+ (EBU R 128: -23 LUFS, wide dynamics) and Web Stream (-16 LUFS, -2 dBTP for MP3 / AAC); every value of every loudness preset can be changed, and
 own loudness presets can be saved, renamed and deleted.

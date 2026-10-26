@@ -106,11 +106,24 @@ void release() {
     CHECK(y.version == "0.1.96" && y.sha256.empty() && y.setupUrl == "u");
 }
 
+// The .sha256 file: the hash on the setup's own line, or the only hash; never a guess between several.
+void checksumFile() {
+    const std::string a(64, 'a'), b(64, 'b');
+    CHECK(checksumFor(a + "  DJAP-Setup-0.1.96.exe\n", "DJAP-Setup-0.1.96.exe") == a);
+    CHECK(checksumFor(a + " *DJAP-Setup-0.1.96.exe\r\n", "DJAP-Setup-0.1.96.exe") == a); // binary-mode marker
+    CHECK(checksumFor(std::string(64, 'A'), "x.exe") == a);                               // the only one, upper case
+    CHECK(checksumFor(b + "  other.exe\n" + a + "  DJAP-Setup-0.1.96.exe\n", "DJAP-Setup-0.1.96.exe") == a);
+    CHECK(checksumFor(b + "  other.exe\n" + a + "  more.exe\n", "DJAP-Setup-0.1.96.exe").empty()); // which one?
+    CHECK(checksumFor("no hash here", "DJAP-Setup-0.1.96.exe").empty());
+    CHECK(checksumFor(a + "a  DJAP-Setup-0.1.96.exe", "DJAP-Setup-0.1.96.exe").empty()); // 65 characters
+}
+
 } // namespace
 
 int main() {
     sha256Vectors();
     versions();
     release();
+    checksumFile();
     return test::finish("release_test");
 }

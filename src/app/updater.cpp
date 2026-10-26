@@ -276,15 +276,7 @@ void Updater::download(HWND notify) {
         if (sha.empty() && !r.sha256Url.empty() && allowed(r.sha256Url, api)) {
             std::string text;
             if (get(r.sha256Url, L"application/octet-stream", &text, nullptr, nullptr, nullptr, 0, quit_, err) == Got::Ok)
-                for (size_t i = 0; i + 64 <= text.size() && sha.empty(); ++i) {
-                    std::string h = text.substr(i, 64);
-                    bool hex = true;
-                    for (char& ch : h) {
-                        if (ch >= 'A' && ch <= 'F') ch = static_cast<char>(ch - 'A' + 'a');
-                        hex = hex && ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'));
-                    }
-                    if (hex) sha = h;
-                }
+                sha = checksumFor(text, r.setupName);
         }
         if (sha.empty()) {
             finish(notify, 1, State::Failed, "GitHub gives no checksum for this setup: it is not installed");
@@ -318,6 +310,11 @@ void Updater::download(HWND notify) {
             finish(notify, 1, State::Failed, got == Got::NotFound ? "the setup is gone from GitHub" : err);
             return;
         }
+        if (r.setupSize > 0 && fs::file_size(part, ec) != r.setupSize) {
+            fs::remove(part, ec);
+            finish(notify, 1, State::Failed, "the download is not as long as GitHub says: it is not installed");
+            return;
+        }
         if (h.hex() != sha) {
             fs::remove(part, ec);
             finish(notify, 1, State::Failed, "the download does not match GitHub's checksum: it is not installed");
@@ -332,6 +329,7 @@ void Updater::download(HWND notify) {
         {
             std::lock_guard<std::mutex> lock(mutex_);
             setup_ = toUtf8(file.wstring());
+            setupSha_ = sha;
         }
         percent_ = 100;
         finish(notify, 1, State::Ready);
@@ -339,10 +337,11 @@ void Updater::download(HWND notify) {
 }
 
 bool Updater::launch(const fs::path& testIni, std::string& error) {
-    std::string setup;
+    std::string setup, sha;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         setup = setup_;
+        sha = setupSha_;
     }
     if (state_ != State::Ready || setup.empty()) {
         error = "no downloaded setup";
@@ -363,6 +362,25 @@ bool Updater::launch(const fs::path& testIni, std::string& error) {
     if (perUser) params += L" /CURRENTUSER";
     if (!testIni.empty()) params += L" /RESTARTINI=\"" + testIni.wstring() + L"\"";
     const std::wstring file = fromUtf8(setup);
+    // checked once more right before it runs, through a handle that lets nobody change or replace the file until the
+    // setup has started (the download folder is the user's own %TEMP%: another program could swap it meanwhile)
+    HANDLE held = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                              FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (held == INVALID_HANDLE_VALUE) {
+        error = "the downloaded setup cannot be read any more: it is not installed";
+        return false;
+    }
+    {
+        Sha256 h;
+        std::vector<char> buf(1 << 16);
+        DWORD got = 0;
+        while (ReadFile(held, buf.data(), static_cast<DWORD>(buf.size()), &got, nullptr) && got > 0) h.update(buf.data(), got);
+        if (sha.empty() || h.hex() != sha) {
+            CloseHandle(held);
+            error = "the downloaded setup was changed after its check: it is not installed";
+            return false;
+        }
+    }
     SHELLEXECUTEINFOW sei{};
     sei.cbSize = sizeof sei;
     sei.fMask = SEE_MASK_NOASYNC;
@@ -370,8 +388,10 @@ bool Updater::launch(const fs::path& testIni, std::string& error) {
     sei.lpFile = file.c_str();
     sei.lpParameters = params.c_str();
     sei.nShow = SW_SHOWNORMAL;
-    if (!ShellExecuteExW(&sei)) {
-        const DWORD e = GetLastError();
+    const BOOL started = ShellExecuteExW(&sei);
+    const DWORD e = GetLastError();
+    CloseHandle(held);
+    if (!started) {
         error = e == ERROR_CANCELLED ? "Windows' permission prompt was declined: nothing was installed"
                                      : "the setup could not be started (error " + std::to_string(e) + ")";
         return false;

@@ -31,7 +31,8 @@ inline double moveToward(double now, double target, double step) {
     return now < target ? (now + step < target ? now + step : target)
                         : (now - step > target ? now - step : target);
 }
-inline double clampd(double v, double lo, double hi) { return v < lo ? lo : (v > hi ? hi : v); }
+// NaN gives lo (a NaN volume once stuck in the deck's glide for good)
+inline double clampd(double v, double lo, double hi) { return v >= lo ? (v <= hi ? v : hi) : lo; }
 
 // Fast versions for per-sample gain computers (std::pow / log10 / tanh cost tens of cycles each, per sample).
 // fastExp2: relative error < 2e-7 (round to nearest, Taylor series of 2^f on [-0.5, 0.5]).
@@ -149,6 +150,69 @@ struct StereoBiquad2 {
     bool finite() const { return a.finite() && b.finite(); }
 };
 
+// 2x oversampling around a nonlinear stage (the soft clipper, the exciter) with polyphase IIR halfbands: two chains of
+// first-order allpasses in z^2 (Valenzuela and Constantinides; the design as in the public hiir library). Nearly no
+// delay - about 3 frames at low frequencies for up and down together, a minimum-phase-like response - against tens of
+// frames for a linear-phase FIR halfband (DJAP adds no latency but the look-ahead). kHalfbandCoefs = 8 with a transition
+// of 0.02: the images and aliases are 82 dB down, flat (+-0.00001 dB) to 0.46 x the base rate (20.3 kHz at 44.1 kHz).
+// Without it the clipper's and the exciter's overtones above the Nyquist frequency folded back as audible
+// inharmonic tones (an outside review measured -16..-44 dBc on 10-15 kHz tones at 48 kHz; client, 2026-10-26).
+constexpr int kHalfbandCoefs = 8;
+const double* halfbandCoefs(); // kHalfbandCoefs coefficients, computed once (design::halfband)
+
+struct StereoOversampler2x {
+    Pair c[kHalfbandCoefs];
+    Pair ux[kHalfbandCoefs], uy[kHalfbandCoefs]; // upsampler: each allpass's last input and output
+    Pair dx[kHalfbandCoefs], dy[kHalfbandCoefs]; // downsampler
+
+    StereoOversampler2x() {
+        const double* k = halfbandCoefs();
+        for (int i = 0; i < kHalfbandCoefs; ++i) c[i] = _mm_set1_pd(k[i]);
+        reset();
+    }
+    // one base-rate sample in, the two high-rate samples out (in time order)
+    inline void up(Pair x, Pair& first, Pair& second) {
+        Pair a = x, b = x; // path 0: the even coefficients, path 1: the odd ones
+        for (int i = 0; i < kHalfbandCoefs; i += 2) {
+            const Pair ta = _mm_add_pd(_mm_mul_pd(_mm_sub_pd(a, uy[i]), c[i]), ux[i]);
+            ux[i] = a;
+            uy[i] = ta;
+            a = ta;
+            const Pair tb = _mm_add_pd(_mm_mul_pd(_mm_sub_pd(b, uy[i + 1]), c[i + 1]), ux[i + 1]);
+            ux[i + 1] = b;
+            uy[i + 1] = tb;
+            b = tb;
+        }
+        first = a;
+        second = b;
+    }
+    // the two high-rate samples in (in time order), one base-rate sample out
+    inline Pair down(Pair first, Pair second) {
+        Pair a = second, b = first;
+        for (int i = 0; i < kHalfbandCoefs; i += 2) {
+            const Pair ta = _mm_add_pd(_mm_mul_pd(_mm_sub_pd(a, dy[i]), c[i]), dx[i]);
+            dx[i] = a;
+            dy[i] = ta;
+            a = ta;
+            const Pair tb = _mm_add_pd(_mm_mul_pd(_mm_sub_pd(b, dy[i + 1]), c[i + 1]), dx[i + 1]);
+            dx[i + 1] = b;
+            dy[i + 1] = tb;
+            b = tb;
+        }
+        return _mm_mul_pd(_mm_add_pd(a, b), _mm_set1_pd(0.5));
+    }
+    void reset() {
+        for (int i = 0; i < kHalfbandCoefs; ++i) ux[i] = uy[i] = dx[i] = dy[i] = _mm_setzero_pd();
+    }
+    bool finite() const {
+        for (int i = 0; i < kHalfbandCoefs; ++i)
+            if (!std::isfinite(leftOf(uy[i])) || !std::isfinite(rightOf(uy[i])) || !std::isfinite(leftOf(dy[i])) ||
+                !std::isfinite(rightOf(dy[i])))
+                return false;
+        return true;
+    }
+};
+
 // State-variable filter, linear trapezoidal integration (A. Simper): its coefficients may change every sample - a
 // gain or frequency glides without a click. The coefficients are shared; each channel has its own SvfState.
 struct SvfCoeffs {
@@ -186,6 +250,9 @@ double magnitudeDb(const BiquadCoeffs& c, double fs, double hz);
 // The same for a state-variable filter section (its analogue prototype at the pre-warped frequency: the SVF is that
 // prototype's bilinear transform, so this is exact).
 double magnitudeDb(const SvfCoeffs& c, double fs, double hz);
+// The allpass coefficients of a polyphase IIR halfband: `count` of them for a transition band of `transition` (as a
+// fraction of the oversampled rate, 0..0.5), written to `out`. Elliptic design, closed form.
+void halfband(int count, double transition, double* out);
 } // namespace design
 
 // Flushes denormals (FTZ/DAZ) for the lifetime of the object and restores the thread's own mode afterwards.

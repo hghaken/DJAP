@@ -309,6 +309,39 @@ void faults() {
         CHECK(st.underruns == 0);
         CHECK_NEAR(st.fillMs, st.targetMs, 0.5);
     }
+    {
+        // the margin a stall added comes back down (0.5 ms per calm minute), without a gap
+        double base = 0.0;
+        {
+            AsyncInput ai;
+            ai.reset(48000);
+            Sim s;
+            s.driftPpm = 50.0;
+            s.capJitter = 0.002;
+            s.signal = sine(440.0, 0.5, 48000);
+            s.run(ai, 10.0);
+            base = ai.state().targetMs;
+        }
+        AsyncInput ai;
+        ai.reset(48000);
+        Sim s;
+        s.driftPpm = 50.0;
+        s.capJitter = 0.002;
+        s.capPause[0] = 10.0;
+        s.capPause[1] = 10.2;
+        s.signal = sine(440.0, 0.5, 48000);
+        s.run(ai, 400.0);
+        const AsyncInputState st = ai.state();
+        size_t gaps = 0;
+        for (size_t i = 20 * 48000; i < s.outL.size(); ++i) // from 10 s after the stall on
+            if (s.outL[i] == 0.0f && s.outR[i] == 0.0f) ++gaps;
+        std::printf("   after a stall: buffer %.2f ms after 400 s (%.2f without the stall), underruns %lld, silent frames "
+                    "after it %zu\n",
+                    st.targetMs, base, st.underruns, gaps);
+        CHECK(st.underruns >= 1 && st.underruns <= 3);
+        CHECK_NEAR(st.targetMs, base, 0.3);
+        CHECK(gaps == 0 && st.resyncs == 0);
+    }
 }
 
 void throughEngine() {

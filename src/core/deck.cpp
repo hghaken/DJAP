@@ -81,7 +81,7 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     normaliseValues(v);
     DeckConfig c;
     c.fs = fs;
-    c.look = static_cast<int>(std::lround(clampd(ctl.lookMs, 0.0, kMaxLookMs) * fs / 1000.0));
+    c.look = lookFrames(ctl.lookMs, fs);
     c.processing = ctl.processing;
     c.freeze = ctl.freeze;
     auto on = [&](Param p) { return v[p] >= 0.5; };
@@ -466,6 +466,10 @@ void DeckProcessor::resetStage(int s) {
     case sExciter:
         excHp_.reset();
         excHp2_.reset();
+        excOs_.reset();
+        break;
+    case sClipper:
+        clipOs_.reset();
         break;
     case sDeEsser:
         dessHp_.reset();
@@ -524,7 +528,7 @@ bool DeckProcessor::statesFinite() const {
     if (!colour_.finite()) return false;
     if (!limiter_.finite() || !kIn_.finite() || !kPost_.finite() || !kOut_.finite()) return false;
     if (!banks_[0]->finite() || !banks_[1]->finite()) return false;
-    if (!bassLp4_.finite() || !excHp_.finite() || !excHp2_.finite()) return false;
+    if (!bassLp4_.finite() || !excHp_.finite() || !excHp2_.finite() || !excOs_.finite() || !clipOs_.finite()) return false;
     if (!dessHp_.finite() || !dessShelf_.finite() || !width_[0].finite() || !width_[1].finite()) return false;
     return compHpf_.finite();
 }
@@ -845,11 +849,17 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         }
         tap(ctBass, l, r);
 
-        // exciter: only what the saturation adds, high-passed again
+        // exciter: only what the saturation adds, high-passed again; the saturation at twice the rate, so its
+        // overtones above the Nyquist frequency do not fold back (dsp.h, StereoOversampler2x)
         if (running_[sExciter]) {
             const Pair h = excHp_.process(makePair(l, r));
-            const double hl = leftOf(h), hr = rightOf(h);
-            const Pair e = excHp2_.process(makePair(hl - fastTanh(4.0 * hl) / 4.0, hr - fastTanh(4.0 * hr) / 4.0));
+            Pair a, b;
+            excOs_.up(h, a, b);
+            auto sat = [](Pair p) {
+                const double x = leftOf(p), y = rightOf(p);
+                return makePair(x - fastTanh(4.0 * x) / 4.0, y - fastTanh(4.0 * y) / 4.0);
+            };
+            const Pair e = excHp2_.process(excOs_.down(sat(a), sat(b)));
             const double el = leftOf(e), er = rightOf(e);
             const double m = mix_[sExciter] * c.excGain;
             l += m * el;
@@ -910,12 +920,24 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             blockPost_ += a * a + b * b;
         }
 
-        // soft clipper (zero latency)
+        // soft clipper at twice the rate (no fold-back of its overtones; about 2.6 frames of phase delay at low
+        // frequencies, no look-ahead)
         if (running_[sClipper]) {
             clipDriveS_ = toward(clipDriveS_, c.clipDrive, c.gainSmooth);
-            const double ceil = c.clipCeiling, d = clipDriveS_ / ceil;
+            const double ceil = c.clipCeiling, d = clipDriveS_ / ceil, inv = 1.0 / ceil;
             const double ul = l * d, ur = r * d;
-            const double yl = ceil * softClip(ul), yr = ceil * softClip(ur);
+            // the filters see the driven signal only; the ceiling enters per sample in the curve itself, so a new
+            // ceiling does not meet samples of the old scale in the filters' memory (a click)
+            Pair a, b;
+            clipOs_.up(makePair(l * clipDriveS_, r * clipDriveS_), a, b);
+            auto curve = [&](Pair p) {
+                return makePair(ceil * softClip(leftOf(p) * inv), ceil * softClip(rightOf(p) * inv));
+            };
+            // a flattened peak, its overtones above the audio band removed, rises a little over the ceiling again
+            // (0.36 dB on a 3 kHz tone 6 dB in): the limiter after it holds the ceiling. Holding it here instead
+            // brought the fold-back of the highs back (-24 dBc on 13 kHz).
+            const Pair y = clipOs_.down(curve(a), curve(b));
+            const double yl = leftOf(y), yr = rightOf(y);
             const double m = mix_[sClipper];
             const double au = std::max(std::fabs(ul), std::fabs(ur));
             if (au > 0.5) {

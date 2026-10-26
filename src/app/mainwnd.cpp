@@ -140,10 +140,12 @@ void MainWindow::startSavedAudio() {
     apiFromName(settings_.api, api);
     if (api == AudioApi::Asio) {
         if (settings_.driver.empty()) err = "no ASIO driver chosen";
-        else
+        else {
+            if (audio_.driverOpen() && audio_.driverName() != settings_.driver) audio_.closeDriver();
             ok = (audio_.driverOpen() || audio_.openDriver(settings_.driver, hwnd_, err)) &&
                  audio_.startDevice(settings_.sampleRate, settings_.bufferSize, asioChannelsFrom(settings_),
                                     sysInputsFrom(settings_), err);
+        }
     } else {
         SysRoute routes[2];
         sysRoutesFrom(settings_, routes);
@@ -643,8 +645,8 @@ void MainWindow::updateStatus() {
         else swprintf(volume, 48, L"Windows volume %.0f %%   |   ", winVolume_.percent());
     }
     if (fs > 0)
-        swprintf(right, 160, L"%sProcessing adds %.2f ms (%d frames at %.1f kHz)", volume, settings_.lookAheadMs,
-                 static_cast<int>(std::lround(settings_.lookAheadMs * fs / 1000.0)), fs / 1000.0);
+        swprintf(right, 160, L"%sProcessing adds %.2f ms (%d frames at %.1f kHz)", volume,
+                 lookFrames(settings_.lookAheadMs, fs) * 1000.0 / fs, lookFrames(settings_.lookAheadMs, fs), fs / 1000.0);
     else
         swprintf(right, 160, L"%sProcessing adds %.2f ms (limiter look-ahead)", volume, settings_.lookAheadMs);
     SendMessageW(status_, SB_SETTEXTW, 1, reinterpret_cast<LPARAM>(right));

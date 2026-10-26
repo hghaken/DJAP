@@ -26,7 +26,7 @@ namespace ap::plugin {
 namespace {
 
 const wchar_t* const kClass = L"DJAPPluginView";
-const double kLooks[] = {0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0}; // the Setup window's choices (ms)
+const double kLooks[] = {0.0, 1.5, 2.0, 3.0, 5.0}; // the Setup window's choices (ms; see audiodlg.cpp)
 enum Id { idPreset = 1, idColour, idLook, idBypass, idEdit, idEditColour, idSlider0 = 10, idMeter = 20 };
 enum Slider { slLevel, slEnhancer, slWidth, slFreq, kSliders };
 const wchar_t* const kSliderName[kSliders] = {L"Bass level", L"Bass enhancer", L"Bass width", L"Bass frequency"};
@@ -199,7 +199,7 @@ void PluginView::create() {
     fillLists();
     for (double l : kLooks) {
         wchar_t t[48];
-        swprintf(t, 48, l == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", l);
+        swprintf(t, 48, l == 0.0 ? L"0 ms (sample peak, no delay)" : l == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", l);
         SendMessageW(look_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(t));
     }
 
