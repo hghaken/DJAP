@@ -282,7 +282,8 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
             std::vector<POINT> poly(SpectrumAnalyzer::kPoints);
             for (int i = 0; i < SpectrumAnalyzer::kPoints; ++i)
                 poly[static_cast<size_t>(i)] = {g.xOf(SpectrumAnalyzer::pointHz(i)), yOfSpec(pts[static_cast<size_t>(i)])};
-            polyline(dc, poly, curve == 0 ? kOrange : kTeal, std::max(1, px(1.5)));
+            // one pixel (client, 2026-10-27: as the history graphs - the two spectra no longer run together)
+            polyline(dc, poly, curve == 0 ? kOrange : kTeal, 1);
         }
         SelectClipRgn(dc, nullptr);
         DeleteObject(clip);
