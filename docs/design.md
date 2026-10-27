@@ -645,7 +645,12 @@ download folder is the user's %TEMP%). The setup is not signed (no code-signing 
 /UPDATE=1 /DIR=<its folder> /LOG=%TEMP%\DJAP-update\setup.log` (`/CURRENTUSER` when not under Program Files; Windows
 asks for permission for Program Files) and ends with the usual fade-out. In update mode the setup waits up to 30 s for
 the program's mutex to go, keeps the Run value and skips the Media Feature Pack, and starts DJAP again as the original
-user. Only https from github.com, api.github.com and *.githubusercontent.com is fetched; a test ini may set `[Updates]
+user. GitHub's API answers 60 questions an hour per network without a login (every program behind the same router
+counts; client 2026-10-27: "403"): when it refuses (403 / 429) the check asks the release's web page
+(`github.com/<owner>/<repo>/releases/latest`), which has no such limit and redirects to `.../releases/tag/v<version>`;
+the setup and its `.sha256` are then taken from their fixed addresses under it (`releaseFromTagUrl`; no size, so no
+progress percentage - the checksum is still required). Only https from github.com, api.github.com and
+*.githubusercontent.com is fetched; a test ini may set `[Updates]
 Url=http://127.0.0.1:<port>/...`, and that host (only 127.0.0.1 / localhost) is then allowed too, and the restarted
 program gets the test ini back (`/RESTARTINI`). The next check removes old setups from the folder (the log stays).
 A release is made by `tools/publish.ps1 -Release` (the setup built from the published commit and its `.sha256`). The

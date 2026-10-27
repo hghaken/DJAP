@@ -741,7 +741,9 @@ of both decks together uses only a few percent of one CPU core.
 
 With "Check GitHub for a new version once a day" on (default), DJAP asks the project's public GitHub page about 15
 seconds after it starts and then once a day. It only asks; it sends nothing about you or your computer beyond what any
-web page request contains.
+web page request contains. GitHub answers its quick way of asking only 60 times an hour per network (every program
+behind your router counts); when that is used up DJAP reads the release page itself instead, which GitHub does not
+limit.
 
 When a newer version exists, DJAP tells you once with a message at its notification-area icon, in the status bar and
 in the Setup window. **Nothing is downloaded or installed until you click Install update** in the Setup window

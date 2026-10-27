@@ -21,6 +21,8 @@ class Updater {
 public:
     enum class State { Idle, Checking, UpToDate, Available, Downloading, Ready, Failed };
     static constexpr const char* kLatestUrl = "https://api.github.com/repos/hghaken/DJAP/releases/latest";
+    // the same release's web page: asked when the API refuses (its hourly limit per network used up)
+    static constexpr const char* kLatestPage = "https://github.com/hghaken/DJAP/releases/latest";
 
     Updater() = default;
     ~Updater(); // waits for a running check or download

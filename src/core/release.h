@@ -23,6 +23,12 @@ struct ReleaseInfo {
 // has no tag or no setup ("DJAP-Setup-*.exe") among its assets.
 bool parseLatestRelease(const std::string& json, ReleaseInfo& out, std::string& error);
 
+// The release from where GitHub's web page of the latest release leads ("https://github.com/<owner>/<repo>/releases/
+// tag/v0.1.95"): the version, and the setup and its .sha256 at their fixed download addresses (no size). For when
+// GitHub's API refuses (403 / 429: its limit of 60 questions an hour per network without a login is used up - the
+// web pages have no such limit). False when the address is not a release tag of that form.
+bool releaseFromTagUrl(const std::string& url, ReleaseInfo& out);
+
 // Compares two versions part by part as numbers ("0.1.10" > "0.1.9"); a leading "v" and anything from "+" or "-" on
 // ("+dev") are ignored, missing parts count as 0. <0, 0 or >0.
 int compareVersions(const std::string& a, const std::string& b);

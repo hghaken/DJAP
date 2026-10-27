@@ -85,8 +85,10 @@ enum class Got { Ok, NotFound, Failed };
 
 // GET `url`: the body into `body` (at most 4 MB), or into `out` with a SHA-256 and the progress in `percent`. Where
 // the redirects (which WinHTTP follows) ended must be allowed too (`api`: see allowed()).
+// `status`: the HTTP status (0: none came); `landed`: the address after the redirects.
 Got get(const std::string& url, const std::string& api, const wchar_t* accept, std::string* body, std::ofstream* out,
-        Sha256* sha, std::atomic<int>* percent, uint64_t expected, const std::atomic<bool>& quit, std::string& error) {
+        Sha256* sha, std::atomic<int>* percent, uint64_t expected, const std::atomic<bool>& quit, std::string& error,
+        DWORD* status = nullptr, std::string* landed = nullptr) {
     Url u;
     if (!crack(url, u)) {
         error = "not a web address: " + url;
@@ -123,13 +125,17 @@ Got get(const std::string& url, const std::string& api, const wchar_t* accept, s
             error = "the download was redirected away from GitHub: " + toUtf8(finalUrl);
             return Got::Failed;
         }
+        if (landed) *landed = toUtf8(finalUrl);
     }
     DWORD code = 0, size = sizeof code;
     WinHttpQueryHeaders(r.h, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &code,
                         &size, WINHTTP_NO_HEADER_INDEX);
+    if (status) *status = code;
     if (code == 404) return Got::NotFound;
     if (code != 200) {
-        error = "the server answered " + std::to_string(code);
+        error = code == 403 || code == 429 ? "GitHub refused (" + std::to_string(code) +
+                                                 "): its limit of questions an hour from this network is used up"
+                                           : "the server answered " + std::to_string(code);
         return Got::Failed;
     }
     uint64_t total = 0;
@@ -244,12 +250,31 @@ void Updater::check(HWND notify, const std::string& url, const std::string& curr
             return;
         }
         std::string body, err;
-        const Got got = get(api, api, L"application/vnd.github+json", &body, nullptr, nullptr, nullptr, 0, quit_, err);
+        DWORD status = 0;
+        const Got got = get(api, api, L"application/vnd.github+json", &body, nullptr, nullptr, nullptr, 0, quit_, err,
+                            &status);
+        ReleaseInfo r;
+        if (got == Got::Failed && (status == 403 || status == 429) && api == kLatestUrl) {
+            // GitHub's API answers 60 questions an hour per network without a login - every program behind the same
+            // router counts. Its web page of the latest release has no such limit: it redirects to the release's
+            // tag, and the setup and its .sha256 sit at fixed addresses under it (the checksum is still required)
+            std::string page, landed, err2;
+            if (get(kLatestPage, api, L"text/html", &page, nullptr, nullptr, nullptr, 0, quit_, err2, nullptr, &landed) ==
+                    Got::Ok &&
+                releaseFromTagUrl(landed, r)) {
+                {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    release_ = r;
+                    checkedAt_ = timeNow();
+                }
+                finish(notify, 0, compareVersions(r.version, current) > 0 ? State::Available : State::UpToDate);
+                return;
+            }
+        }
         if (got == Got::Failed) {
             finish(notify, 0, State::Failed, err);
             return;
         }
-        ReleaseInfo r;
         if (got == Got::NotFound) { // no release published yet
             {
                 std::lock_guard<std::mutex> lock(mutex_);
