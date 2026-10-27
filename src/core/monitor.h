@@ -32,8 +32,40 @@ struct DeckMeters {
     uint16_t active = 0;                  // MeterRecord::active of the newest record
 };
 
-// What the graphs show (analysis.h): spectra and stereo statistics of a deck's input and output, and the last 60 s
-// of loudness and gains, a point every 0.1 s.
+// A waveform of the last kSeconds for the Graphs window's scope (client, 2026-10-27: "an oscilloscope, L and R, to
+// see whether it clips - of the input and the output, chosen with a right-click"): per bucket of time each channel's
+// lowest and highest sample and how many samples stood at full scale (the output's clip guard holds them there; at
+// the input it is the source that clips).
+struct WaveScope {
+    static constexpr int kBuckets = 400;
+    static constexpr double kSeconds = 2.0;
+    static constexpr float kClipLevel = 0.9999f; // |x| at or over this: at full scale (-0.001 dBFS)
+    struct Bucket {
+        float lo[2] = {0.0f, 0.0f}, hi[2] = {0.0f, 0.0f};
+        int clipped[2] = {0, 0};
+    };
+    std::vector<Bucket> buckets = std::vector<Bucket>(kBuckets); // ring
+    int pos = 0;                                                  // the oldest
+    // the last samples themselves, for the short time spans (client, 2026-10-27: "the sines are too close together"):
+    // kRaw frames, 0.68 s at 48 kHz
+    static constexpr int kRaw = 32768;
+    std::vector<float> raw[2] = {std::vector<float>(kRaw), std::vector<float>(kRaw)};
+    long long rawWritten = 0; // frames written so far: the newest is rawWritten - 1
+    double fs = 48000.0;
+    void reset(double fs);
+    void feed(const float* left, const float* right, int n);
+    // the buckets oldest first
+    const Bucket& at(int i) const { return buckets[static_cast<size_t>((pos + i) % kBuckets)]; }
+    // sample `i` (absolute: rawWritten - kRaw <= i < rawWritten) of channel c
+    float sample(int c, long long i) const { return raw[c][static_cast<size_t>(i & (kRaw - 1))]; }
+
+private:
+    Bucket cur_;
+    int curFrames_ = 0, perBucket_ = 240;
+};
+
+// What the graphs show (analysis.h): spectra and stereo statistics of a deck's input and output, the last 60 s of
+// loudness and gains, a point every 0.1 s, and the input's and output's waveform of the last 2 s.
 struct DeckAnalysis {
     static constexpr int kHistory = 600;
     struct Point {
@@ -45,6 +77,7 @@ struct DeckAnalysis {
     StereoAnalyzer stereoIn, stereoOut;
     std::vector<Point> history = std::vector<Point>(kHistory); // ring
     int historyPos = 0;
+    WaveScope scopeIn, scopeOut;
     // the history oldest first
     const Point& at(int i) const { return history[static_cast<size_t>((historyPos + i) % kHistory)]; }
 };

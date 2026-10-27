@@ -689,6 +689,14 @@ width       = sqrt(sum(S^2) / sum(M^2)) x 100 %       (M = (L+R)/2, S = (L-R)/2;
 
 The goniometer plots the output's last 43 ms with mono vertical and left / right on the diagonals.
 
+The scope shows the input or the output (a right-click chooses) as 20, 50 or 200 ms of the samples themselves - the
+picture ends at the newest rising zero crossing of the left channel, so a steady tone stands still - or as the last
+2 s in 400 buckets of each channel's lowest and highest sample. It counts the samples at full scale (|x| >= 0.9999,
+-0.001 dBFS) over the last 2 s whatever the span shown. At the output only the clip guard puts
+samples there - it holds anything over full scale - so a red bucket is clipping that left the processor; at the input
+it is clipping in the source. `analysis_test`: a sine 25 % over full scale, clamped, counts 41 % of its samples, a
+clean one none.
+
 ## 16. The real-time engine
 
 ### 16.1 Rules for the audio thread

@@ -451,7 +451,12 @@ per 10 ms record, averaged over 0.4 s in the GUI), on a square-root scale (0.5 d
 preset (output against input, LU to the target, 1:1 dashed) with the detector's level now as a white dot and its last 3 s as amber dots fading with age (client: "the dots in
 the compressor output"; a point per GUI refresh, 20 Hz, kept while the window is closed); the last 60 s
 of momentary loudness of input and output in LU to the target; the last 60 s of the leveller, compressor and
-density (mean of the bands) gains; a goniometer of the output's last 43 ms (mono vertical, L / R on the
+density (mean of the bands) gains; a scope of the last 2 s (client, 2026-10-27: "an oscilloscope of L and R to
+check for clipping, of the input and the output, chosen with a right-click"; then "the sines are too close
+together": 20 / 50 / 200 ms of the samples themselves - 50 by default - ending at the newest rising zero crossing of
+the left channel, or 2 s as buckets; `WaveScope` in monitor.h keeps the last 32768 frames and 400 buckets of 2 s with
+each channel's lowest / highest sample and the samples at |x| >= 0.9999; linear -1 .. +1, red where they clipped, the
+limiter's ceiling for the output; the clip count always over 2 s); a goniometer of the output's last 43 ms (mono vertical, L / R on the
 diagonals) with, in the same panel right under it (client: "the three values in the same stereo graph, not
 taller"), bars for the output's correlation (0.3 s) and the input's and output's width (side level against mid
 level, 0 % = mono). History points every 0.1 s; every start of the audio clears it.

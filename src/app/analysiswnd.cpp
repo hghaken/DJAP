@@ -23,18 +23,18 @@ const wchar_t* const kClass = L"APAnalysisWindow";
 const COLORREF kBack = RGB(28, 30, 33), kPanel = RGB(20, 22, 25), kEdge = RGB(55, 58, 64), kGrid = RGB(70, 74, 80),
                kText = RGB(214, 218, 224), kDim = RGB(120, 126, 134), kBlue = RGB(80, 160, 235),
                kOrange = RGB(240, 130, 50), kTeal = RGB(80, 215, 195), kPurple = RGB(175, 145, 245),
-               kTarget = RGB(250, 220, 90), kWell = RGB(44, 47, 52);
+               kTarget = RGB(250, 220, 90), kWell = RGB(44, 47, 52), kRed = RGB(235, 70, 70);
 
-const wchar_t* const kTips[7] = {
+const wchar_t* const kTips[8] = {
     L"The compressor's curve for this deck's loudness preset: output against input level, both in LU to the target (dashed: "
     L"1:1, no compression). Above the threshold the line bends by the ratio, with a soft knee; make-up lifts it "
     L"back. The white dot is where the compressor works now, the amber dots where it worked in the last 3 s (the "
     L"fainter, the older): the further up the bend, the more it compresses.",
     L"Loudness of the last 60 s, momentary (400 ms), in LU to the loudness preset's target: orange = original (the deck's "
-    L"input), turquoise = processed (the output). The processed line should stay close to the target line; the "
+    L"input), turquoise = processed (the output), -30 .. +18 LU. The processed line should stay close to the target line; the "
     L"original shows how much the songs' levels differ.",
     L"Gains of the last 60 s: leveller (blue; up = lifted), compressor (turquoise; its reduction, 0 or down) and "
-    L"density (purple; the average of its bands). Scale -12 .. +12 dB.",
+    L"density (purple; the average of its bands). Scale -18 .. +18 dB.",
     L"Goniometer of the output (the last 43 ms): mono is a vertical line, left alone lies on the L diagonal, right "
     L"alone on the R diagonal; the wider the cloud, the wider the stereo image. A flat, horizontal cloud means left "
     L"and right are opposite (a phase problem).",
@@ -43,6 +43,10 @@ const wchar_t* const kTips[7] = {
     L"Stereo width of the deck's input: the side (L - R) level against the mid (L + R) level. 0 % = mono, 100 % = as "
     L"much side as mid; music is usually 20 - 60 %.",
     L"Stereo width of the deck's output, as for the input: compare the two to see what the width stage does.",
+    L"Scope of the last 2 s, left channel above, right below: the waveform's highest and lowest sample at each moment. "
+    L"Red where samples stood at full scale (0 dBFS): clipping. Output: the dotted yellow lines are the limiter's "
+    L"ceiling, which the output should stay inside; the output's own clip guard holds anything over full scale. "
+    L"Input: what comes in - clipping there is in the source. Right-click: input or output.",
 };
 
 // The signal-chain panel (client, 2026-10-25: "for every step of the audio process a bar: does it do anything; start
@@ -270,6 +274,31 @@ LRESULT AnalysisWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         if (openStage_ && chainRowAt(pt, deck, row)) openStage_(deck, kChainTab[row], row == kColourRow);
         return 0;
     }
+    case WM_CONTEXTMENU: { // a right-click on a scope: the input or the output (client, 2026-10-27)
+        POINT pt{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+        if (lp == -1) break; // from the keyboard: no point to go by
+        POINT local = pt;
+        ScreenToClient(hwnd_, &local);
+        for (int d = 0; d < 2; ++d) {
+            if (!PtInRect(&scopeRect_[d], local)) continue;
+            HMENU m = CreatePopupMenu();
+            AppendMenuW(m, MF_STRING | (scopeInput_[d] ? MF_CHECKED : 0), 1, L"Scope of the &input");
+            AppendMenuW(m, MF_STRING | (scopeInput_[d] ? 0 : MF_CHECKED), 2, L"Scope of the &output");
+            AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+            const int spans[4] = {20, 50, 200, 2000};
+            const wchar_t* spanNames[4] = {L"20 ms across", L"50 ms across", L"200 ms across", L"2 s across"};
+            for (int k = 0; k < 4; ++k)
+                AppendMenuW(m, MF_STRING | (scopeMs_[d] == spans[k] ? MF_CHECKED : 0), static_cast<UINT_PTR>(10 + k),
+                            spanNames[k]);
+            const int choice = TrackPopupMenuEx(m, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y, hwnd_, nullptr);
+            DestroyMenu(m);
+            if (choice == 1 || choice == 2) scopeInput_[d] = choice == 1;
+            if (choice >= 10 && choice < 14) scopeMs_[d] = spans[choice - 10];
+            if (choice) InvalidateRect(hwnd_, nullptr, FALSE);
+            return 0;
+        }
+        break;
+    }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC dc = BeginPaint(hwnd_, &ps);
@@ -377,21 +406,24 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
     const RECT chain{area.left, top, area.left + chainW, bottom};
     paintChain(dc, d, chain, live);
     const int left0 = chain.right + g, room = area.right - left0;
-    // compressor and goniometer square, but never wider than a quarter of the room (one tall row)
-    const int sq = std::min(h, (room - barsW - 4 * g) / 4);
-    const int flexW = std::max(px(120), (room - 2 * sq - barsW - 4 * g) / 2);
-    RECT panel[4];
+    // compressor and goniometer square, but never wider than a fifth of the room (one tall row); between them the
+    // loudness and gain histories and the scope
+    const int sq = std::min(h, (room - barsW - 5 * g) / 5);
+    const int flexW = std::max(px(120), (room - 2 * sq - barsW - 5 * g) / 3);
+    RECT panel[5];
     int x = left0;
-    const int widths[4] = {sq, flexW, flexW, sq};
-    for (int i = 0; i < 4; ++i) {
+    const int widths[5] = {sq, flexW, flexW, flexW, sq};
+    for (int i = 0; i < 5; ++i) {
         panel[i] = RECT{x, top, x + widths[i], bottom};
         x += widths[i] + g;
     }
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         fill(dc, panel[i], kPanel);
         frame(dc, panel[i], kEdge);
         if (i < 3) placeTip(d, i, panel[i]); // the goniometer's tip covers its plot only (below)
     }
+    placeTip(d, 7, panel[3]);
+    paintScope(dc, d, panel[3], live, th);
 
     // ---- compressor curve ----
     {
@@ -458,12 +490,15 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
     for (int which = 0; which < 2; ++which) {
         const RECT& p = panel[1 + which];
         const int l = p.left + px(8), r = p.right - px(30), t = p.top + th + px(12), b = p.bottom - th - px(12);
-        const double lo = which == 0 ? -24.0 : -12.0, hi = which == 0 ? 6.0 : 12.0;
+        // room for what the music does (client, 2026-10-27: "the graphs clip at the bottom and top"): a loud original
+        // in a quiet preset lies 15-18 LU over its target (-24 .. +6 cut it off), the leveller's range goes to 15 dB
+        // (-12 .. +12 cut it off); loudness under -30 LU (a pause, a fade's end) is left out instead of lying on the edge
+        const double lo = which == 0 ? -30.0 : -18.0, hi = 18.0;
         auto Y = [&](double vdb) { return b - static_cast<int>((b - t) * (std::min(hi, std::max(lo, vdb)) - lo) / (hi - lo) + 0.5); };
         auto X = [&](int i) { return l + static_cast<int>(static_cast<double>(r - l) * i / (DeckAnalysis::kHistory - 1) + 0.5); };
         text(dc, p.left + px(6), p.top + px(4),
              which == 0 ? L"Loudness, LU to the target - last 60 s" : L"Gain, dB - last 60 s", kDim);
-        for (double gv = which == 0 ? -18.0 : -6.0; gv <= hi; gv += 6.0) {
+        for (double gv = lo + 6.0; gv <= hi; gv += 6.0) {
             line(dc, l, Y(gv), r, Y(gv), gv == 0.0 ? RGB(110, 114, 120) : kGrid, PS_DOT);
             text(dc, p.right - px(4), Y(gv) - th / 2, num(gv > 0 ? L"+%.0f" : L"%.0f", gv), kDim, TA_RIGHT);
         }
@@ -495,8 +530,8 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
                 bool ok = pt.live;
                 if (which == 0) {
                     const double lufs = k == 0 ? pt.inM : pt.outM;
-                    ok = ok && lufs > -70.0;
                     val = lufs - target;
+                    ok = ok && lufs > -70.0 && val >= lo; // under the scale: a gap, not a line on the edge
                 } else {
                     val = k == 0 ? pt.leveller : k == 1 ? pt.compressor : pt.density;
                 }
@@ -509,7 +544,7 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
     // ---- goniometer, with the correlation and width bars under it (client, 2026-10-25: "the three values in the
     // same stereo graph; do not make it taller"): plot and bars as one block, centred in the panel; the plot as large
     // a square as the panel leaves after the bars ----
-    const RECT& gp = panel[3];
+    const RECT& gp = panel[4];
     const int rowH = th + px(10), barsH = 3 * rowH;
     const int side = std::max(px(60), std::min(static_cast<int>(gp.right - gp.left),
                                                 static_cast<int>(gp.bottom - gp.top) - barsH - px(10)));
@@ -577,6 +612,102 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
             }
         }
     }
+}
+
+// The scope (client, 2026-10-27: "an oscilloscope of L and R, to check whether it clips - of the input and the output,
+// chosen with a right-click"; then "the sines are too close together"): 20, 50 (the default) or 200 ms of the samples
+// themselves, ending at the newest rising zero crossing of the left channel (a trigger: a tone stands still), or the
+// last 2 s as each moment's lowest and highest sample; left above, right below, on a linear scale (-1 .. +1 = full
+// scale); red where samples stood at full scale. The output also gets the limiter's ceiling (yellow, dotted). The
+// clip count and the peaks under it are always over the last 2 s.
+void AnalysisWindow::paintScope(HDC dc, int d, const RECT& p, bool live, int th) {
+    scopeRect_[d] = p;
+    const bool input = scopeInput_[d];
+    const WaveScope& s = input ? audio_.analysis(d).scopeIn : audio_.analysis(d).scopeOut;
+    const PresetValues v = settings_.valuesOf(settings_.deck[d].preset);
+    const bool ceilingShown = !input && v[pLimOn] >= 0.5 && settings_.deck[d].processing;
+    const double ceiling = dbToLin(v[pLimCeiling]);
+    const int span = scopeMs_[d];
+    text(dc, p.left + px(6), p.top + px(4),
+         std::wstring(input ? L"Scope: input" : L"Scope: output") + L", L / R - " +
+             (span >= 1000 ? std::wstring(L"last 2 s") : std::to_wstring(span) + L" ms") + L"  (right-click: more)",
+         kDim);
+    const int l = p.left + px(22), r = p.right - px(8), t = p.top + th + px(10), b = p.bottom - th - px(12);
+    const int gap = px(8), laneH = (b - t - gap) / 2;
+    if (laneH < px(20) || r - l < px(40)) return;
+    long clipped[2] = {0, 0};
+    float peak[2] = {0.0f, 0.0f};
+    for (int k = 0; k < WaveScope::kBuckets; ++k) {
+        const WaveScope::Bucket& bk = s.at(k);
+        for (int c = 0; c < 2; ++c) {
+            clipped[c] += bk.clipped[c];
+            peak[c] = std::max(peak[c], std::max(std::fabs(bk.lo[c]), std::fabs(bk.hi[c])));
+        }
+    }
+    for (int c = 0; c < 2; ++c) {
+        const int top = t + c * (laneH + gap), mid = top + laneH / 2;
+        const double amp = laneH / 2.0 - px(2); // full scale a little inside the lane
+        auto yOf = [&](double x) { return mid - static_cast<int>(std::max(-1.0, std::min(1.0, x)) * amp + (x >= 0 ? 0.5 : -0.5)); };
+        text(dc, p.left + px(8), mid - th / 2, c == 0 ? L"L" : L"R", kDim);
+        line(dc, l, mid, r, mid, kGrid, PS_DOT);
+        line(dc, l, yOf(1.0), r, yOf(1.0), RGB(120, 60, 60), PS_DOT);
+        line(dc, l, yOf(-1.0), r, yOf(-1.0), RGB(120, 60, 60), PS_DOT);
+        if (ceilingShown) {
+            line(dc, l, yOf(ceiling), r, yOf(ceiling), RGB(150, 130, 60), PS_DOT);
+            line(dc, l, yOf(-ceiling), r, yOf(-ceiling), RGB(150, 130, 60), PS_DOT);
+        }
+        if (!live) continue;
+        const COLORREF wave = input ? kOrange : kTeal;
+        if (span >= 1000) { // the last 2 s: each bucket's range
+            for (int k = 0; k < WaveScope::kBuckets; ++k) {
+                const WaveScope::Bucket& bk = s.at(k);
+                const int x = l + static_cast<int>(static_cast<double>(r - l) * k / WaveScope::kBuckets);
+                line(dc, x, yOf(bk.hi[c]), x, yOf(bk.lo[c]) + 1, bk.clipped[c] > 0 ? kRed : wave);
+            }
+            continue;
+        }
+        // the samples of `span` ms, ending at the newest rising zero crossing of the left channel within the last
+        // `span` ms (none: at the newest sample)
+        const long long frames = std::min<long long>(WaveScope::kRaw / 2, std::llround(s.fs * span / 1000.0));
+        const long long newest = s.rawWritten;
+        if (newest < frames + 2) continue;
+        long long end = newest;
+        for (long long k = newest - 1; k > newest - frames && k > newest - WaveScope::kRaw + frames + 1; --k)
+            if (s.sample(0, k - 1) < 0.0f && s.sample(0, k) >= 0.0f) {
+                end = k;
+                break;
+            }
+        const long long start = end - frames;
+        const int cols = r - l;
+        int prevY = yOf(s.sample(c, start));
+        for (int x = 0; x < cols; ++x) {
+            const long long a = start + frames * x / cols, z = std::max(a + 1, start + frames * (x + 1) / cols);
+            float lo = s.sample(c, a), hi = lo;
+            for (long long k = a; k < z; ++k) {
+                lo = std::min(lo, s.sample(c, k));
+                hi = std::max(hi, s.sample(c, k));
+            }
+            const bool clip = std::max(std::fabs(lo), std::fabs(hi)) >= WaveScope::kClipLevel;
+            // from where the last column ended, so the line stays one line
+            const int yHi = std::min(yOf(hi), prevY), yLo = std::max(yOf(lo), prevY);
+            line(dc, l + x, yHi, l + x, yLo + 1, clip ? kRed : wave);
+            prevY = yOf(s.sample(c, z - 1));
+        }
+    }
+    // under it: the peak of each channel and the samples at full scale in these 2 s
+    std::wstring info;
+    if (!live) {
+        info = L"no audio";
+    } else {
+        for (int c = 0; c < 2; ++c) {
+            info += c == 0 ? L"L " : L"   R ";
+            info += peak[c] > 0.0f ? num(L"%.1f dBFS", linToDb(peak[c])) : std::wstring(L"silent");
+        }
+        info += clipped[0] + clipped[1] > 0
+                    ? L"   clipped: " + std::to_wstring(clipped[0]) + L" / " + std::to_wstring(clipped[1]) + L" samples"
+                    : std::wstring(L"   no clipping");
+    }
+    text(dc, p.left + px(6), p.bottom - th - px(4), info, live && clipped[0] + clipped[1] > 0 ? kRed : kDim);
 }
 
 void AnalysisWindow::paintChain(HDC dc, int d, const RECT& p, bool live) {

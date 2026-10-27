@@ -1,6 +1,7 @@
 #include "monitor.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace ap {
 
@@ -94,6 +95,37 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
     }
 }
 
+void WaveScope::reset(double rate) {
+    fs = rate > 0 ? rate : 48000.0;
+    buckets.assign(kBuckets, Bucket());
+    pos = 0;
+    for (auto& r : raw) r.assign(kRaw, 0.0f);
+    rawWritten = 0;
+    cur_ = Bucket();
+    curFrames_ = 0;
+    perBucket_ = std::max(1, static_cast<int>(fs * kSeconds / kBuckets + 0.5));
+}
+
+void WaveScope::feed(const float* left, const float* right, int n) {
+    for (int i = 0; i < n; ++i) {
+        const float x[2] = {left[i], right[i]};
+        raw[0][static_cast<size_t>(rawWritten & (kRaw - 1))] = x[0];
+        raw[1][static_cast<size_t>(rawWritten & (kRaw - 1))] = x[1];
+        ++rawWritten;
+        for (int c = 0; c < 2; ++c) {
+            if (curFrames_ == 0 || x[c] < cur_.lo[c]) cur_.lo[c] = x[c];
+            if (curFrames_ == 0 || x[c] > cur_.hi[c]) cur_.hi[c] = x[c];
+            if (std::fabs(x[c]) >= kClipLevel) ++cur_.clipped[c];
+        }
+        if (++curFrames_ >= perBucket_) {
+            buckets[static_cast<size_t>(pos)] = cur_;
+            pos = (pos + 1) % kBuckets;
+            cur_ = Bucket();
+            curFrames_ = 0;
+        }
+    }
+}
+
 void DeckMonitor::drainTaps(DeckProcessor& deck, double fs) {
     DeckAnalysis& a = a_;
     if (fs > 0 && fs != analysisRate_) { // a new rate: the analyzers start again
@@ -102,6 +134,8 @@ void DeckMonitor::drainTaps(DeckProcessor& deck, double fs) {
         a.specOut.reset(fs);
         a.stereoIn.reset(fs);
         a.stereoOut.reset(fs);
+        a.scopeIn.reset(fs);
+        a.scopeOut.reset(fs);
     }
     constexpr int kBlock = 1024;
     TapFrame frames[kBlock];
@@ -120,6 +154,8 @@ void DeckMonitor::drainTaps(DeckProcessor& deck, double fs) {
         a.specOut.feed(outMono, n);
         a.stereoIn.feed(inL, inR, n);
         a.stereoOut.feed(outL, outR, n);
+        a.scopeIn.feed(inL, inR, n);
+        a.scopeOut.feed(outL, outR, n);
     }
 }
 
@@ -127,6 +163,10 @@ void DeckMonitor::reset() {
     in_.reset();
     out_.reset();
     a_.history.assign(DeckAnalysis::kHistory, DeckAnalysis::Point());
+    if (analysisRate_ > 0) {
+        a_.scopeIn.reset(analysisRate_);
+        a_.scopeOut.reset(analysisRate_);
+    }
     DeckMeters fresh;
     fresh.live = m_.live;
     m_ = fresh;

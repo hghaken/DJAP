@@ -620,7 +620,14 @@ Click **Graphs** on a deck strip. The window has a row per deck with five panels
 3. **Loudness** - the momentary loudness of the input (original, orange) and output (processed, turquoise) over the
    last 60 seconds, relative to the target.
 4. **Gain** - the leveller, compressor and density gains over the last 60 seconds.
-5. **Stereo** - a goniometer of the output (mono is the vertical line, left and right the diagonals), with bars for
+5. **Scope** - an oscilloscope of the waveform, left channel above and right below, to see whether the sound clips:
+   50 ms across by default (a tone stands still: the picture starts at a rising zero crossing), or 20 ms, 200 ms or
+   the last 2 s (then each moment's highest and lowest sample). The red dotted lines are full scale (0 dBFS); red
+   parts stood at full scale - that is clipping. Under the scope: each channel's peak and the clipped samples of the
+   last 2 s, whatever the time across. For the output the yellow dotted lines are the limiter's ceiling, which the
+   sound should stay inside. **Right-click** the scope for the *input* (orange: what comes in - clipping there is in
+   the source) or the *output* (turquoise), and for the time across.
+6. **Stereo** - a goniometer of the output (mono is the vertical line, left and right the diagonals), with bars for
    the output's correlation (+1 = mono, 0 = unrelated, negative = out of phase) and the stereo width of input and
    output (0 % = mono).
 

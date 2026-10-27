@@ -30,13 +30,14 @@ public:
     void onOpenStage(OpenStage f) { openStage_ = std::move(f); }
 
 private:
-    // compressor, loudness, gain, goniometer, correlation, width in, width out; then a row per step of the chain
-    static constexpr int kGraphs = 7, kChainRows = 13, kParts = kGraphs + kChainRows;
+    // compressor, loudness, gain, goniometer, correlation, width in, width out, scope; then a row per step of the chain
+    static constexpr int kGraphs = 8, kChainRows = 13, kParts = kGraphs + kChainRows;
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
     void paint(HDC target);
     void paintDeck(HDC dc, int d, const RECT& area);
     void paintChain(HDC dc, int d, const RECT& panel, bool live);
+    void paintScope(HDC dc, int d, const RECT& panel, bool live, int th);
     void setFonts();
     void placeTip(int d, int part, const RECT& r);
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
@@ -55,6 +56,10 @@ private:
     double trail_[2][kTrail] = {};
     int trailPos_ = 0;
     OpenStage openStage_;
+    // the scope of each deck: the input or the output (a right-click on it chooses), and where it was painted
+    bool scopeInput_[2] = {false, false};
+    int scopeMs_[2] = {50, 50}; // the time across it: 20, 50, 200 or 2000 ms (the right-click menu)
+    RECT scopeRect_[2] = {};
 };
 
 } // namespace ap

@@ -1,9 +1,12 @@
 // The GUI's analysis (docs/design.md section 8): FFT against a plain DFT, spectrum levels of sines, stereo
 // correlation and width of known signals.
 #include "analysis.h"
+#include "monitor.h"
 #include "check.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <vector>
 
@@ -139,11 +142,45 @@ void stereo() {
     CHECK(quiet.silent() && quiet.correlation() == 0.0 && quiet.widthPercent() == 0.0);
 }
 
+// The Graphs window's scope: each bucket's lowest and highest sample per channel, and the samples at full scale.
+void scope() {
+    std::printf("-- scope: the lowest / highest sample per bucket, samples at full scale counted\n");
+    const double fs = 48000.0, pi = 3.14159265358979;
+    WaveScope s;
+    s.reset(fs);
+    const int n = static_cast<int>(fs * WaveScope::kSeconds); // exactly the scope's length
+    std::vector<float> l(static_cast<size_t>(n)), r(static_cast<size_t>(n));
+    for (int i = 0; i < n; ++i) {
+        const double x = std::sin(2.0 * pi * 100.0 * i / fs);
+        l[static_cast<size_t>(i)] = static_cast<float>(0.5 * x);                                         // clean
+        r[static_cast<size_t>(i)] = static_cast<float>(std::max(-1.0, std::min(1.0, 1.25 * x)));        // clipped
+    }
+    s.feed(l.data(), r.data(), n);
+    float hiL = -2, loL = 2, hiR = -2;
+    long clipL = 0, clipR = 0;
+    for (int b = 0; b < WaveScope::kBuckets; ++b) {
+        const WaveScope::Bucket& k = s.at(b);
+        hiL = std::max(hiL, k.hi[0]);
+        loL = std::min(loL, k.lo[0]);
+        hiR = std::max(hiR, k.hi[1]);
+        clipL += k.clipped[0];
+        clipR += k.clipped[1];
+    }
+    // a sine 25 % over full scale stands at it for 2 asin(0.8)/pi of each half period... about 41 % of its samples
+    std::printf("   left (0.5): %.3f .. %.3f, %ld at full scale; right (1.25, clamped): top %.3f, %ld at full scale (%.0f %%)\n",
+                loL, hiL, clipL, hiR, clipR, 100.0 * clipR / n);
+    CHECK(std::fabs(hiL - 0.5f) < 0.001f && std::fabs(loL + 0.5f) < 0.001f);
+    CHECK(clipL == 0);
+    CHECK(hiR == 1.0f);
+    CHECK(clipR > n / 3 && clipR < n / 2);
+}
+
 } // namespace
 
 int main() {
     fftAgainstDft();
     spectrum();
     stereo();
+    scope();
     return test::finish("analysis_test");
 }
