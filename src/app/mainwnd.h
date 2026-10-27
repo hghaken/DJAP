@@ -104,7 +104,11 @@ private:
     std::string saveError_, message_, holdSaves_;
     int ticks_ = 0;
     WindowsVolume winVolume_;
-    double shownVolume_ = -3.0; // the volume in the status bar (-2 not following, -1 muted)
+    double shownVolume_ = -3.0; // the volume in the status bar (-2 unknown, -1 muted)
+    // the program's CPU use, as Task Manager shows it (% of the whole computer), measured over about a second
+    double cpuPercent_ = -1.0;
+    unsigned long long cpuLastBusy_ = 0, cpuLastWall_ = 0;
+    void measureCpu();
     TrayIcon tray_;
     HICON iconSmall_ = nullptr;
     bool quitting_ = false; // Shutdown chosen (or Windows ends the session): WM_CLOSE really closes

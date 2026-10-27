@@ -27,6 +27,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 using namespace Steinberg;
@@ -455,6 +456,64 @@ int main(int argc, char** argv) {
         std::printf("-- an input marked silent (holding junk): %d of %d output samples not silent\n", loud, n);
         CHECK(loud == 0);
         a.close();
+    }
+
+    // 6. several plug-ins at once (one per deck in the DJ program, next to the program itself, which runs once): four
+    // instances of the one loaded module, each with a target of its own, processed on four threads at the same time -
+    // each bit-exact with its own deck, none hears another (no shared state between instances)
+    {
+        constexpr int kInstances = 4;
+        const double targets[kInstances] = {-18.0, -14.0, -11.0, -8.0};
+        Instance inst[kInstances];
+        State st[kInstances];
+        for (int i = 0; i < kInstances; ++i) {
+            CHECK(inst[i].open(module, &host));
+            st[i] = inst[i].state();
+            st[i].values[ap::pTarget] = targets[i];
+            inst[i].start();
+        }
+        const int n = static_cast<int>(kRate * 4);
+        std::vector<float> outL[kInstances], outR[kInstances], refL[kInstances], refR[kInstances];
+        std::vector<std::thread> threads;
+        for (int i = 0; i < kInstances; ++i) {
+            outL[i].assign(static_cast<size_t>(n), 0.0f);
+            outR[i].assign(static_cast<size_t>(n), 0.0f);
+            refL[i].assign(inL.begin(), inL.begin() + n);
+            refR[i].assign(inR.begin(), inR.begin() + n);
+            threads.emplace_back([&, i] {
+                ap::DeckProcessor ref;
+                ref.prepare(kRate);
+                configure(ref, st[i]);
+                ref.startFadeIn();
+                for (int pos = 0, b = 0; pos < n;) {
+                    const int len = std::min(blocks[(b++ + i) % 5], n - pos); // block sizes differ per instance
+                    ParameterChanges changes(1);
+                    IParameterChanges* withChange = nullptr;
+                    if (pos == 0) { // the instance's own target, as the host's automation at the start
+                        int32 qi = 0, pi = 0;
+                        IParamValueQueue* q = changes.addParameterData(ap::plugin::paramId(ap::pTarget), qi);
+                        q->addPoint(0, static_cast<double>(ap::paramPositionOf(ap::pTarget, targets[i])) /
+                                           ap::paramPositions(ap::pTarget), pi);
+                        withChange = &changes;
+                    }
+                    inst[i].run(&inL[static_cast<size_t>(pos)], &inR[static_cast<size_t>(pos)],
+                                &outL[i][static_cast<size_t>(pos)], &outR[i][static_cast<size_t>(pos)], len, withChange);
+                    ref.process(&refL[i][static_cast<size_t>(pos)], &refR[i][static_cast<size_t>(pos)], len);
+                    pos += len;
+                }
+            });
+        }
+        for (std::thread& t : threads) t.join();
+        int diff = 0, alike = 0;
+        for (int i = 0; i < kInstances; ++i) {
+            diff += differences(outL[i], refL[i]) + differences(outR[i], refR[i]);
+            if (i > 0) alike += differences(outL[i], outL[0]) == 0; // a target of its own is heard
+        }
+        std::printf("-- %d plug-ins at once on %d threads, targets -18 / -14 / -11 / -8 LUFS: %d samples differ from "
+                    "their own decks, %d outputs equal to another's\n", kInstances, kInstances, diff, alike);
+        CHECK(diff == 0);
+        CHECK(alike == 0);
+        for (Instance& x : inst) x.close();
     }
     return test::finish("plugin_test");
 }

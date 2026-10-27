@@ -332,7 +332,7 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
   after an underrun); each underrun adds 2 ms of margin (up to 20 ms). A fill far above target (the reader stalled,
   blocks dropped) moves the read position to the target (a resync).
 - Shown: per deck the added latency (capture period + drift buffer), the drift in ppm, underruns and overruns, in
-  the Audio window and the status bar. A capture stream that stops by itself stops the audio with a message.
+  the Setup window. A capture stream that stops by itself stops the audio with a message.
 - The deck's own processing is unchanged; this is the only path where an input adds buffering beyond the devices'
   own, and only by the user's choice.
 
@@ -393,7 +393,10 @@ its range, compressor / de-esser / clipper / limiter reduction 0..12 dB; the den
 bands are lines in the spectrum) and the
 spectrum; the two lines of numbers (M, S, I, LRA, max true peak, state) were removed at the client's request
 (2026-10-25) to give the spectrum room. No menu bar (2026-10-25): a right-click opens Setup / Shutdown.
-Status bar: audio state and the latency the processing adds. Per-monitor DPI aware. Every change is heard and
+Status bar (client, 2026-10-27): the Windows volume and the program's CPU use (process time against wall time and
+logical processors, over a second - as Task Manager shows it); then, only when present, a device error, a start being
+retried, a failed save or a new version. The audio's state (devices, rate, latency, drift, health) is in the Setup
+window, which also shows the retried start and a failed save. Per-monitor DPI aware. Every change is heard and
 saved at once.
 
 Graphs (client, 2026-10-25). In each meter panel, under the stage rows: the spectrum of the deck's input
@@ -628,9 +631,10 @@ health 3, note 2) and the window as high as its content, so it is lower with one
 Updates (client, 2026-10-25: "check daily, report, install after one click - not while audio runs - and an off
 switch in Setup"; 2026-10-26: "after the online update, start the audio again automatically"; `src/core/release.*`, `src/app/updater.*`): with `[Updates] CheckUpdates=1` (default; Setup ->
 Updates) the program asks GitHub's API for the latest release of the public repository 15 s after the start and then
-once a day (also Setup -> Check now). A newer version (`compareVersions`, numeric parts) is reported once per version
-by a balloon at the notification-area icon, in the status bar and in Setup; nothing is downloaded before the user
-clicks Install update. While the audio runs it asks first (the audio stops during the update); the audio then stops
+once a day (also Check now in the About window). A newer version (`compareVersions`, numeric parts) is reported once per version
+by a balloon at the notification-area icon (a click opens About), in the status bar and in the About window; nothing
+is downloaded before the user clicks Install update there (client, 2026-10-27: the update buttons moved from Setup to
+About; Setup keeps the daily switch). While the audio runs it asks first (the audio stops during the update); the audio then stops
 with the program's usual fade-out, `StartAudio` stays 1, and the restarted program starts it again (`startSavedAudio`,
 retried every 5 s for 2 minutes). Not during a simulation.
 The setup asset `DJAP-Setup-<version>.exe` is downloaded into `%TEMP%\DJAP-update` and checked against the SHA-256

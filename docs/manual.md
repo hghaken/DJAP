@@ -289,10 +289,11 @@ window (8.2).
 
 ### 4.4 The status bar
 
-Left: the audio state - the driver or devices, sample rate, buffer size, the latency of the devices, the heaviest
-period and the number of late periods (dropouts); with an input on another clock its extra latency and drift; error
-messages; a new version when one is available. Right: the Windows volume when the outputs follow it, and the delay
-the processing adds.
+The Windows volume (or "muted") and DJAP's CPU use, as a share of the whole computer as Task Manager shows it (two
+decks take a few percent of one processor core, so well under 1 % on a computer with many cores). After them, only
+when there is one: an error, a start that is being retried, a settings file that could not be saved, a new version.
+The audio's state - devices, sample rate, buffer size, latency, drift, the health counters - is in the Setup window
+(chapter 5).
 
 ### 4.5 Linked presets
 
@@ -339,11 +340,13 @@ the audio again (a short fade-out and fade-in).
 ### 5.3 Updates
 
 - **Check GitHub for a new version once a day** - on by default.
+
+The rest is in the **About DJAP** window (right-click the main window or the notification-area icon: *About
+DJAP...*):
+
 - **Check now** asks at once.
 - **Install update** downloads and installs a newer version (chapter 11). Greyed when there is nothing newer.
 - The text beside the buttons shows this version and what the last check found.
-- **Check now** and **Install update** are in the **About DJAP** window too (right-click the main window or the
-  notification-area icon: *About DJAP...*).
 
 ### 5.4 Start, stop and state
 
@@ -722,7 +725,7 @@ Windows starts.
   hiccups again and again for 70 ms or more gives a dropout each time. With WASAPI Windows may run longer periods than the buffer size asked for (its low-latency mode
   takes only some sizes, at the device's own rate): the Setup window then says so, and the latency shown follows.
 
-The Setup window and the status bar show the total.
+The Setup window shows the total.
 
 **Health** (Setup window) shows whether the computer keeps up:
 
@@ -747,7 +750,7 @@ behind your router counts); when that is used up DJAP reads the release page its
 limit.
 
 When a newer version exists, DJAP tells you once with a message at its notification-area icon, in the status bar and
-in the Setup window. **Nothing is downloaded or installed until you click Install update** in the Setup window
+in the About window. **Nothing is downloaded or installed until you click Install update** in the About window
 (clicking the message opens it).
 
 Install update:
@@ -835,11 +838,11 @@ old file stays.
 
 | Problem | What to do |
 |---|---|
-| **No sound** | Is the audio started (status bar)? Are the right input and output pairs or devices chosen? Is a deck on *(none)*? Do the In bars move? If In moves and Out does not, check the output route and the amplifier. |
+| **No sound** | Is the audio started (Setup window)? Are the right input and output pairs or devices chosen? Is a deck on *(none)*? Do the In bars move? If In moves and Out does not, check the output route and the amplifier. |
 | **"Open driver" fails** | Another program (DJ software) may hold the ASIO driver. Close it or use another interface. Check that the interface is connected and its driver installed. |
 | **A device shows "(not found)"** | The saved device is not connected, or it was chosen under another API (each API names devices differently). Choose it again. |
 | **"The settings file could not be read"** at the start | Another program held `DJAP.ini` (a virus scanner, a sync tool) for more than two seconds. DJAP runs with its default settings and saves nothing, so your file stays as it is; close that program and start DJAP again. |
-| **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer density bands. With an input on another clock, underruns in the status bar mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
+| **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer density bands. With an input on another clock, underruns in the Setup window mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
 | **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window. |
 | **The sound pumps or breathes** | Lower the density amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
 | **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Fast down" (Leveller tab) brings it down within about a second. Raise it if needed. |

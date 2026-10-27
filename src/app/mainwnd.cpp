@@ -113,7 +113,7 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     tray_.add(hwnd_, iconSmall_ ? iconSmall_ : wc.hIconSm, L"DJAP");
     updateTrayTip();
     nextCheck_ = GetTickCount64() + 15000; // the first update check a little after the start
-    audioWindow_.setUpdater(&updater_, [this] { checkForUpdate(); }, [this] { installUpdate(); });
+    audioWindow_.setUpdater(&updater_);
     about_.setUpdates([this] { return audioWindow_.updateView(); }, [this] { checkForUpdate(); },
                       [this] { installUpdate(); });
     return true;
@@ -208,8 +208,8 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         case NIN_KEYSELECT:
             fromTray();
             break;
-        case NIN_BALLOONUSERCLICK: // the message about a new version: Setup, where Install update is
-            if (updater_.state() == Updater::State::Available) audioWindow_.show(hwnd_);
+        case NIN_BALLOONUSERCLICK: // the message about a new version: About, where Install update is
+            if (updater_.state() == Updater::State::Available) about_.show(hwnd_, ini_);
             break;
         case WM_CONTEXTMENU:
             trayMenu(GET_X_LPARAM(wp), GET_Y_LPARAM(wp));
@@ -258,6 +258,7 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             analysisWindow_.refresh();
             spectrumWindow_.refresh();
             if (ticks_++ % 10 == 0) {
+                measureCpu();
                 updateStatus();
                 audioWindow_.refresh();
                 about_.refresh(); // the download's percentage
@@ -431,8 +432,8 @@ void MainWindow::layout() {
         y += rowH + gap; // = meterTop()
         MoveWindow(s.meter, x0, y, stripW, rc.bottom - statusH - m - y, TRUE);
     }
-    const int parts[2] = {(rc.right * 62) / 100, -1};
-    SendMessageW(status_, SB_SETPARTS, 2, reinterpret_cast<LPARAM>(parts));
+    const int parts[1] = {-1};
+    SendMessageW(status_, SB_SETPARTS, 1, reinterpret_cast<LPARAM>(parts));
     // the whole window again: the metal is drawn for the new size, and a moved button leaves no piece of itself
     // behind (client, 2026-10-26: after a resize part of the old Bypass button stayed beside the new one)
     RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
@@ -602,66 +603,46 @@ void MainWindow::updateMeters() {
     }
 }
 
+// The program's CPU use (all its threads, the audio included) as a share of the whole computer, as Task Manager shows
+// it: the process's kernel + user time against the wall time and the number of logical processors, over at least 1 s.
+void MainWindow::measureCpu() {
+    FILETIME created, exited, kernel, user, now;
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) return;
+    GetSystemTimeAsFileTime(&now);
+    auto u64 = [](const FILETIME& f) { return (static_cast<unsigned long long>(f.dwHighDateTime) << 32) | f.dwLowDateTime; };
+    const unsigned long long busy = u64(kernel) + u64(user), wall = u64(now);
+    if (cpuLastWall_ != 0 && wall - cpuLastWall_ < 10000000ull) return; // 100 ns units: a second at least
+    if (cpuLastWall_ != 0 && wall > cpuLastWall_) {
+        const DWORD cpus = std::max<DWORD>(1, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+        cpuPercent_ = 100.0 * static_cast<double>(busy - cpuLastBusy_) / static_cast<double>(wall - cpuLastWall_) / cpus;
+    }
+    cpuLastBusy_ = busy;
+    cpuLastWall_ = wall;
+}
+
+// The status bar (client, 2026-10-27): the Windows volume and the program's CPU use; the audio's state is in the
+// Setup window. A message that needs attention (an error, a start that is retried, a new version) comes after them.
 void MainWindow::updateStatus() {
     if (!status_) return;
-    std::wstring left;
-    if (audio_.simulating()) {
-        left = L"Simulation (no sound): " + audio_.simulationFile().filename().wstring();
-    } else if (audio_.systemRunning()) {
-        double latency = 0; // with drift correction its buffer too
-        for (int d = 0; d < 2; ++d)
-            latency = std::max(latency, audio_.sys().info(d).latencyMs +
-                                            (audio_.asyncInput(d) ? audio_.asyncState(d).targetMs : 0.0));
-        const EngineHealth h = audio_.health();
-        wchar_t b[256];
-        swprintf(b, 256, L"%hs: decks at %.1f kHz, device latency \x2248 %.1f ms   |   heaviest period %.0f %%, late %lld",
-                 apiName(audio_.sys().api()), audio_.sampleRate() / 1000.0, latency, h.heaviestPercent, h.late);
-        left = b;
-    } else if (audio_.deviceRunning()) {
-#if AP_HAVE_ASIO
-        const AsioDeviceState& s = audio_.host().state();
-        const EngineHealth h = audio_.engine().health();
-        const double ms = 1000.0 / s.sampleRate;
-        wchar_t b[256];
-        swprintf(b, 256, L"%s: %.1f kHz, %ld frames, latency %.1f ms in + out   |   heaviest period %.0f %%, late %lld",
-                 fromUtf8(s.driver).c_str(), s.sampleRate / 1000.0, s.bufferSize,
-                 (s.inputLatency + s.outputLatency) * ms, h.heaviestPercent, h.late);
-        left = b;
-        for (int d = 0; d < 2; ++d) {
-            if (!audio_.asyncInput(d)) continue;
-            // a deck whose input is a device of another API: its own extra latency and the clocks' drift
-            const AsyncInputState a = audio_.asyncState(d);
-            const SysStreamInfo in = audio_.sys().info(d);
-            swprintf(b, 256, L"   |   deck %c input %hs: + %.1f ms, drift %+.0f ppm%s", d == 0 ? L'A' : L'B',
-                     apiName(audio_.sys().api()), in.latencyMs + a.targetMs, a.driftPpm,
-                     a.active ? L"" : L" (filling up)");
-            left += b;
-            if (a.underruns) left += L", underruns " + std::to_wstring(a.underruns);
-        }
-#endif
-    } else if (audio_.driverOpen()) {
-        left = L"ASIO driver open, audio stopped (right-click: Setup)";
-    } else {
-        left = L"No audio device running (right-click: Setup)";
+    std::wstring notes; // also shown in the Setup window
+    if (!message_.empty()) notes += fromUtf8(message_);
+    if (!saveError_.empty()) notes += (notes.empty() ? L"" : L"\n") + fromUtf8(saveError_);
+    audioWindow_.setNotes(notes);
+    wchar_t b[160];
+    if (!winVolume_.valid()) swprintf(b, 160, L"Windows volume: unknown");
+    else if (winVolume_.muted()) swprintf(b, 160, L"Windows volume: muted");
+    else swprintf(b, 160, L"Windows volume %.0f %%", winVolume_.percent());
+    std::wstring line = b;
+    if (cpuPercent_ >= 0.0) {
+        swprintf(b, 160, L"   |   CPU %.1f %%", cpuPercent_);
+        line += b;
     }
-    if (!audio_.deviceError().empty()) left += L"   |   " + fromUtf8(audio_.deviceError());
-    if (!message_.empty()) left += L"   |   " + fromUtf8(message_);
+    if (!audio_.deviceError().empty()) line += L"   |   " + fromUtf8(audio_.deviceError());
+    if (!message_.empty()) line += L"   |   " + fromUtf8(message_);
     if (updater_.state() == Updater::State::Available)
-        left += L"   |   DJAP " + fromUtf8(updater_.release().version) + L" is available (right-click: Setup)";
-    if (!saveError_.empty()) left += L"   |   " + fromUtf8(saveError_);
-    SendMessageW(status_, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(left.c_str()));
-    wchar_t right[160], volume[48] = L"";
-    const double fs = audio_.sampleRate();
-    if (settings_.followsVolume() && winVolume_.valid()) {
-        if (winVolume_.muted()) swprintf(volume, 48, L"Windows volume: muted   |   ");
-        else swprintf(volume, 48, L"Windows volume %.0f %%   |   ", winVolume_.percent());
-    }
-    if (fs > 0)
-        swprintf(right, 160, L"%sProcessing adds %.2f ms (%d frames at %.1f kHz)", volume,
-                 lookFrames(settings_.lookAheadMs, fs) * 1000.0 / fs, lookFrames(settings_.lookAheadMs, fs), fs / 1000.0);
-    else
-        swprintf(right, 160, L"%sProcessing adds %.2f ms (limiter look-ahead)", volume, settings_.lookAheadMs);
-    SendMessageW(status_, SB_SETTEXTW, 1, reinterpret_cast<LPARAM>(right));
+        line += L"   |   DJAP " + fromUtf8(updater_.release().version) + L" is available (right-click: About DJAP)";
+    if (!saveError_.empty()) line += L"   |   " + fromUtf8(saveError_);
+    SendMessageW(status_, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(line.c_str()));
     updateTrayTip();
 }
 
@@ -706,7 +687,7 @@ void MainWindow::checkForUpdate() {
 }
 
 void MainWindow::installUpdate() {
-    HWND owner = about_.hwnd() ? about_.hwnd() : audioWindow_.hwnd() ? audioWindow_.hwnd() : hwnd_;
+    HWND owner = about_.hwnd() ? about_.hwnd() : hwnd_;
     if (audio_.simulating()) { // a test's simulation is never ended by an update
         placement::messageBox(owner, L"End the simulation first: the update closes DJAP.", L"Update",
                               MB_OK | MB_ICONINFORMATION);
@@ -732,7 +713,7 @@ void MainWindow::updateEvent(WPARAM what) {
         if (v != notified_) {
             notified_ = v;
             tray_.balloon(L"DJAP " + fromUtf8(v) + L" is available",
-                          L"Click here (or right-click the window: Setup) to install it. Nothing is installed "
+                          L"Click here (or right-click the window: About DJAP) to install it. Nothing is installed "
                           L"until you click Install update.");
         }
     }
@@ -744,7 +725,7 @@ void MainWindow::updateEvent(WPARAM what) {
             DestroyWindow(hwnd_);
             return;
         }
-        placement::messageBox(audioWindow_.hwnd() ? audioWindow_.hwnd() : hwnd_, fromUtf8(err).c_str(), L"Update",
+        placement::messageBox(about_.hwnd() ? about_.hwnd() : hwnd_, fromUtf8(err).c_str(), L"Update",
                               MB_OK | MB_ICONWARNING);
     }
 }
@@ -781,7 +762,7 @@ void MainWindow::trayMenu(int x, int y) {
 // processing sees the music's own level and the volume counts once.
 void MainWindow::updateVolume() {
     const bool follow = settings_.followsVolume();
-    if (follow) winVolume_.poll();
+    winVolume_.poll(); // also when the outputs do not follow it: the status bar shows it (client, 2026-10-27)
     const bool on = follow && winVolume_.valid();
     const SysInputs sysIn = sysInputsFrom(settings_);
     for (int d = 0; d < 2; ++d) {
@@ -795,7 +776,7 @@ void MainWindow::updateVolume() {
         audio_.setVolume(d, out, in);
     }
     // the status bar shows the volume: updated at once when it changes
-    const double shown = !on ? -2.0 : winVolume_.muted() ? -1.0 : std::round(winVolume_.percent());
+    const double shown = !winVolume_.valid() ? -2.0 : winVolume_.muted() ? -1.0 : std::round(winVolume_.percent());
     if (shown != shownVolume_) {
         shownVolume_ = shown;
         updateStatus();
