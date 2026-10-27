@@ -4,7 +4,7 @@ A standalone Windows loudness and dynamics processor. For DJs: two independent s
 B - come in on an ASIO interface, each runs its own processing chain with its own preset, and goes out again on
 its own output pair. For other Windows users: one channel, one stereo processor (Setup window, "Processing"). A
 plug-in brings the same processing into DJ software, one deck per plug-in. The same code renders WAV files offline.
-Licence: GPL-3.0.
+Licence: GPL-3.0. The code was improved with outside reviews by Grok (xAI).
 
 ## Download
 
