@@ -486,7 +486,9 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
         const int lines = which == 0 ? 2 : 3;
         const COLORREF colors[2][3] = {{kOrange, kTeal, 0}, {kBlue, kTeal, kPurple}};
         for (int k = 0; k < lines; ++k) {
-            Trace tr{dc, colors[which][k], std::max(1, px(1.5)), {}};
+            // one pixel: 600 points of 100 ms in a few hundred pixels - a thicker line ran together into a band
+            // (client, 2026-10-27: "thinner, no thick mush")
+            Trace tr{dc, colors[which][k], 1, {}};
             for (int i = 0; i < DeckAnalysis::kHistory; ++i) {
                 const DeckAnalysis::Point& pt = an.at(i);
                 double val;

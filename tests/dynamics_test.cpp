@@ -70,10 +70,10 @@ void compressorTimes() {
 }
 
 void leveller() {
-    std::printf("-- leveller (target -14 LUFS, range 9 dB, 1 dB/s, catch-up after a pause)\n");
+    std::printf("-- leveller (target -14 LUFS, range 9 dB, 1 dB/s, catch-up after a pause at Release 0.5 s)\n");
     PresetValues v = allOff();
     v[pLevOn] = 1;
-    v[pLevCatchUp] = 1; // allOff() switched it off too
+    v[pLevRelease] = 0.5; // 20 dB/s: the catch-up after a pause as it was before Release (a fixed 20 dB/s)
     v[pTarget] = -14;
     Buffer l = sig::beatMusic(fs, 30, 124, 1), r = sig::beatMusic(fs, 30, 124, 2);
     tdeck::setLoudness(fs, l, r, -21);
@@ -116,10 +116,11 @@ void leveller() {
 // start) and must not stop half-way up a slow fade (it would leave the slow leveller to correct the rest: 1 dB/s
 // here, 0.5 in Gentle).
 void levellerFadeIn() {
-    std::printf("-- leveller catch-up on a track that fades in (3 s silence, fade-in from -50 dB, target -14 LUFS)\n");
+    std::printf("-- leveller catch-up on a track that fades in (3 s silence, fade-in from -50 dB, target -14 LUFS, "
+                "Release 0.5 s)\n");
     PresetValues v = allOff();
     v[pLevOn] = 1;
-    v[pLevCatchUp] = 1;
+    v[pLevRelease] = 0.5; // the former catch-up speed
     v[pTarget] = -14;
     for (double fade : {4.0, 12.0}) {
         for (double full : {-21.0, -7.0}) {
@@ -159,10 +160,10 @@ void levellerFastDown() {
     std::printf("-- leveller fast down (target -18 LUFS, range 12 dB, 0.5 dB/s; 6 s intro at -25, then -9 LUFS)\n");
     PresetValues v = allOff();
     v[pLevOn] = 1;
-    v[pLevCatchUp] = 1;
     v[pTarget] = -18;
     v[pLevRange] = 12;
     v[pLevSpeed] = 0.5;
+    v[pLevRelease] = 5.0; // Gentle's
     Buffer l = sig::beatMusic(fs, 46, 124, 7), r = sig::beatMusic(fs, 46, 124, 8);
     tdeck::setLoudness(fs, l, r, -9);
     const size_t entry = static_cast<size_t>(6 * fs);
@@ -176,7 +177,7 @@ void levellerFastDown() {
     };
     double first[2], soon[2], whole[2], late[2];
     for (int fast = 0; fast < 2; ++fast) {
-        v[pLevFastDown] = fast ? 10.0 : 0.0; // the default
+        v[pLevAttack] = fast ? 1.0 : 20.0; // 10 dB/s (the default), or 0.5 dB/s = this Speed: no fast down
         const tdeck::Stereo o = run(fs, v, l, r);
         first[fast] = at(o, 0, 2);
         soon[fast] = at(o, 4, 10);
@@ -207,12 +208,68 @@ void levellerFastDown() {
     }
     double chorus[2];
     for (int fast = 0; fast < 2; ++fast) {
-        v[pLevFastDown] = fast ? 10.0 : 0.0;
+        v[pLevAttack] = fast ? 1.0 : 20.0;
         const tdeck::Stereo o = run(fs, v, cl, cr);
         chorus[fast] = tdeck::loudness(fs, o.l, o.r, static_cast<size_t>(25 * fs), static_cast<size_t>(33 * fs));
     }
     std::printf("   chorus +4 LU for 8 s: %.2f LUFS without fast down, %.2f with\n", chorus[0], chorus[1]);
     CHECK_NEAR(chorus[1], chorus[0], 0.5);
+}
+
+// A soft intro (client, 2026-10-27: "it sometimes takes too long before a soft intro is on level, and then it is as
+// if someone quickly turns the volume knob"): 3 s of silence, a 15 s intro 12 LU under the target (under the hold
+// level), then the song at -12 LUFS. Quiet wait, Release and Attack set how soon the intro is up, how fast it goes
+// up and how fast the entry comes down.
+void levellerIntro() {
+    std::printf("-- leveller and a soft intro (target -14 LUFS, range 12 dB, 1 dB/s; 3 s silence, 15 s intro at -26, "
+                "then -12 LUFS)\n");
+    const double pause = 3.0, intro = 15.0;
+    Buffer l = sig::beatMusic(fs, 40, 124, 11), r = sig::beatMusic(fs, 40, 124, 12);
+    tdeck::setLoudness(fs, l, r, -12);
+    for (size_t i = 0; i < l.size(); ++i) {
+        const double t = static_cast<double>(i) / fs;
+        const float g = static_cast<float>(t < pause ? 0.0 : t < pause + intro ? dbToLin(-14.0) : 1.0);
+        l[i] *= g;
+        r[i] *= g;
+    }
+    struct Case {
+        const char* name;
+        double wait, release, attack;
+    };
+    double onLevel[3] = {}, step[3] = {};
+    const Case cases[3] = {{"before  (wait 3 s, release 3.3 s, attack 1 s)", 3.0, 3.3, 1.0},
+                           {"default (wait 1 s, release 1.5 s, attack 1 s)", 1.0, 1.5, 1.0},
+                           {"long    (wait 8 s, release 8 s,   attack 4 s)", 8.0, 8.0, 4.0}};
+    for (int k = 0; k < 3; ++k) {
+        PresetValues v = allOff();
+        v[pLevOn] = 1;
+        v[pTarget] = -14;
+        v[pLevRange] = 12;
+        v[pLevSpeed] = 1;
+        v[pLevQuietWait] = cases[k].wait;
+        v[pLevRelease] = cases[k].release;
+        v[pLevAttack] = cases[k].attack;
+        const tdeck::Stereo o = run(fs, v, l, r);
+        // the intro on level: the first 0.5 s window whose output is within 2 LU of the target, from the intro's start
+        onLevel[k] = intro;
+        for (double t = pause; t < pause + intro - 0.5; t += 0.25)
+            if (std::fabs(tdeck::loudness(fs, o.l, o.r, static_cast<size_t>(t * fs), static_cast<size_t>((t + 0.5) * fs)) +
+                          14.0) < 2.0) {
+                onLevel[k] = t - pause;
+                break;
+            }
+        // the entry: the loudest 0.5 s just after it, over the target
+        step[k] = -100.0;
+        for (double t = pause + intro; t < pause + intro + 4.0; t += 0.25)
+            step[k] = std::max(step[k], tdeck::loudness(fs, o.l, o.r, static_cast<size_t>(t * fs),
+                                                        static_cast<size_t>((t + 0.5) * fs)) + 14.0);
+        std::printf("   %s: intro on level after %.2f s; the entry at most %+.1f LU over the target\n", cases[k].name,
+                    onLevel[k], step[k]);
+    }
+    CHECK(onLevel[0] < 10.0);               // before: the warm start, the wait, then 12 dB at 3 dB/s
+    CHECK(onLevel[1] < onLevel[0] - 3.0);   // the default now: clearly sooner
+    CHECK(onLevel[2] > onLevel[0] + 3.0);   // long: clearly later
+    CHECK(step[2] < step[0]);               // an intro left soft: a smaller jump at the entry
 }
 
 // Quiet sections inside a song (client, 2026-10-26: a song whose spoken verses lie 10 LU under its choruses stayed
@@ -223,12 +280,13 @@ void levellerQuietSections() {
     std::printf("-- leveller and quiet sections (target -14 LUFS, range 12 dB, 1 dB/s, hold 10 LU)\n");
     PresetValues v = allOff();
     v[pLevOn] = 1;
-    v[pLevCatchUp] = 1;
     v[pTarget] = -14;
     v[pLevRange] = 12;
     v[pLevSpeed] = 1;
     v[pLevHold] = 10;
-    v[pLevFastDown] = 10;
+    v[pLevAttack] = 1.0;     // 10 dB/s
+    v[pLevQuietWait] = 3.0;  // the rules as they were measured here (the shipped default is 1 s now)
+    v[pLevRelease] = 3.3;
     auto gainAt = [](const tdeck::Stereo& o, const Buffer& in, double from, double to) {
         const size_t a = static_cast<size_t>(from * fs), n = static_cast<size_t>((to - from) * fs);
         return tdeck::rmsDb(o.l, a, n) - tdeck::rmsDb(in, a, n);
@@ -603,6 +661,7 @@ int main() {
     levellerFadeIn();
     levellerFastDown();
     levellerQuietSections();
+    levellerIntro();
     densityBank();
     densityAction();
     width();

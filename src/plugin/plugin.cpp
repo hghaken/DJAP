@@ -440,13 +440,21 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     int8 bypass = 0;
     if (!s.readDouble(look) || !s.readInt8(bypass) || !s.readInt32(count)) return kResultFalse;
     PresetValues v = currentValues();
+    bool haveAttack = false;
+    double oldFastDown = -1.0;
     for (int32 i = 0; i < count; ++i) {
         const std::string key = readText();
         double x = 0;
         if (!s.readDouble(x)) return kResultFalse;
         for (int p = 0; p < kParamCount; ++p)
             if (key == paramInfo(p).key) v[static_cast<size_t>(p)] = x; // unknown keys (a newer version): skipped
+        haveAttack = haveAttack || key == paramInfo(pLevAttack).key;
+        if (key == "LevellerFastDown") oldFastDown = x;
     }
+    // a project of the versions before Attack / Release: its "Fast down" (dB/s; 0 = Speed) is the Attack in seconds
+    // per 10 dB (as Settings does for a saved preset)
+    if (!haveAttack && oldFastDown >= 0.0)
+        v[pLevAttack] = 10.0 / (oldFastDown > 0.0 ? oldFastDown : std::max(0.1, v[pLevSpeed]));
     normaliseValues(v);
     int32 oversampling = kOversamplingDefault;
     if (version >= 2 && s.readInt32(oversampling)) oversampling = snapOversampling(oversampling);

@@ -15,9 +15,10 @@ enum Param : int {
     pLevOn,
     pLevRange,
     pLevSpeed,
-    pLevFastDown,
+    pLevAttack,    // s per 10 dB down while clearly too loud (was "Fast down", dB/s)
+    pLevRelease,   // s per 10 dB up while clearly too soft, and after a pause (was a fixed fast-up and "Catch up")
     pLevHold,
-    pLevCatchUp,
+    pLevQuietWait, // s a steady quiet section waits before it is levelled
     // compressor
     pCompOn,
     pCompThreshold,

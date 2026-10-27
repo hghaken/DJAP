@@ -402,6 +402,18 @@ void handEdited() {
     checkSame(Settings(), e);
     CHECK(e.driftCorrection == Settings::kDriftAuto); // the default
 
+    // a loudness preset of the versions before Attack / Release: "Fast down" (dB/s) becomes the Attack (s per 10 dB);
+    // 0 was "the normal speed", the preset's Speed
+    {
+        Settings fd;
+        fd.fromText("[Preset Loud]\r\nLevellerFastDown=5\r\n[Preset Old own]\r\nLevellerSpeed=0.5\r\nLevellerFastDown=0\r\n");
+        CHECK_NEAR(fd.valuesOf("Loud")[pLevAttack], 2.0, 1e-9);
+        CHECK_NEAR(fd.valuesOf("Old own")[pLevAttack], 20.0, 1e-9);
+        Settings kept; // an Attack of its own wins over an old Fast down beside it
+        kept.fromText("[Preset Loud]\r\nLevellerFastDown=5\r\nLevellerAttack=0.7\r\n");
+        CHECK_NEAR(kept.valuesOf("Loud")[pLevAttack], 0.7, 1e-9);
+    }
+
     // [Audio] DriftCorrection: 0 / 1 of the versions before three modes keep their meaning, 2 = always, anything else
     // (a hand edit) the default
     for (const auto& [value, mode] : std::vector<std::pair<std::string, int>>{

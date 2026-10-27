@@ -246,7 +246,7 @@ enough not to follow the phrases of a song.
 
 - **Hold below.** While the input is more than `Hold below` (10 LU) under the target - a fade, a pause, the start of
   a quiet passage - the gain is held. A quiet passage that *stays* is music, though: when the music has been under
-  that level for 3 s without falling (the trend level not more than 3.5 dB under its value 4 s earlier) and not more
+  that level for `Quiet wait` (1 s; Gentle and DAB+ 3 s) without falling (the trend level not more than 3.5 dB under its value 4 s earlier) and not more
   than 12 LU under it (music, not a noise floor), the hold ends and the passage is levelled like any other part.
 - **Falling.** The gain may not rise while the music falls: the trend level dropped more than 2.5 dB over the last
   2 s (a fade of 1.25 dB/s or more, the drop into a quiet passage), or it sank more than 0.8 dB in each of the last
@@ -260,8 +260,15 @@ enough not to follow the phrases of a song.
   (at least 1 s of silence), the slow detector follows the fast one for the first 1.5 s of music, and the gain is held
   meanwhile. A quiet passage without silence is not a pause: the leveller goes on from where it was.
 - **Fast up.** When the gain is more than 4 dB under what the 3 s level needs and the music is not falling - a quiet
-  verse after a loud chorus - it goes up at four times the loudness preset's speed up to 3 dB/s, or twice its speed when that is more (Gentle and DAB+ 2 dB/s, Light, Medium, Web Stream and Loud 3, FM Station 4), until it is within 1 dB. A gap
-  between two phrases does not stop it (only a fall does). The counterpart of fast down.
+  verse after a loud chorus, a soft intro - it goes up at the *Release* speed (seconds per 10 dB: 1.5, so 6.7 dB/s;
+  Gentle and DAB+ 5 s, 2 dB/s), until it is within 1 dB. A gap between two phrases does not stop it (only a fall
+  does). The counterpart of fast down. Until 2026-10-27 this was a fixed rule (four times the speed up to 3 dB/s);
+  Release, Attack and Quiet wait are sliders now (client: "a soft intro sometimes takes too long to get to level, and
+  then it is as if someone turns the volume knob quickly"). Their defaults were chosen on copies of 18 songs with soft
+  intros through Loud: the time until on level summed 322 -> 249 s and the seconds more than 6 LU too soft
+  601 -> 497, with the steepest rise 6.7 dB/s (1 s per 10 dB took 234 s, but at 10 dB/s) and no song further over
+  the target. Where an intro stayed soft longer, the cause was the Range (an intro more than 12 dB under the target)
+  or a fade-in from silence still more than 12 LU under the hold level (held as a noise floor) - not these speeds.
 - **Why these rules** (client, 2026-10-26, a song whose spoken verses lie 10 LU under its choruses): after each
   chorus the output stayed 6-8 LU under the target for 10-19 s on every loudness preset. The gaps between the phrases had
   dipped the 0.4 s level under the hold level and under the old fall rule (no move for half of each verse, and a
@@ -269,12 +276,12 @@ enough not to follow the phrases of a song.
   speed another 7 s. A synthetic verse 10 LU under its chorus with a 0.8 s gap every 3 s stayed at -24.1 LUFS (target
   -14) with the old rules and is levelled to -14.0 LUFS from 9 s on now; the drop itself still sounds (the first 2 s
   are not lifted), as do the first 3 s of a breakdown.
-- **Catch-up.** After at least 2 s of silence (a stopped deck) the next song is caught up at 20 dB/s, following the
-  0.4 s level, so a new song is at level within about half a second. Catch-up goes on while the 0.4 s level still
+- **Catch-up.** After at least 2 s of silence (a stopped deck) the next song is caught up - up at the Release
+  speed, down at the Attack speed (until 2026-10-27 a switch, at 20 dB/s both ways) - following the 0.4 s level. Catch-up goes on while the 0.4 s level still
   rises more than 1 dB per second (a track fading in), for at most 15 s; then the 3 s detector starts from the level
   reached. Measured: a 12 s fade-in from -50 dB ended 5.1 LU too loud without, 0.04 LU with.
-- **Fast down.** When the gain is more than 3 dB above what the 3 s level needs - a loud song after a quiet intro or a
-  break - it comes down at the *Fast down* speed (default 10 dB/s), following the 0.4 s level (the 3 s average lags
+- **Fast down (Attack).** When the gain is more than 3 dB above what the 3 s level needs - a loud song after a quiet intro or a
+  break - it comes down at the *Attack* speed (seconds per 10 dB, default 1 s: 10 dB/s), following the 0.4 s level (the 3 s average lags
   a loud entry), only down, until it is within 0.5 dB; then the 3 s level starts from the level reached. Because it is
   judged on the 3 s level, a chorus 4 LU above the verse does not trigger it. Measured on a 16 dB entry after a 6 s
   intro: 4-10 s after the entry the output was -6.0 LUFS without fast down and -17.9 LUFS with it (target -18).
@@ -796,7 +803,7 @@ buffers.
 - **One object.** Processor and controller are one object (the SDK's single-component effect), so the plug-in's
   window reads the deck's meter and tap rings itself through the same `DeckMonitor` (`src/core/monitor.*`) the
   program uses: one reader per ring, as the rings require (16.2).
-- **Parameters.** The 71 values of the chain plus the loudness preset and colour lists, Bypass and the look-ahead. A value's
+- **Parameters.** The 72 values of the chain plus the loudness preset and colour lists, Bypass and the look-ahead. A value's
   normalised position (0..1) maps to the program's slider positions (`paramPositions`, `paramValueAt`,
   `paramPositionOf`): linear in the value's steps, logarithmic (300 positions) for times and frequencies spanning
   a factor of 8 or more. A parameter's id is an FNV-1a hash of its settings key plus 1000, so ids stay the same
@@ -886,7 +893,7 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Inputs on another clock | simulated clocks -500..+500 ppm, late callbacks, pauses | no xruns, drift within 3 ppm, fill within 0.5 ms |
 | Graphs | FFT against a DFT; sines 50 Hz - 18 kHz; correlation and width of known signals | 1e-12; within a bin; +-0.05 / 1 % |
 | Offline | synthetic songs through every loudness preset, checked with an independent meter | integrated loudness within 1 LU of the target, true peak <= ceiling |
-| Plug-in | loaded like a host: against the deck at block sizes 1..1024 with a change; state stored and loaded; Bypass; latency; parameter ids; the SDK's validator | bit-exact; 71 of 71 values, bit-exact; bit-exact; 72 / 144 samples; unique; 47 + 537 tests passed |
+| Plug-in | loaded like a host: against the deck at block sizes 1..1024 with a change; state stored and loaded; Bypass; latency; parameter ids; the SDK's validator | bit-exact; 72 of 72 values, bit-exact; bit-exact; 72 / 144 samples; unique; 47 + 537 tests passed |
 | Slider positions | every value's positions: range, order, every shipped value back within a step | exact ends, rising, within a step (2 % on log scales) |
 
 The offline render check runs the real deck code on synthetic songs (fades, pauses, loud entries) and measures the

@@ -339,7 +339,7 @@ the audio again (a short fade-out and fade-in).
 
 ### 5.3 Updates
 
-- **Check GitHub for a new version once a day** - on by default.
+- **Check GitHub for a new version once a day** (among the switches) - on by default.
 
 The rest is in the **About DJAP** window (right-click the main window or the notification-area icon: *About
 DJAP...*):
@@ -348,15 +348,22 @@ DJAP...*):
 - **Install update** downloads and installs a newer version (chapter 11). Greyed when there is nothing newer.
 - The text beside the buttons shows this version and what the last check found.
 
-### 5.4 Start, stop and state
+### 5.4 Start and stop
+
+Right under Look-ahead and Oversampling:
 
 - **Start audio** starts the audio with the choices above (with WASAPI exclusive it asks first).
 - **Stop audio** fades out and stops.
-- Under the buttons: the state - the driver or devices, rate, buffer, the latency of input, output and processing,
-  and per deck the extra latency and drift of an input on another clock.
+
 ### 5.5 Health
 
-Counters that show whether the computer keeps up with the audio (chapter 10). **Reset counters** sets them to 0.
+At the bottom of the window, under one heading:
+
+- What runs: the driver or devices, rate, buffer, the latency of input, output and processing, and per deck the
+  extra latency and drift of an input on another clock; a message when the audio could not start or the settings
+  could not be saved.
+- Under it, counters that show whether the computer keeps up with the audio (chapter 10). **Reset counters** sets
+  them to 0.
 
 ## 6. Loudness presets and the loudness window
 
@@ -440,9 +447,14 @@ Defaults below are those of Medium (the general defaults of a new own preset).
 | On | | | on | |
 | Range | dB | 0 .. 15 | 9 | The largest boost or cut. Larger evens out bigger differences between songs. |
 | Speed | dB/s | 0.1 .. 6 | 1.0 | How fast the gain may move. Higher reaches a new song's level sooner but can be heard as the volume drifting within a song. |
-| Fast down | dB/s | 0 .. 20 | 10 | How fast the gain comes down when a song comes in clearly too loud (after a quiet intro or a break). 0 = the normal speed. |
-| Hold below | LU | 5 .. 20 | 10 | Holds the gain while the music is this far under the target: fades and pauses are not pumped up. A quiet part that stays this low for 3 s without fading (a soft verse, a breakdown) is levelled like the rest. |
-| Catch up after a pause | on / off | | on | After 2 s of silence (a stopped deck) the gain moves to the new song's level within about half a second. |
+| Attack | s per 10 dB | 0.2 .. 20 | 1.0 | How fast the gain comes down when a song comes in clearly too loud (after a quiet intro or a break). Shorter: the loud part is down sooner; longer: a gentler turn of the knob. |
+| Release | s per 10 dB | 0.2 .. 20 | 1.5 (Gentle, DAB+: 5) | How fast the gain goes up when the music is clearly too soft (a soft intro, a quiet song after a loud one), and to a new song after a pause. Shorter: on level sooner, but the rise is easier to hear; longer: a gentler turn of the knob. |
+| Hold below | LU | 5 .. 20 | 10 | Holds the gain while the music is this far under the target: fades and pauses are not pumped up. A quiet part that stays this low for the Quiet wait without fading (a soft intro or verse, a breakdown) is levelled like the rest. |
+| Quiet wait | s | 0.5 .. 10 | 1 (Gentle, DAB+: 3) | How long such a quiet part waits before it is levelled. Shorter: a soft intro comes up sooner; longer: the start of a breakdown or a fade is surer to be left alone. |
+
+Attack and Release never move slower than Speed. After a pause (a stopped deck) the next song is caught up at the
+Release speed (up) or the Attack speed (down). The defaults were chosen on 18 songs with soft intros: they bring such
+an intro to the target about a quarter sooner than before, without a song coming in louder at its loud part.
 
 **Compressor** - evens out the loud parts within a song.
 
@@ -696,7 +708,7 @@ The window is one deck strip of the program:
 - Choosing a loudness preset or colour loads its values. Choosing the one that is already chosen loads its values again -
   back to the loudness preset after changes. "(other values)" means the values match no loudness preset in the list (for example a
   project made on another computer).
-- **Every value is a parameter** the DJ software can show and automate: the 71 values of the loudness preset and colour
+- **Every value is a parameter** the DJ software can show and automate: the 72 values of the loudness preset and colour
   (named "Stage: value", for example "Compressor: Threshold", grouped by stage), the loudness preset and colour lists, Bypass
   and the look-ahead. They move in the same steps as the program's sliders.
 - A **project** (or a preset of the DJ software) stores the values themselves, not only the loudness preset's name: it
@@ -845,10 +857,10 @@ old file stays.
 | **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer density bands. With an input on another clock, underruns in the Setup window mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
 | **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window. |
 | **The sound pumps or breathes** | Lower the density amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
-| **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Fast down" (Leveller tab) brings it down within about a second. Raise it if needed. |
+| **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Attack" (Leveller tab) brings it down within about a second. Shorten it if needed - or lengthen Release or Quiet wait, so the soft intro is turned up less. |
+| **A soft intro takes too long to come up** | Shorten "Quiet wait" (it starts sooner) and "Release" (it rises faster). A very soft intro (more than Range under the target) cannot be brought up fully: raise Range. |
 | **Quiet passages come up too much** | A quiet part that stays is levelled after a few seconds. To keep more of the difference, lower the leveller range or its speed. |
-| **A soft verse after a loud chorus stays too soft** | The leveller waits until the music has stopped falling (about 2-4 s) and then, when it is more than 4 dB too soft, comes up faster than its normal speed ("fast up": 2-4 dB/s,
-depending on the loudness preset) until it is within 1 dB. A larger range lets it come up further. |
+| **A soft verse after a loud chorus stays too soft** | The leveller waits until the music has stopped falling (about 2-4 s) and then, when it is more than 4 dB too soft, comes up at the "Release" speed until it is within 1 dB. A shorter Release brings it up sooner, a larger Range further. |
 | **Everything sounds too dull / too sharp** | Try another colour (Bright, Warm), or lower the exciter / de-esser. |
 | **Limiter works hard all the time** | Lower the input gain, the clipper drive or the target, or use a quieter loudness preset. |
 | **DJAP does not start with Windows** | Check the option in the Setup window and Windows' startup apps list. |

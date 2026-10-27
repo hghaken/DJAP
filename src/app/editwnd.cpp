@@ -118,11 +118,11 @@ const StageSound kStageSound[] = {
      L"The slow hand on the volume: quiet and loud songs come out at the same loudness, while the sound within a song "
      L"is left alone. A larger range evens out bigger differences (a quiet old record comes up, a hot master comes "
      L"down). A higher speed reaches a new song's level sooner but can be heard as the volume drifting within a "
-     L"song; a lower one is inaudible but takes longer. Fast down only acts when a song comes in clearly too loud "
-     L"(after a quiet intro or a break): higher brings it down sooner, lower lets the loud start through longer. "
-     L"Hold below keeps fades and pauses from being pumped up; a quiet part that stays (a soft verse, a breakdown) is "
-     L"levelled after a few seconds, quickly when it is far too soft. Catch-up brings a song to level within a second "
-     L"after a pause."},
+     L"song; a lower one is inaudible but takes longer. Attack and Release (seconds per 10 dB) act only when a song is "
+     L"clearly too loud or too soft: Attack how fast a loud start after a quiet intro or a break comes down, Release "
+     L"how fast a soft intro, a quiet song after a loud one or a new song after a pause comes up - shorter is sooner "
+     L"but easier to hear, like a quick turn of the knob. Hold below keeps fades and pauses from being pumped up; a "
+     L"quiet part that stays (a soft intro or verse, a breakdown) is levelled after Quiet wait."},
     {"Compressor",
      L"Evens out the loud parts within a song. A lower threshold and a higher ratio make the sound more even and "
      L"more 'in your face'; too much flattens the dynamics and sounds tired. A short attack catches drum hits (less "

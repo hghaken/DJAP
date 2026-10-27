@@ -71,6 +71,7 @@ private:
     HWND tooltips_ = nullptr;                                    // the switch of all tooltips
     HWND checkUpdates_ = nullptr; // the daily update check
     std::wstring notes_;
+    int stateLines_ = 1; // the lines the state text takes now (the Health section is as high as its text)
     const Updater* updater_ = nullptr;
     bool testRun_ = false;
     HFONT font_ = nullptr;

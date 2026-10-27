@@ -362,35 +362,36 @@ void AudioWindow::layout() {
     MoveWindow(labels_[13], m + colW + g, y, labelW, h, TRUE);
     MoveWindow(oversampling_, m + colW + g + labelW + g, y, cw, px(300), TRUE);
     y += h + g;
+    SetWindowTextW(labels_[9], two ? L"Deck inputs" : L"Input from");
+    SetWindowTextW(labels_[1], two ? L"Deck A input" : L"Input");
+    SetWindowTextW(labels_[2], two ? L"Deck A output" : L"Output");
+    // Start / Stop right under the audio choices (client, 2026-10-27)
+    MoveWindow(start_, m + labelW + g, y, bw, h, TRUE);
+    MoveWindow(stop_, m + labelW + bw + 2 * g, y, bw, h, TRUE);
+    y += h + 2 * g;
+    // the switches, one under the other (the daily update check among them: no heading of its own - client,
+    // 2026-10-27; Check now / Install update are in the About window)
     ShowWindow(link_, two ? SW_SHOW : SW_HIDE);
     if (two) {
         MoveWindow(link_, m + labelW + g, y, W - labelW - g, h, TRUE);
         y += h + g;
     }
-    MoveWindow(follow_, m + labelW + g, y, W - labelW - g, h, TRUE);
-    y += h + g;
-    MoveWindow(startup_, m + labelW + g, y, W - labelW - g, h, TRUE);
-    y += h + g;
-    MoveWindow(tooltips_, m + labelW + g, y, W - labelW - g, h, TRUE);
-    y += h + g;
-    // updates: the switch (Check now / Install update are in the About window - client, 2026-10-27)
-    MoveWindow(labels_[12], m, y, labelW, h, TRUE);
-    MoveWindow(checkUpdates_, m + labelW + g, y, W - labelW - g, h, TRUE);
-    y += h + 2 * g;
-    SetWindowTextW(labels_[9], two ? L"Deck inputs" : L"Input from");
-    SetWindowTextW(labels_[1], two ? L"Deck A input" : L"Input");
-    SetWindowTextW(labels_[2], two ? L"Deck A output" : L"Output");
-    MoveWindow(start_, m + labelW + g, y, bw, h, TRUE);
-    MoveWindow(stop_, m + labelW + bw + 2 * g, y, bw, h, TRUE);
-    y += h + g;
-    // the state: a line for the stream, then one per deck that may wrap to two
-    const int stateLines = two ? 6 : 4; // (and a line for a message: a device error, a start retried)
+    for (HWND box : {follow_, startup_, tooltips_, checkUpdates_}) {
+        MoveWindow(box, m + labelW + g, y, W - labelW - g, h, TRUE);
+        y += h + g;
+    }
+    ShowWindow(labels_[12], SW_HIDE); // (the former "Updates" heading)
+    y += g;
+    // one section, Health: what runs (a line for the stream, then one per deck that may wrap to two, and a line for
+    // a message - as many lines as the text takes, refresh()), then the counters with Reset counters beside them
+    // (client, 2026-10-27: one heading)
+    const int stateLines = stateLines_;
+    MoveWindow(labels_[7], m, y, labelW, lh, TRUE);
     MoveWindow(state_, m + labelW + g, y, W - labelW - g, stateLines * lh, TRUE);
-    y += stateLines * lh + 2 * g;
-    MoveWindow(labels_[7], m, y, labelW, h, TRUE);
-    MoveWindow(health_, m + labelW + g, y + px(4), W - labelW - bw - 2 * g, 3 * lh, TRUE);
+    y += stateLines * lh + g;
+    MoveWindow(health_, m + labelW + g, y, W - labelW - bw - 2 * g, 3 * lh, TRUE);
     MoveWindow(resetHealth_, m + W - bw, y, bw, h, TRUE);
-    y += std::max(3 * lh + px(4), h) + 2 * g;
+    y += std::max(3 * lh, h) + 2 * g;
     MoveWindow(note_, m, y, W, 2 * lh, TRUE);
     y += 2 * lh + m;
     // the window is as high as its content (one channel needs less than two decks)
@@ -970,7 +971,30 @@ void AudioWindow::refresh() {
              running ? h.blocks : 0LL, running ? h.heaviestPercent : 0.0, running ? h.lastPercent : 0.0,
              running ? h.overHalf : 0LL, running ? h.late : 0LL, running ? h.refused : 0LL, resyncs, overloads);
     SetWindowTextW(info_, info.c_str());
-    SetWindowTextW(state_, state.c_str());
+    wchar_t shown[2048] = {};
+    GetWindowTextW(state_, shown, 2048);
+    if (state != shown) {
+        SetWindowTextW(state_, state.c_str());
+        // the counters right under the text: lay out again when it takes another number of lines
+        RECT sr;
+        GetClientRect(state_, &sr);
+        int lines = stateLines_;
+        if (HDC dc = GetDC(state_)) {
+            HGDIOBJ old = SelectObject(dc, font_);
+            TEXTMETRICW tm;
+            GetTextMetricsW(dc, &tm);
+            RECT r{0, 0, sr.right, 0};
+            DrawTextW(dc, state.c_str(), -1, &r, DT_WORDBREAK | DT_CALCRECT | DT_NOPREFIX);
+            const int lh = std::max(1, static_cast<int>(tm.tmHeight + tm.tmExternalLeading));
+            lines = std::max(1, static_cast<int>((r.bottom + lh - 1) / lh));
+            SelectObject(dc, old);
+            ReleaseDC(state_, dc);
+        }
+        if (lines != stateLines_ && sr.right > 0) {
+            stateLines_ = lines;
+            layout();
+        }
+    }
     SetWindowTextW(health_, hb);
 }
 

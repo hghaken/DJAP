@@ -21,14 +21,20 @@ const ParamInfo kInfo[kParamCount] = {
     {"LevellerRange", "Leveller", "Range", "dB", 0, 15, 9, 0.5, 1, false, "Largest boost or cut of the leveller"},
     {"LevellerSpeed", "Leveller", "Speed", "dB/s", 0.1, 6, 1.0, 0.1, 1, false,
      "How fast the leveller gain may move"},
-    {"LevellerFastDown", "Leveller", "Fast down", "dB/s", 0, 20, 10, 0.5, 1, false,
-     "How fast the gain comes down while the music is clearly too loud (the gain more than 3 dB above what the 3 s "
-     "level needs: a loud start after a quiet intro or a break); 0 = the normal speed"},
+    {"LevellerAttack", "Leveller", "Attack", "s", 0.2, 20, 1.0, 0.1, 1, false,
+     "Seconds per 10 dB down while the music is clearly too loud (the gain more than 3 dB above what the 3 s level "
+     "needs: a loud start after a quiet intro or a break); short = the loud part is down at once, long = a gentler "
+     "turn of the knob. Never slower than Speed"},
+    {"LevellerRelease", "Leveller", "Release", "s", 0.2, 20, 1.5, 0.1, 1, false,
+     "Seconds per 10 dB up while the music is clearly too soft (a soft intro, a quiet song after a loud one) and "
+     "when a new song starts after a pause; short = on level sooner, long = a gentler turn of the knob. Never "
+     "slower than Speed"},
     {"LevellerHold", "Leveller", "Hold below", "LU", 5, 20, 10, 1, 0, false,
      "Holds the gain while the music is this far under the target (fades, pauses); a quiet part that stays is "
-     "levelled after 3 s"},
-    {"LevellerCatchUp", "Leveller", "Catch up after a pause", "", 0, 1, 1, 1, 0, true,
-     "After 2 s of silence (deck stopped) the gain jumps to the new song's level within about half a second"},
+     "levelled after Quiet wait"},
+    {"LevellerQuietWait", "Leveller", "Quiet wait", "s", 0.5, 10, 1, 0.5, 1, false,
+     "How long a steady quiet part (more than Hold below under the target: a soft intro) waits before it is "
+     "levelled; short = a soft intro comes up sooner, long = fades and breakdowns are surer to be left alone"},
 
     {"CompressorOn", "Compressor", "On", "", 0, 1, 1, 1, 0, true, "Wide-band compressor (soft knee, feed-forward)"},
     {"CompressorThreshold", "Compressor", "Threshold", "LU", -10, 15, 2, 0.5, 1, false,
@@ -187,6 +193,16 @@ PresetValues shippedPresetValues(int i) {
     v[pTarget] = r.target;
     v[pLevRange] = r.levRange;
     v[pLevSpeed] = r.levSpeed;
+    // Quiet wait and Release (sliders since 2026-10-27; client: "set them to a reasonable average for all the
+    // soft-to-loud songs"): 1 s and 1.5 s per 10 dB, chosen on 18 songs with soft intros through Loud - the time until
+    // on level summed 322 -> 249 s and the seconds more than 6 LU too soft 601 -> 497 against the former 3 s / 3 dB/s,
+    // the steepest rise 6.7 dB/s (1 s per 10 dB took 234 s, but at 10 dB/s - the "turn of the knob"), no song more
+    // over the target. Gentle and DAB+ keep their calm: 3 s and 5 s (2 dB/s - faster brought quiet song endings up too
+    // eagerly there)
+    if (r.levSpeed <= 0.5) {
+        v[pLevQuietWait] = 3.0;
+        v[pLevRelease] = 5.0;
+    }
     v[pCompThreshold] = r.thr;
     v[pCompRatio] = r.ratio;
     v[pCompAttack] = r.att;

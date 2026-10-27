@@ -15,7 +15,7 @@ const double kFallHold = std::pow(10.0, -kFallHoldLu / 10.0);
 const double kRiseCatchDb = 1.0;
 const double kCatchMaxSeconds = 15.0;
 // fast down: when the gain is more than kFastDownDb above what the 3 s level needs (clearly too loud: a loud entry
-// after a quiet intro or a break) it comes down at the preset's fast speed until it is within kFastDownDoneDb
+// after a quiet intro or a break) it comes down at the preset's Attack until it is within kFastDownDoneDb
 const double kFastDownDb = 3.0;
 const double kFastDownDoneDb = 0.5;
 // The leveller on a song with quiet verses and loud choruses (client, 2026-10-26, a song whose spoken verses lie
@@ -29,26 +29,27 @@ const double kFastDownDoneDb = 0.5;
 //   last two 2 s (a slow fade, 0.4 dB/s or more: it goes on falling, while a quiet passage is flat again
 //   after its drop). No move up while falling (a slow fade at 1 dB/s was turned up by 12 dB without this rule);
 // - when it has stopped falling, the 3 s level starts from the level reached instead of its lag;
-// - a quiet section under the hold level that stays (kQuietMusicSeconds, not falling, the gated level not more
+// - a quiet section under the hold level that stays (Quiet wait, 3 s by default, not falling, the gated level not more
 //   than kSteadyDb under its value 4 s ago, and not more than kQuietMusicLu under the hold level: music, not a noise
 //   floor) is levelled like any music; fades, pauses and the first seconds of a breakdown keep the hold;
 // - warm restart only after a real pause (at least 1 s of silence), not after a quiet passage;
-// - clearly too soft (the gain more than kFastUpDb under what the 3 s level needs, not falling): up at four times the
-//   preset's speed but at most kFastUpMax, or at twice its speed when that is more (Gentle and DAB+, 0.5 dB/s: 2;
-//   Light, Medium, Web Stream, Loud: 3; FM Station: 4 - 3 dB/s for all brought the quiet endings of three songs up too
-//   eagerly in Gentle and DAB+, 2 dB/s left the spoken verses 1 LU more uneven in the 1 dB/s presets), until within
+// - clearly too soft (the gain more than kFastUpDb under what the 3 s level needs, not falling): up at the preset's
+//   Release (the shipped values keep the speeds this had as a fixed rule - Gentle and DAB+: 2 dB/s; Light, Medium,
+//   Web Stream, Loud: 3; FM Station: 4 - 3 dB/s for all brought the quiet endings of three songs up too eagerly in
+//   Gentle and DAB+, 2 dB/s left the spoken verses 1 LU more uneven in the 1 dB/s presets), until within
 //   kFastUpDoneDb - the counterpart of fast down; meanwhile a gap between two phrases does not stop it (only a fall does).
+// Attack, Release and Quiet wait are sliders since 2026-10-27 (client: "a soft intro sometimes takes too long to get
+// to level, and then it is as if someone turns the volume knob quickly"); the catch-up after a pause (20 dB/s, a
+// switch) moves at the Release speed now.
 const double kDropDb = 2.5;
 const double kSinkDb = 0.8;
 const double kFallKeepSeconds = 1.0;
 const double kGateDb = 10.0;
 const double kGate = std::pow(10.0, -kGateDb / 10.0);
-const double kQuietMusicSeconds = 3.0;
 const double kSteadyDb = 3.5;
 const double kQuietMusicLu = 12.0;
 const double kFastUpDb = 4.0;
 const double kFastUpDoneDb = 1.0;
-const double kFastUpMax = 3.0; // dB/s
 
 // Crossfade position (-1..0 warm-up, 0..1 fade) to weight: raised cosine, so the fade starts and ends without a
 // corner (a linear fade's corner showed as a click on a 120 Hz tone).
@@ -109,14 +110,16 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.aim = workingLevel(v);
     c.levRange = v[pLevRange];
     c.levStep = v[pLevSpeed] / ctrlRate;
-    c.levFastStep = std::max(v[pLevFastDown], v[pLevSpeed]) / ctrlRate; // 0 = the normal speed
-    c.levFastUpStep = std::max(2.0 * v[pLevSpeed], std::min(kFastUpMax, 4.0 * v[pLevSpeed])) / ctrlRate;
+    // Attack and Release in seconds per 10 dB (normaliseValues keeps them at 0.2 s or more), never slower than Speed
+    c.levFastStep = std::max(10.0 / v[pLevAttack], v[pLevSpeed]) / ctrlRate;
+    c.levFastUpStep = std::max(10.0 / v[pLevRelease], v[pLevSpeed]) / ctrlRate;
     // a block far louder than the leveller could ever correct is a glitch, not music: one sample far over full scale
     // (and the low filters ringing after it) must not make fast down pull the gain to the end of its range
     c.levDetMax = lufsToPower(c.aim + c.levRange + 6.0);
     c.holdLufs = c.aim - v[pLevHold];
-    c.catchUp = on(pLevCatchUp);
-    c.catchStep = 20.0 / ctrlRate; // catch-up after a pause: 20 dB/s
+    c.quietWait = v[pLevQuietWait];
+    c.catchStep = c.levFastUpStep; // a new song after a pause: up at the Release speed, down at the Attack speed
+                                   // (was a switch and 20 dB/s both ways)
     c.aFast = onePoleCoeff(0.4, ctrlRate);
     c.aMid = onePoleCoeff(1.5, ctrlRate);
     c.aSlow = onePoleCoeff(3.0, ctrlRate);
@@ -577,7 +580,7 @@ void DeckProcessor::controlUpdate() {
     } else {
         if (quietTime_ >= 1.0 && pauseSeen_) { // music after a pause: warm start (a quiet passage is not a pause)
             musicTime_ = 0.0;
-            if (longSilence_ && c.catchUp) catchPending_ = true;
+            if (longSilence_) catchPending_ = true;
         }
         pauseSeen_ = false;
         quietTime_ = 0.0;
@@ -615,12 +618,12 @@ void DeckProcessor::controlUpdate() {
     if (falling) fell_ = true;
     // a quiet section that stays is music to level; the hold keeps fades, pauses and a breakdown's first seconds
     const double midOut = powerToLufs(midIn_) + levDb + linToDb(inGain_);
-    const bool wasReleased = quietSteady_ >= kQuietMusicSeconds;
+    const bool wasReleased = quietSteady_ >= c.quietWait;
     if (midOut < c.holdLufs && midOut > c.holdLufs - kQuietMusicLu && steady && inLufs >= -60.0)
         quietSteady_ += dt;
     else
         quietSteady_ = 0.0;
-    const bool released = quietSteady_ >= kQuietMusicSeconds;
+    const bool released = quietSteady_ >= c.quietWait;
     if (released && !wasReleased) fell_ = true; // the 3 s level starts from the quiet section's level
     const bool hold = quiet_ && !released;
     if (quiet_ && released) musicTime_ += dt; // a released quiet section is music: a warm start ends in it too
@@ -672,7 +675,10 @@ void DeckProcessor::controlUpdate() {
             // clearly too soft (judged on the 3 s level, not falling): up at the fast-up speed until nearly there
             if (!catching_ && !fastDown_ && !falling && wanted - levGainDb_ > kFastUpDb) fastUp_ = true;
             if (fastUp_ && (fastDown_ || wanted - levGainDb_ < kFastUpDoneDb)) fastUp_ = false;
-            const double step = catching_ ? c.catchStep : fastDown_ ? c.levFastStep : fastUp_ ? c.levFastUpStep : c.levStep;
+            // catching up after a pause: up at the Release speed, down at the Attack speed (a loud song after a pause
+            // came down at Gentle's 2 dB/s and played 2 LU too loud - render check)
+            const double step = catching_ ? (wanted < levGainDb_ ? c.levFastStep : c.catchStep)
+                                : fastDown_ ? c.levFastStep : fastUp_ ? c.levFastUpStep : c.levStep;
             levGainDb_ = moveToward(levGainDb_, wanted, step);
             if (catching_) {
                 catchTime_ += dt;

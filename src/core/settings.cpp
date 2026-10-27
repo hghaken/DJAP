@@ -482,6 +482,14 @@ void Settings::fromText(const std::string& text) {
             double d;
             if (it != keys.end() && parseDouble(it->second, d)) values[static_cast<size_t>(i)] = d;
         }
+        // a preset of the versions before Attack / Release (2026-10-27): its "Fast down" in dB/s is the Attack in
+        // seconds per 10 dB (0 was "the normal speed": Speed); "Catch up after a pause" is gone (the Release speed now)
+        if (keys.find(paramInfo(pLevAttack).key) == keys.end()) {
+            auto old = keys.find("LevellerFastDown");
+            double d;
+            if (old != keys.end() && parseDouble(old->second, d))
+                values[pLevAttack] = 10.0 / (d > 0.0 ? d : std::max(0.1, values[pLevSpeed]));
+        }
         normaliseValues(values);
         if (Preset* p = find(name)) {
             p->values = values;
