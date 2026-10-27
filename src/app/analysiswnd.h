@@ -58,7 +58,7 @@ private:
     OpenStage openStage_;
     // the scope of each deck: the input or the output (a right-click on it chooses), and where it was painted
     bool scopeInput_[2] = {false, false};
-    int scopeMs_[2] = {50, 50}; // the time across it: 20, 50, 200 or 2000 ms (the right-click menu)
+    int scopeMs_[2] = {50, 50}; // the time across it: 1, 5, 10, 20, 50, 200 or 2000 ms (the right-click menu)
     RECT scopeRect_[2] = {};
 };
 

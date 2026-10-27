@@ -285,15 +285,17 @@ LRESULT AnalysisWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             AppendMenuW(m, MF_STRING | (scopeInput_[d] ? MF_CHECKED : 0), 1, L"Scope of the &input");
             AppendMenuW(m, MF_STRING | (scopeInput_[d] ? 0 : MF_CHECKED), 2, L"Scope of the &output");
             AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-            const int spans[4] = {20, 50, 200, 2000};
-            const wchar_t* spanNames[4] = {L"20 ms across", L"50 ms across", L"200 ms across", L"2 s across"};
-            for (int k = 0; k < 4; ++k)
+            // client, 2026-10-27: 20 / 50 / 200 ms and 2 s, then "1, 5 and 10 ms too"
+            const int spans[7] = {1, 5, 10, 20, 50, 200, 2000};
+            const wchar_t* spanNames[7] = {L"1 ms across",  L"5 ms across",   L"10 ms across", L"20 ms across",
+                                           L"50 ms across", L"200 ms across", L"2 s across"};
+            for (int k = 0; k < 7; ++k)
                 AppendMenuW(m, MF_STRING | (scopeMs_[d] == spans[k] ? MF_CHECKED : 0), static_cast<UINT_PTR>(10 + k),
                             spanNames[k]);
             const int choice = TrackPopupMenuEx(m, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y, hwnd_, nullptr);
             DestroyMenu(m);
             if (choice == 1 || choice == 2) scopeInput_[d] = choice == 1;
-            if (choice >= 10 && choice < 14) scopeMs_[d] = spans[choice - 10];
+            if (choice >= 10 && choice < 17) scopeMs_[d] = spans[choice - 10];
             if (choice) InvalidateRect(hwnd_, nullptr, FALSE);
             return 0;
         }
@@ -671,14 +673,28 @@ void AnalysisWindow::paintScope(HDC dc, int d, const RECT& p, bool live, int th)
         const long long frames = std::min<long long>(WaveScope::kRaw / 2, std::llround(s.fs * span / 1000.0));
         const long long newest = s.rawWritten;
         if (newest < frames + 2) continue;
+        // the trigger looks back at least 50 ms: a short span (1 ms) holds no zero crossing of a low tone
+        const long long look = std::max(frames, std::llround(s.fs * 0.05));
         long long end = newest;
-        for (long long k = newest - 1; k > newest - frames && k > newest - WaveScope::kRaw + frames + 1; --k)
+        for (long long k = newest - 1; k > newest - look && k > newest - WaveScope::kRaw + frames + 1; --k)
             if (s.sample(0, k - 1) < 0.0f && s.sample(0, k) >= 0.0f) {
                 end = k;
                 break;
             }
         const long long start = end - frames;
         const int cols = r - l;
+        if (frames < cols) { // fewer samples than pixels (1 - 10 ms): a line through the samples
+            int px0 = l, py0 = yOf(s.sample(c, start));
+            for (long long k = 1; k <= frames; ++k) {
+                const float v0 = s.sample(c, start + k - 1), v1 = s.sample(c, start + k);
+                const int x1 = l + static_cast<int>(static_cast<double>(cols) * k / frames), y1 = yOf(v1);
+                const bool clip = std::max(std::fabs(v0), std::fabs(v1)) >= WaveScope::kClipLevel;
+                line(dc, px0, py0, x1, y1, clip ? kRed : wave);
+                px0 = x1;
+                py0 = y1;
+            }
+            continue;
+        }
         int prevY = yOf(s.sample(c, start));
         for (int x = 0; x < cols; ++x) {
             const long long a = start + frames * x / cols, z = std::max(a + 1, start + frames * (x + 1) / cols);

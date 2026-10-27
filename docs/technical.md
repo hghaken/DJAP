@@ -689,7 +689,7 @@ width       = sqrt(sum(S^2) / sum(M^2)) x 100 %       (M = (L+R)/2, S = (L-R)/2;
 
 The goniometer plots the output's last 43 ms with mono vertical and left / right on the diagonals.
 
-The scope shows the input or the output (a right-click chooses) as 20, 50 or 200 ms of the samples themselves - the
+The scope shows the input or the output (a right-click chooses) as 1, 5, 10, 20, 50 or 200 ms of the samples themselves - the
 picture ends at the newest rising zero crossing of the left channel, so a steady tone stands still - or as the last
 2 s in 400 buckets of each channel's lowest and highest sample. It counts the samples at full scale (|x| >= 0.9999,
 -0.001 dBFS) over the last 2 s whatever the span shown. At the output only the clip guard puts
