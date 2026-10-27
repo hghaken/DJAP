@@ -167,8 +167,7 @@ void AudioWindow::createControls() {
     inputs_ = make(WC_COMBOBOXW, L"", combo, idInputs);
     exclusive_ = make(L"BUTTON", L"Exclusive (WASAPI: lower latency)",
                       BS_AUTOCHECKBOX | WS_TABSTOP, idExclusive);
-    drift_ = make(L"BUTTON", L"Drift correction (input and output device on different clocks)",
-                  BS_AUTOCHECKBOX | WS_TABSTOP, idDrift);
+    drift_ = make(WC_COMBOBOXW, L"", combo, idDrift);
     driver_ = make(WC_COMBOBOXW, L"", combo, idDriver);
     open_ = make(L"BUTTON", L"Open driver", BS_OWNERDRAW | WS_TABSTOP, idOpen);
     close_ = make(L"BUTTON", L"Close driver", BS_OWNERDRAW | WS_TABSTOP, idClose);
@@ -210,7 +209,7 @@ void AudioWindow::createControls() {
                  SS_LEFT, 0);
 
     for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_, about_, checkNow_, install_}) theme::makeButton(b);
-    for (HWND c : {decks_, api_, inputs_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
+    for (HWND c : {decks_, api_, inputs_, drift_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
                       L"players or a mixer's channels).\nOne channel: one stereo processor, for example for everything "
@@ -223,17 +222,17 @@ void AudioWindow::createControls() {
     tips_.add(exclusive_, L"WASAPI only: take the devices for this program alone - lower latency and no Windows "
                           L"mixing, but other programs cannot use them while the audio runs (asks at Start).");
     tips_.add(drift_, L"WASAPI, DirectSound, MME: each deck's input and output device usually run on clocks of their "
-                      L"own, which drift apart - without correction a glitch now and then. On (the default): the "
+                      L"own, which drift apart - without correction a glitch now and then. Auto (the default): the "
                       L"program reads the input a little faster or slower (at most 0.2 %, inaudible) so they never "
                       L"drift apart, at the cost of a buffer of about 8 ms (128-frame periods) to 23 ms (10 ms "
-                      L"periods), shown while running. WASAPI recognises an input and output of the same device (one "
-                      L"clock) and leaves them one stream without the buffer. Off: always one stream from input to "
-                      L"output, no buffer.");
+                      L"periods), shown while running - except for an input and output that WASAPI finds on one "
+                      L"device (one clock): one stream, no buffer. Always: corrected also then (if a device glitches "
+                      L"now and then on Auto). Off: always one stream from input to output, no buffer.");
     tips_.add(inputs_, L"With ASIO: where the decks' inputs come from - the interface's ASIO input pairs, or per "
                        L"deck an input device of WASAPI, DirectSound or MME (for example a player sending into a "
                        L"virtual cable). The outputs stay ASIO.\nSuch an input runs on its own clock: the program "
                        L"reads it a little faster or slower (at most 0.2 %, inaudible) so the two never drift apart, "
-                       L"at the cost of a buffer of about 10-20 ms (shown while running).");
+                       L"at the cost of a buffer of about 10-15 ms with a 10 ms input (shown while running).");
     tips_.add(driver_, L"The ASIO driver of the interface, from the list Windows keeps. Nothing is opened until "
                        L"Open driver or Start audio.");
     tips_.add(open_, L"Loads and opens the driver (asks first). This takes the interface: other programs on the same "
@@ -340,7 +339,7 @@ void AudioWindow::layout() {
     y += h + g;
     MoveWindow(labels_[9], m, y, labelW, h, TRUE);
     MoveWindow(inputs_, m + labelW + g, y, px(300), px(200), TRUE);
-    MoveWindow(drift_, m + labelW + px(300) + 2 * g, y, W - labelW - px(300) - 2 * g, h, TRUE);
+    MoveWindow(drift_, m + labelW + px(300) + 2 * g, y, W - labelW - px(300) - 2 * g, px(200), TRUE);
     y += h + g;
     MoveWindow(labels_[0], m, y, labelW, h, TRUE);
     const int comboW = W - labelW - 3 * (bw + g) - g;
@@ -454,7 +453,11 @@ void AudioWindow::fillAll() {
     for (int i = 0; i < 4; ++i)
         if (kApis[i] == current) SendMessageW(api_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
     SendMessageW(exclusive_, BM_SETCHECK, settings_.exclusive ? BST_CHECKED : BST_UNCHECKED, 0);
-    SendMessageW(drift_, BM_SETCHECK, settings_.driftCorrection ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(drift_, CB_RESETCONTENT, 0, 0);
+    addItem(drift_, L"Drift correction: auto (not for one device)", Settings::kDriftAuto);
+    addItem(drift_, L"Drift correction: always", Settings::kDriftAlways);
+    addItem(drift_, L"Drift correction: off", Settings::kDriftOff);
+    selectData(drift_, settings_.driftCorrection);
     SendMessageW(link_, BM_SETCHECK, settings_.linkPresets ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(follow_, BM_SETCHECK, settings_.followsVolume() ? BST_CHECKED : BST_UNCHECKED, 0);
     // ASIO: where the decks' inputs come from
@@ -615,7 +618,7 @@ void AudioWindow::fillAll() {
 void AudioWindow::readChoices() {
     // the API is read in command(): the device / pair lists still belong to the API they were filled for
     settings_.exclusive = SendMessageW(exclusive_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-    settings_.driftCorrection = SendMessageW(drift_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    settings_.driftCorrection = static_cast<int>(selectedData(drift_, settings_.driftCorrection));
     const LRESULT d = SendMessageW(driver_, CB_GETCURSEL, 0, 0);
     if (d >= 0) {
         const int n = static_cast<int>(SendMessageW(driver_, CB_GETLBTEXTLEN, static_cast<WPARAM>(d), 0));
@@ -801,7 +804,7 @@ void AudioWindow::command(int id, int code) {
         onChange_();
         return;
     }
-    if ((code == CBN_SELCHANGE && !filling_) || ((id == idExclusive || id == idDrift) && code == BN_CLICKED)) {
+    if ((code == CBN_SELCHANGE && !filling_) || (id == idExclusive && code == BN_CLICKED)) {
         readChoices();
         // while the audio runs a new device, pair, rate or buffer size is taken at once: the audio starts again
         if (id != idDriver && audio_.deviceRunning()) startAudio(id == idExclusive);
@@ -963,6 +966,15 @@ void AudioWindow::refresh() {
                              s.sameDevice ? L" (one device, one clock: no drift correction needed)" : L"");
                 }
                 state += line;
+                // shared WASAPI takes a short period only in Windows' low-latency mode (a multiple of the device's
+                // own step, at its own rate); else Windows runs longer ones - say so (fifth outside review)
+                const double asked = s.deviceRate > 0 ? s.askedFrames * s.deviceRate / audio_.sampleRate() : s.askedFrames;
+                if (s.askedFrames && std::fabs(s.periodFrames - asked) > 1.0) {
+                    swprintf(line, 480, L"; Windows runs %u-frame periods, not the %u asked for (its low-latency mode "
+                                        L"does not take this size or rate)",
+                             s.periodFrames, s.askedFrames);
+                    state += line;
+                }
             }
         }
     }

@@ -171,7 +171,7 @@ Settings busy() {
     s.followVolume[1] = true;
     s.api = "WASAPI";
     s.exclusive = true;
-    s.driftCorrection = false; // the other way round than the default
+    s.driftCorrection = Settings::kDriftAlways; // not the default
     s.inDevice[0] = "FOC-Analogue 1 + 2 (2- Focusrite USB Audio)"; // device names with + ( ) - and UTF-8
     s.outDevice[0] = "ROD-Headphones (R\xC3\x98" "DE PodMic USB)";
     s.inDevice[1] = s.outDevice[1] = "";

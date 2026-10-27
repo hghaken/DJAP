@@ -76,12 +76,9 @@ double softClip(double u) {
     return u < 0.0 ? -y : y;
 }
 
-// The clipper's curve against its ceiling: 1 with the limiter on (it holds the ceiling), else this far under it - the
-// clipper's hard hold on the ceiling then seldom cuts a peak (deck.cpp, the clipper; fourth outside review)
+// The clipper's curve against its ceiling with the limiter off: this far under it - the clipper's hard hold on the
+// ceiling then seldom cuts a peak (the clipper in process(); fourth outside review). With the limiter on: 1.
 constexpr double kClipOwnHeadroomDb = 1.5;
-static double clipBendFor(const DeckConfig& c) {
-    return c.on[sLimiter] ? 1.0 : std::pow(10.0, -kClipOwnHeadroomDb / 20.0);
-}
 
 DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double fs) {
     PresetValues v = in;
@@ -189,6 +186,7 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     // soft clipper and limiter
     c.clipDrive = dbToLin(v[pClipDrive]);
     c.clipCeiling = dbToLin(v[pLimCeiling]);
+    c.clipBend = c.on[sLimiter] ? 1.0 : dbToLin(-kClipOwnHeadroomDb);
     c.limCeiling = c.on[sLimiter] ? dbToLin(v[pLimCeiling]) : 1e9; // off: the gain releases to 1
     c.limRelease = onePoleCoeff(v[pLimRelease] / 1000.0, fs);
     return c;
@@ -490,7 +488,7 @@ void DeckProcessor::resetStage(int s) {
         break;
     case sClipper:
         clipOs_.setFactor(cfg_.oversampling);
-        clipBendS_ = clipBendFor(cfg_);
+        clipBendS_ = cfg_.clipBend;
         break;
     case sDeEsser:
         dessHp_.reset();
@@ -538,7 +536,7 @@ void DeckProcessor::resetStates() {
     musicTime_ = 0.0;
     quiet_ = true;
     clipDriveS_ = cfg_.clipDrive;
-    clipBendS_ = clipBendFor(cfg_);
+    clipBendS_ = cfg_.clipBend;
     rec_ = MeterRecord();
     recIn_ = recOut_ = 0.0;
     recClipRatio_ = 1.0;
@@ -948,7 +946,7 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         // phase delay at low frequencies - an IIR filter's phase, like the crossovers', no look-ahead)
         if (running_[sClipper]) {
             clipDriveS_ = toward(clipDriveS_, c.clipDrive, c.gainSmooth);
-            clipBendS_ = toward(clipBendS_, clipBendFor(c), c.gainSmooth);
+            clipBendS_ = toward(clipBendS_, c.clipBend, c.gainSmooth);
             // `bend`: the curve's own ceiling - the configured one, or under it with the limiter off (see below)
             const double ceil = c.clipCeiling, bend = ceil * clipBendS_, d = clipDriveS_ / bend, inv = 1.0 / bend;
             const double ul = l * d, ur = r * d;

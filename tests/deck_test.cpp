@@ -714,6 +714,23 @@ void clicks() {
         CHECK(ratio < 1.5);
     }
 
+    // the clipper's curve moves 1.5 dB under the ceiling when the limiter goes off, and back: it glides (fifth outside
+    // review: without the glide a loud 200 Hz tone got a step of twice its own slope)
+    {
+        PresetValues on = allOff();
+        on[pClipOn] = 1;
+        on[pClipDrive] = 6;
+        on[pLimOn] = 1;
+        on[pLimCeiling] = -1;
+        PresetValues off = on;
+        off[pLimOn] = 0;
+        const Buffer t200 = sig::sine(fs, 200, -1, 4.6), t200r = sig::sine(fs, 200, -1, 4.6, 90);
+        const double down = clickRatio(on, ctl, {{frames(3.0), off, ctl}}, 3.0, 4.0, t200, t200r);
+        const double up = clickRatio(off, ctl, {{frames(3.0), on, ctl}}, 3.0, 4.0, t200, t200r);
+        std::printf("   limiter off / on under a clipping 200 Hz tone (the clipper's curve glides): %.2f / %.2f\n", down, up);
+        CHECK(down < 1.5 && up < 1.5);
+    }
+
     // bypass on and off, freeze on and off
     DeckControl by = ctl, fr = ctl;
     by.processing = false;

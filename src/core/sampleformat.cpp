@@ -53,8 +53,10 @@ inline double ditherUnit() {
 // A block that stays under a quarter step everywhere gets no dither: the faint remains of a filter or a release after
 // the music (1e-7 and less) round to digital silence instead of a lasting +-1 step of noise (outside review). A quiet
 // passage above it keeps its dither. A quarter, not one step: at one step a steady tone of 0.4 steps vanished and one
-// of 0.9 steps came out undithered (3rd harmonic -22 dBc); at a quarter both are dithered (-47 dBc) and the tail after
-// the music is still about 1 ms (fourth outside review, measured; 0.1 step gave a 12 ms tail of noise).
+// of 0.9 steps came out undithered (3rd harmonic -22 dBc); at a quarter both are dithered (-47 dBc). The price: the
+// +-1 step of noise after the music lasts a few ms up to some tens of ms, by rate, loudness preset and block size
+// (fourth and fifth outside reviews, measured: 1.5 ms at 48 kHz in 480-frame blocks, 12 ms at 44.1 kHz, up to 45 ms
+// in 2048-frame blocks) - at about -96 dBFS, not audible.
 constexpr double kDitherFloorSteps = 0.25;
 inline bool underOneStep(const float* in, int frames, double scale) {
     const double limit = kDitherFloorSteps / scale;

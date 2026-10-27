@@ -192,7 +192,7 @@ would turn it back up.
 
 You can also keep an ASIO interface as the output and take the input from a WASAPI device: choose **Audio API: ASIO**
 and **Input from: WASAPI devices** (see 5.1, "Deck inputs"). The two devices run on separate clocks; DJAP corrects
-the drift between them at the cost of a buffer (about 10-15 ms with a 10 ms WASAPI input; see chapter 10).
+the drift between them at the cost of a buffer (about 15-20 ms with a 10 ms WASAPI input; see chapter 10).
 
 ### 3.3 Which audio API?
 
@@ -208,11 +208,13 @@ buffers (chapter 10).
 
 With WASAPI, DirectSound and MME a deck's input and output device usually run on clocks of their own (a virtual
 cable and a USB headset, a recording device and the PC's speakers), and two clocks always drift apart a little. With
-**Drift correction** on (the default, Setup window) DJAP reads the input a little faster or slower - at most 0.2 %,
-inaudible - so they never drift apart, at the cost of a buffer of about 8 ms (128-frame periods) to 23 ms (10 ms
-periods), shown while running. With WASAPI an input and output of the same device (one clock, for example the inputs
-and outputs of one USB interface) are recognised and run without the buffer, as one stream. Off, the input always
-goes straight to the output with no buffer, but devices on different clocks give a short glitch now and then.
+**Drift correction** (Setup window) on *Auto*, the default, DJAP reads the input a little faster or slower - at most
+0.2 %, inaudible - so they never drift apart, at the cost of a buffer of about 8 ms (128-frame periods) to 23 ms
+(10 ms periods), shown while running. With WASAPI an input and output of the same device (one clock, for example the
+inputs and outputs of one USB interface) are recognised and run without the buffer, as one stream - 5 to 13 ms less.
+Should such a device still give a short glitch now and then, choose *Always*: then it is corrected too. *Off*: the
+input always goes straight to the output with no buffer, and devices on different clocks give a short glitch now and
+then.
 
 ### 3.4 Test safely
 
@@ -312,8 +314,8 @@ the audio again (a short fade-out and fade-in).
 |---|---|
 | **Processing** | *Two decks* (deck A and deck B, each its own input, output and loudness preset) or *One channel* (one stereo processor, for example for what Windows plays). |
 | **Audio API** | ASIO, WASAPI, DirectSound or MME (see 3.3). Choosing another API stops the audio. **Exclusive** (WASAPI only): lower latency, but the devices are taken from other programs while the audio runs. |
-| **Drift correction** (WASAPI, DirectSound, MME) | On (default): each deck's input is read a little faster or slower so that an input and output device on different clocks never drift apart; adds a buffer of about 8-23 ms (smaller with a smaller buffer size). WASAPI leaves an input and output of the same device as one stream without it. Off: no buffer, but a glitch now and then unless input and output are the same device (see 3.3). Changing it while the audio runs starts the audio again. |
-| **Deck inputs** / **Input from** (ASIO only) | Where the decks' inputs come from: *ASIO input pairs*, or devices of WASAPI, DirectSound or MME (drift-corrected; adds a buffer of about 10-15 ms with a 10 ms input). The outputs stay ASIO. |
+| **Drift correction** (WASAPI, DirectSound, MME) | *Auto* (default): each deck's input is read a little faster or slower so that an input and output device on different clocks never drift apart; adds a buffer of about 8-23 ms (smaller with a smaller buffer size). WASAPI leaves an input and output of the same device as one stream without it. *Always*: also those. *Off*: no buffer, but a glitch now and then unless input and output are the same device (see 3.3). Changing it while the audio runs starts the audio again. |
+| **Deck inputs** / **Input from** (ASIO only) | Where the decks' inputs come from: *ASIO input pairs*, or devices of WASAPI, DirectSound or MME (drift-corrected; adds a buffer of about 15-20 ms with a 10 ms input). The outputs stay ASIO. |
 | **ASIO driver** | The installed ASIO drivers. **Open driver** opens it (DJAP asks first: it may take the interface from other programs); **Close driver** releases it; **Control panel** opens the driver's own settings (buffer size, clock source). Under it: the driver's state. |
 | **Deck A / B input**, **output** | ASIO: a channel pair per deck, with the driver's channel names once it is open. Other APIs: an input and an output device per deck; *(none)* = the deck does not run. A saved device that is not connected shows "(not found)". |
 | **Sample rate** | 44.1, 48, 88.2 or 96 kHz. ASIO uses this rate if the driver accepts it, else the interface's own rate. Other APIs convert when a device runs at another rate. |
@@ -714,7 +716,9 @@ Windows starts.
 - with an input on another clock (an ASIO output fed from a WASAPI / DirectSound / MME input, or WASAPI /
   DirectSound / MME with Drift correction on): the drift buffer - the input's block plus the output's period plus
   3 ms, so about 8 ms at 128 frames and 23 ms at 10 ms periods. After a dropout of the input it grows by 2 ms (up to
-  20 ms more) and shrinks again by 0.5 ms per quiet minute.
+  20 ms more) and shrinks again by 0.5 ms per quiet minute; the burst of sound a device sends after a hiccup can raise
+  it for up to 40 s. With WASAPI Windows may run longer periods than the buffer size asked for (its low-latency mode
+  takes only some sizes, at the device's own rate): the Setup window then says so, and the latency shown follows.
 
 The Setup window and the status bar show the total.
 

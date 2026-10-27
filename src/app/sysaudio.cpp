@@ -272,7 +272,7 @@ bool SysAudio::devices(AudioApi api, std::vector<SysDevice>& inputs, std::vector
 }
 
 bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames, bool exclusive,
-                     AsyncInput* const drift[2], AudioEngine& engine, const std::function<void(double)>& beforeStart,
+                     AsyncInput* const drift[2], bool oneDeviceDuplex, AudioEngine& engine, const std::function<void(double)>& beforeStart,
                      std::string& error) {
     stop();
     for (int d = 0; d < 2; ++d)
@@ -318,7 +318,7 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
             auto s = std::make_unique<DeckStream>();
             s->deck = &engine.deck(d);
             s->rate = sampleRate;
-            const bool sameDevice = drift && drift[d] && oneClock(api, *inId, *outId);
+            const bool sameDevice = drift && drift[d] && oneDeviceDuplex && oneClock(api, *inId, *outId);
             if (drift && drift[d] && !sameDevice) { // a capture stream into the AsyncInput, a playback stream reading it
                 s->capture = drift[d];
                 ma_device_config c = ma_device_config_init(ma_device_type_capture);
@@ -368,6 +368,7 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
                 in.input = routes[d].input;
                 in.output = routes[d].output;
                 in.driftCorrected = true;
+                in.askedFrames = periodFrames;
                 in.deviceRate = s->play.playback.internalSampleRate;
                 in.periodFrames = s->play.playback.internalPeriodSizeInFrames;
                 in.periods = s->play.playback.internalPeriods;
@@ -411,6 +412,7 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
             in.input = routes[d].input;
             in.output = routes[d].output;
             in.sameDevice = sameDevice;
+            in.askedFrames = periodFrames;
             in.deviceRate = s->dev.playback.internalSampleRate;
             in.periodFrames = s->dev.playback.internalPeriodSizeInFrames;
             in.periods = s->dev.playback.internalPeriods;

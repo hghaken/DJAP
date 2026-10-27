@@ -283,9 +283,10 @@ std::string Settings::toText() const {
     o << "; WASAPI exclusive mode (1 = lower latency, the devices are taken from other programs)\nExclusive="
       << (exclusive ? 1 : 0) << "\n";
     o << "; WASAPI / DirectSound / MME: 1 = each deck's input is read with drift correction (input and output device "
-         "on\n; different clocks never drift apart; adds a buffer of about 10-20 ms), 0 = one duplex stream\n"
+         "on\n; different clocks never drift apart; adds a buffer of about 8-23 ms) unless WASAPI finds them on one "
+         "device,\n; 2 = always, 0 = never (one duplex stream)\n"
          "DriftCorrection="
-      << (driftCorrection ? 1 : 0) << "\n";
+      << driftCorrection << "\n";
     o << "; Sample rate in Hz: 44100, 48000, 88200 or 96000\nSampleRate=" << sampleRate << "\n";
     o << "; First channel (1-based) of the input / output pair of each deck\n";
     o << "InputA=" << inputA << "\nInputB=" << inputB << "\nOutputA=" << outputA << "\nOutputB=" << outputB << "\n";
@@ -407,7 +408,7 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Audio", "InputDeviceB")) inDevice[1] = *v;
     if (auto v = get("Audio", "OutputDeviceB")) outDevice[1] = *v;
     if (auto v = get("Audio", "Exclusive")) exclusive = toInt(*v, 0) != 0;
-    if (auto v = get("Audio", "DriftCorrection")) driftCorrection = toInt(*v, 1) != 0;
+    if (auto v = get("Audio", "DriftCorrection")) driftCorrection = std::clamp(toInt(*v, kDriftAuto), kDriftOff, kDriftAlways);
     if (auto v = get("Audio", "AsioInputs"))
         if (*v == "ASIO" || *v == "WASAPI" || *v == "DirectSound" || *v == "MME") asioInputs = *v;
     if (auto v = get("Audio", "AsioInputDeviceA")) asioInputDevice[0] = *v;

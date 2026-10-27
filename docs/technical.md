@@ -617,7 +617,7 @@ under any converter's own noise. Measured (`engine_test`): a tone of 0.4 steps, 
 steps, without an offset; the error variance is 1/4 step^2 for any value (TPDF; rectangular dither would give
 1/6). A block of the device period that stays under a quarter step everywhere gets no dither: the faint remains of
 a filter or a release after the music round to digital silence instead of a lasting +-1 step of noise (the tail
-after the music is about 1 ms). Below a quarter step the output is silence (about -102 dBFS rms at 16 bits); above
+of +-1 step after the music lasts a few ms to some tens of ms, by rate and block size - at about -96 dBFS). Below a quarter step the output is silence (about -102 dBFS rms at 16 bits); above
 it a steady tone is dithered (a 0.9-step tone: 3rd harmonic -47 dBc; with the old limit of one step it came out
 undithered at -22 dBc, and a 0.4-step tone vanished - fourth outside review, measured).
 
@@ -751,14 +751,26 @@ deck's input and output device (16.3). The two devices run on their own crystals
   the sawtooth of the capture blocks does not modulate the speed; smoothed over 0.5 s, the error corrected over 4 s,
   the drift estimate following over 16 s (critically damped). With simulated clocks at -500..+500 ppm and late
   callbacks: drift found within 2 ppm, fill within 0.5 ms of its target, read-speed wobble about 15 ppm, no xruns.
-- **Target fill** = the largest capture block + the ASIO period + half the interpolator + a 3 ms margin: about 19 ms
-  for 10 ms capture blocks and 256-frame periods at 48 kHz. Each underrun adds 2 ms of margin (up to 20 ms), and
+- **Target fill** = the largest capture block + the output period + half the interpolator + a 3 ms margin: about
+  19 ms for 10 ms capture blocks and 256-frame periods at 48 kHz. "Block" and "period" are bursts: callbacks that come
+  within a quarter of the last one's length after it count as one (a device period cut into short callbacks arrives
+  at once; counting only the callback gave underruns after each start). The largest burst of the last 20-40 s counts,
+  at most 50 ms: the catch-up after a stall is a burst too, and it must not raise the buffer for good (a fifth outside
+  review measured 125 ms after a 100 ms stall; now it is back at the base within 40 s). The drift estimate learns only
+  while the read speed is inside its limits (anti-windup): a fill far over the target ran it into the limit, and it
+  then overshot into an underrun. Each underrun adds 2 ms of margin (up to 20 ms), and
   every minute without one takes 0.5 ms back down to the 3 ms, so one stall does not keep the delay up (the read
   speed glides to the smaller fill: no gap; simulated, a 200 ms capture stall was back at the original 18.69 ms
   within 400 s). An underrun right after such a step down sets a floor at the margin that held: with lasting jitter
   larger than the base margin a plain decay walked back into the failing margin every ~4 minutes (an outside review
   measured 15 underruns an hour); simulated with 8 ms of capture jitter: 4 underruns while the margin finds its
-  level, then none in 40 minutes. The deck fades in over 10 ms whenever reading (re)starts.
+  level, then none in 40 minutes. The deck fades in over 10 ms whenever reading (re)starts, and at an underrun
+  what is still in the buffer plays out with a fade of up to 3 ms (before, the music stopped with a step - a click).
+- **Same path for WASAPI / DirectSound / MME decks** with Drift correction: a capture stream writes, a playback
+  stream reads. On *Auto* (the default) WASAPI leaves an input and output of one device (the same container id, not
+  the computer's own) one duplex stream: one clock, nothing to correct - saving the buffer minus the period that
+  duplex keeps, 5-13 ms at 64-480 frames. *Always* corrects them too, for a device that holds two clocks after all;
+  *Off* never corrects.
 
 This is the only place where DJAP adds buffering beyond the look-ahead, and only when the user chooses such an input.
 The Setup window shows the added latency and the measured drift.

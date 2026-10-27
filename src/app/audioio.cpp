@@ -38,18 +38,19 @@ AudioIO::~AudioIO() {
 }
 
 bool AudioIO::startSystem(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames,
-                          bool exclusive, bool driftCorrection, std::string& error) {
+                          bool exclusive, int driftCorrection, std::string& error) {
     fadeOutDecks(); // a running stream (another device or API) stops first
     stopSimulation(); // one source at a time; the engine is prepared again
     closeDriver();
     sys_.stop(); // the streams that may read the AsyncInputs end before they are reset
     AsyncInput* drift[2] = {nullptr, nullptr};
     for (int d = 0; d < 2; ++d)
-        if (driftCorrection && !routes[d].input.empty()) {
+        if (driftCorrection != Settings::kDriftOff && !routes[d].input.empty()) {
             async_[d].reset(sampleRate); // the capture stream converts its device's rate to the decks' rate
             drift[d] = &async_[d];
         }
-    const bool ok = sys_.start(api, routes, sampleRate, periodFrames, exclusive, drift, engine_,
+    const bool ok = sys_.start(api, routes, sampleRate, periodFrames, exclusive, drift,
+                               driftCorrection == Settings::kDriftAuto, engine_,
                                [this](double) {
                                    publish(0); // the decks' configurations for the rate in use
                                    publish(1);

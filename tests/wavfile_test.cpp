@@ -153,6 +153,20 @@ void headers(const fs::path& dir) {
     std::printf("   sizes as written match the file; RF64 from %llu data bytes on\n", 0xFFFFFFFFull - 36);
 }
 
+// The header writeWav writes switches to RF64 by itself at the 4 GB edge (fifth outside review: the switch inside
+// writeWav was untested - a real 4 GB file is too large for a test, its header is not).
+void headerSwitch() {
+    std::printf("-- the header turns RF64 by itself at 4 GB\n");
+    const uint64_t last = 0xFFFFFFFFull - 37; // the largest data size a RIFF file holds (the RIFF size counts 37 more)
+    const std::vector<unsigned char> riff = wavHeader(last, last / 8, 2, 48000, false, false);
+    const std::vector<unsigned char> rf = wavHeader(last + 1, (last + 1) / 8, 2, 48000, false, false);
+    const std::string a(riff.begin(), riff.begin() + 4), b(rf.begin(), rf.begin() + 4);
+    std::printf("   %llu bytes of data: %s; one more: %s (%zu header bytes)\n", static_cast<unsigned long long>(last),
+                a.c_str(), b.c_str(), rf.size());
+    CHECK(a == "RIFF" && riff.size() == 44);
+    CHECK(b == "RF64" && rf.size() == 80);
+}
+
 void brokenRf64(const fs::path& dir) {
     std::printf("-- RF64 with a chunk after the data, without ds64, with a hostile ds64 size\n");
     std::string err;
@@ -239,6 +253,7 @@ int main() {
     roundTrips(dir);
     oddAndBad(dir);
     headers(dir);
+    headerSwitch();
     brokenRf64(dir);
     outOfMemory(dir);
     fs::remove_all(dir, ec);

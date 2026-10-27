@@ -46,8 +46,12 @@ inline HANDLE createUserMutex(const wchar_t* name) {
 class SettingsLock {
 public:
     SettingsLock() : h_(createUserMutex(L"Local\\DJAP.Settings")) {
-        // WAIT_ABANDONED (a writer ended while holding it) also gives the mutex to this one
-        if (h_) owned_ = WaitForSingleObject(h_, 2000) != WAIT_TIMEOUT;
+        // WAIT_ABANDONED (a writer ended while holding it) also gives the mutex to this one; a timeout or a failed
+        // wait does not (the save then goes ahead without it)
+        if (h_) {
+            const DWORD r = WaitForSingleObject(h_, 2000);
+            owned_ = r == WAIT_OBJECT_0 || r == WAIT_ABANDONED;
+        }
     }
     ~SettingsLock() {
         if (h_ && owned_) ReleaseMutex(h_);

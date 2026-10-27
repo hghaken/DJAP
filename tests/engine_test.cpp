@@ -188,6 +188,25 @@ void formats() {
     softAmp /= softRef;
     std::printf("   16-bit dither: a 0.4-step tone alone comes out at %.3f steps\n", softAmp);
     CHECK(std::fabs(softAmp - 0.4) < 0.03);
+    // the limit itself (fifth outside review: 0.1 instead of 0.25 survived the tests): a 0.2-step tone stays silent,
+    // a 0.3-step one is dithered
+    for (const double a : {0.2, 0.3}) {
+        for (size_t i = 0; i < soft.size(); ++i)
+            soft[i] = static_cast<float>(a * std::sin(2.0 * pi * 1000.0 * static_cast<double>(i) / 48000.0) / 32768.0);
+        double got = 0.0;
+        size_t nonZero = 0;
+        for (int rep = 0; rep < 100; ++rep) {
+            for (size_t b = 0; b < soft.size(); b += 480) fromFloat(soft.data() + b, SampleFormat::Int16, sq.data() + b, 0, 480);
+            for (size_t i = 0; i < soft.size(); ++i) {
+                got += sq[i] * std::sin(2.0 * pi * 1000.0 * static_cast<double>(i) / 48000.0);
+                nonZero += sq[i] != 0;
+            }
+        }
+        got /= softRef;
+        std::printf("   16-bit dither: a %.1f-step tone comes out at %.3f steps, %zu samples not 0\n", a, got, nonZero);
+        if (a < 0.25) CHECK(nonZero == 0);
+        else CHECK(std::fabs(got - a) < 0.03);
+    }
 }
 
 // A fake driver: four input and four output channel buffers of one format, `period` frames per buffer switch.

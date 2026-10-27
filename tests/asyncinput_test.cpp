@@ -55,7 +55,10 @@ struct Sim {
     int block = 480;          // capture frames per callback
     int split = 1;            // ... delivered as this many callbacks straight after each other (a 10 ms packet in
                               // short callbacks, or a long device period in callbacks of at most 512 frames)
+    std::vector<int> pieces;  // or these callback sizes (adding up to `block`), straight after each other
     int period = 256;         // output frames per period
+    int playSplit = 1;        // ... asked for as this many callbacks straight after each other
+    bool catchUp = false;     // the capture blocks of a capPause come all at once after it (else they are lost)
     double capJitter = 0.0;   // s: capture callbacks come up to this late
     double outJitter = 0.0;   // s: output callbacks come up to this late
     double capPause[2] = {-1, -1}, outPause[2] = {-1, -1}; // no callbacks in [from, to) (s since start)
@@ -65,6 +68,7 @@ struct Sim {
     std::vector<float> outL, outR;    // what the output side read
     std::vector<double> correction;   // ppm, each period after `settleAfter`
     double settleAfter = 1e9;
+    double probeAt = -1.0, probed = 0.0; // the buffer (targetMs) at this time (s since start)
 
     void run(AsyncInput& ai, double seconds) {
         const double t0 = 1000.0;
@@ -72,6 +76,7 @@ struct Sim {
         const double capRate = fs * (1.0 + driftPpm * 1e-6);
         int64_t capIndex = 0, k = 0, m = 0;
         std::vector<float> buf(2 * static_cast<size_t>(block));
+        std::vector<float> held; // capture blocks held back by a pause with catchUp
         float l[256], r[256];
         auto capTime = [&] { return t0 + static_cast<double>(k + 1) * block / capRate + capJitter * rng.uniform(); };
         auto outTime = [&] { return t0 + static_cast<double>(m) * period / fs + outJitter * rng.uniform(); };
@@ -80,21 +85,48 @@ struct Sim {
         while (std::min(tc, to) < t0 + seconds) {
             if (tc <= to) { // a capture block is complete
                 for (int i = 0; i < block; ++i) signal(capIndex++, buf[2 * static_cast<size_t>(i)], buf[2 * static_cast<size_t>(i) + 1]);
-                if (!paused(capPause, tc - t0))
-                    for (int part = 0; part < split; ++part) // 20 us apart
-                        ai.write(buf.data() + 2 * static_cast<size_t>(part * block / split), block / split, tc + 2e-5 * part);
+                if (paused(capPause, tc - t0)) {
+                    if (catchUp) held.insert(held.end(), buf.begin(), buf.end());
+                } else {
+                    double t = tc;
+                    for (size_t at = 0; at < held.size(); at += 2 * static_cast<size_t>(block)) { // the catch-up
+                        ai.write(held.data() + at, block, t);
+                        t += 2e-5;
+                    }
+                    held.clear();
+                    if (!pieces.empty()) {
+                        size_t at = 0;
+                        for (int n : pieces) {
+                            ai.write(buf.data() + at, n, t);
+                            at += 2 * static_cast<size_t>(n);
+                            t += 2e-5;
+                        }
+                    } else {
+                        for (int part = 0; part < split; ++part) { // 20 us apart
+                            ai.write(buf.data() + 2 * static_cast<size_t>(part * block / split), block / split, t);
+                            t += 2e-5;
+                        }
+                    }
+                }
                 ++k;
                 tc = capTime();
             } else {
                 if (!paused(outPause, to - t0)) {
-                    ai.beginPeriod(period, to);
-                    for (int pos = 0; pos < period; pos += 256) {
-                        const int n = std::min(256, period - pos);
-                        ai.read(l, r, n);
-                        outL.insert(outL.end(), l, l + n);
-                        outR.insert(outR.end(), r, r + n);
+                    const int part = period / playSplit;
+                    for (int p = 0; p < playSplit; ++p) {
+                        ai.beginPeriod(part, to + 2e-5 * p);
+                        for (int pos = 0; pos < part; pos += 256) {
+                            const int n = std::min(256, part - pos);
+                            ai.read(l, r, n);
+                            outL.insert(outL.end(), l, l + n);
+                            outR.insert(outR.end(), r, r + n);
+                        }
                     }
-                    if (to - t0 >= settleAfter) correction.push_back(ai.state().correctionPpm);                }
+                    if (to - t0 >= settleAfter) correction.push_back(ai.state().correctionPpm);
+                    if (probeAt >= 0.0 && to - t0 >= probeAt) {
+                        probed = ai.state().targetMs;
+                        probeAt = -1.0;
+                    }                }
                 ++m;
                 to = outTime();
             }
@@ -366,28 +398,89 @@ void faults() {
 void bursts() {
     std::printf("-- bursts: blocks that come straight after each other count as one block\n");
     struct Case {
-        int block, split, period;
+        int block, split, period, playSplit;
+        std::vector<int> pieces;
     };
-    for (const Case& c : {Case{480, 4, 128}, Case{1024, 2, 256}, Case{480, 1, 128}}) {
+    // the input's bursts; the output's (fifth outside review: 1024 frames as two of 512 on the output side gave
+    // underruns); unequal pieces (512 + 512 + 76: the quarter rule follows the last piece's length)
+    for (const Case& c : {Case{480, 4, 128, 1, {}}, Case{1024, 2, 256, 1, {}}, Case{480, 1, 128, 1, {}},
+                          Case{480, 1, 1024, 2, {}}, Case{1024, 2, 1024, 2, {}}, Case{1100, 1, 256, 1, {512, 512, 76}}}) {
         AsyncInput ai;
         ai.reset(48000);
         Sim s;
         s.block = c.block;
         s.split = c.split;
+        s.pieces = c.pieces;
         s.period = c.period;
+        s.playSplit = c.playSplit;
         s.driftPpm = 50.0;
         s.capJitter = 0.001;
         s.signal = sine(440.0, 0.5, 48000);
         s.run(ai, 60.0);
         const AsyncInputState st = ai.state();
         const double least = (c.block + c.period) / 48.0; // ms: the whole burst and the output period
-        std::printf("   %d frames as %d callbacks, output %d frames: buffer %.2f ms (at least %.2f), underruns %lld\n",
-                    c.block, c.split, c.period, st.targetMs, least, st.underruns);
+        std::printf("   %d frames as %d callbacks, output %d frames as %d: buffer %.2f ms (at least %.2f), underruns %lld\n",
+                    c.block, c.pieces.empty() ? c.split : static_cast<int>(c.pieces.size()), c.period, c.playSplit,
+                    st.targetMs, least, st.underruns);
         // an outside review measured 5-6 underruns after the start when only the callback's size counted
         CHECK(st.underruns == 0);
         CHECK(st.targetMs > least);
         CHECK(st.active && st.overruns == 0 && st.resyncs == 0);
     }
+}
+
+void stallCatchUp() {
+    std::printf("-- a stall whose blocks come all at once afterwards: the buffer goes back to where it was\n");
+    double base = 0.0;
+    for (const bool stall : {false, true}) {
+        AsyncInput ai;
+        ai.reset(48000);
+        Sim s;
+        s.driftPpm = 50.0;
+        s.capJitter = 0.001;
+        s.catchUp = true;
+        if (stall) {
+            s.capPause[0] = 20.0;
+            s.capPause[1] = 20.1; // 100 ms: ten blocks of 480 frames, then all of them at once
+        }
+        s.signal = sine(440.0, 0.5, 48000);
+        s.probeAt = 30.0;
+        // 330 s: the burst is forgotten after 20-40 s, the margin the stall's underrun added after 4 minutes
+        s.run(ai, stall ? 330.0 : 31.0);
+        const double at30 = s.probed;
+        if (!stall) {
+            base = at30;
+            continue;
+        }
+        const AsyncInputState st = ai.state();
+        std::printf("   100 ms stall at 20 s: buffer %.2f ms at 30 s, %.2f ms 5 minutes later (%.2f without the stall); "
+                    "underruns %lld, resyncs %lld\n", at30, st.targetMs, base, st.underruns, st.resyncs);
+        // fifth outside review: the catch-up counted as one block for good - 0.1.148 stayed at about 125 ms
+        CHECK(at30 < base + 60.0); // the burst is capped (50 ms)
+        CHECK_NEAR(st.targetMs, base, 0.3);
+        CHECK(st.active && st.underruns <= 2);
+    }
+}
+
+// An underrun ends with what is still there, faded out: no step from music to silence.
+void fadeOut() {
+    std::printf("-- an underrun fades out what is left\n");
+    AsyncInput ai;
+    ai.reset(48000);
+    Sim s;
+    s.capPause[0] = 5.0;
+    s.capPause[1] = 5.2;
+    s.signal = sine(1000.0, 0.5, 48000);
+    s.run(ai, 6.0);
+    // the largest step from one frame to the next, after the start's fade-in: a 1 kHz sine of 0.5 moves at most
+    // 0.5 x 2 pi x 1000 / 48000 = 0.065 per frame; a cut to silence is a step of up to 0.5
+    double step = 0.0;
+    for (size_t i = 48000; i < s.outL.size(); ++i)
+        step = std::max(step, static_cast<double>(std::fabs(s.outL[i] - s.outL[i - 1])));
+    std::printf("   largest step between frames %.3f (a sine of 0.5 at 1 kHz: 0.065), underruns %lld\n", step,
+                ai.state().underruns);
+    CHECK(ai.state().underruns >= 1);
+    CHECK(step < 0.08);
 }
 
 void throughEngine() {
@@ -475,6 +568,8 @@ int main() {
     quality();
     faults();
     bursts();
+    stallCatchUp();
+    fadeOut();
     throughEngine();
     return test::finish("asyncinput_test");
 }

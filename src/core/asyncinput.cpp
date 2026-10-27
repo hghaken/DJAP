@@ -72,8 +72,9 @@ void AsyncInput::reset(double fs) {
     maxBlock_.store(0, std::memory_order_relaxed);
     overruns_.store(0, std::memory_order_relaxed);
     writes_.store(0, std::memory_order_relaxed);
-    burst_ = lastFrames_ = 0;
-    lastWrite_ = -1.0;
+    writeBursts_ = Bursts();
+    playBursts_ = Bursts();
+    fadeOut_ = 0;
     oldestNeeded_.store(0, std::memory_order_relaxed);
     pos_ = 0;
     frac_ = 0.0;
@@ -95,17 +96,25 @@ void AsyncInput::reset(double fs) {
     resyncs_.store(0, std::memory_order_release);
 }
 
+// A device period cut into short callbacks (a 10 ms packet in 128-frame callbacks, 1024 frames in two of 512)
+// arrives at once: counting only the callback's size gave 5-6 underruns after each start (fourth outside review).
+// The largest burst decays (two windows) and is capped: a stall's catch-up raised the buffer for good (fifth review).
+int AsyncInput::Bursts::add(int frames, double time, double fs) {
+    burst = lastTime >= 0.0 && time - lastTime < 0.25 * lastFrames / fs ? burst + frames : frames;
+    lastTime = time;
+    lastFrames = frames;
+    if (windowStart < 0.0 || time - windowStart >= kBurstWindowS) {
+        before = windowStart < 0.0 ? 0 : now;
+        now = 0;
+        windowStart = time;
+    }
+    now = std::max(now, std::min(burst, std::max(frames, static_cast<int>(kBurstCapMs * fs / 1000.0))));
+    return std::max(now, before);
+}
+
 void AsyncInput::write(const float* in, int frames, double now) {
     if (frames <= 0) return;
     bump(writes_);
-    // a block that comes within a quarter of the last one's length after it belongs to the same burst: a device
-    // period cut into short callbacks (a 10 ms packet in 128-frame callbacks, 1024 frames in two of 512) arrives at
-    // once, and the fill must hold the whole of it (fourth outside review: 5-6 underruns after each start when only
-    // the callback's size counted)
-    burst_ = lastWrite_ >= 0.0 && now - lastWrite_ < 0.25 * lastFrames_ / fs_ ? burst_ + frames : frames;
-    lastWrite_ = now;
-    lastFrames_ = frames;
-    if (burst_ > maxBlock_.load(std::memory_order_relaxed)) maxBlock_.store(burst_, std::memory_order_relaxed);
     const int64_t w = written_.load(std::memory_order_relaxed);
     const int64_t space = kCapacity - (w - oldestNeeded_.load(std::memory_order_acquire));
     if (frames > space) { // the reader is not reading (stopped, or far behind): drop the block
@@ -113,6 +122,7 @@ void AsyncInput::write(const float* in, int frames, double now) {
         writeTime_.store(now, std::memory_order_relaxed); // the next block follows `written_`, a block from now
         return;
     }
+    maxBlock_.store(writeBursts_.add(frames, now, fs_), std::memory_order_relaxed); // (a dropped block does not count)
     float* ring = ring_.get();
     for (int i = 0; i < frames; ++i) {
         const int64_t idx = (w + i) & kMask;
@@ -128,7 +138,8 @@ void AsyncInput::write(const float* in, int frames, double now) {
 }
 
 void AsyncInput::beginPeriod(int frames, double now) {
-    period_ = std::max(period_, frames);
+    // the output side's bursts as the input's: an output period cut into short callbacks (fifth outside review)
+    period_ = playBursts_.add(frames, now, fs_);
     const int64_t w = written_.load(std::memory_order_acquire);
     const double written = static_cast<double>(w);
     const int block = maxBlock_.load(std::memory_order_relaxed);
@@ -164,13 +175,20 @@ void AsyncInput::beginPeriod(int frames, double now) {
             ratio_ = fixedRatio_;
         } else {
             const double p = (avgFill_ - target) / (fs_ * kTp);
-            integ_ = std::clamp(integ_ + p * (frames / fs_) / kTi, -kMaxCorrection, kMaxCorrection);
+            // the drift estimate learns only while the read speed is inside its limits (anti-windup): a fill far
+            // off the target - the buffer coming down after a burst is forgotten - drove it to the limit, and when
+            // the fill was back it ran on past the target into an underrun (fifth outside review's stall test)
+            if (std::fabs(p + integ_) < kMaxCorrection)
+                integ_ = std::clamp(integ_ + p * (frames / fs_) / kTi, -kMaxCorrection, kMaxCorrection);
             ratio_ = 1.0 + std::clamp(p + integ_, -kMaxCorrection, kMaxCorrection);
         }
         // the frames this period reads must be there now
         const double need = frac_ + frames * ratio_ + kHalfTaps + 1;
         if (written - static_cast<double>(pos_) < need) {
             active_ = false; // silence, fill up again with a larger margin
+            // what is still there plays out, fading (fifth outside review: the music stopped with a step - a click)
+            const double avail = (written - static_cast<double>(pos_) - frac_ - kHalfTaps - 1) / ratio_;
+            fadeOutTotal_ = fadeOut_ = static_cast<int>(std::clamp(std::floor(avail), 0.0, kFadeOutMs * fs_ / 1000.0));
             // an underrun after a step down: that step was one too many - the margin never goes under the level
             // that held again (lasting jitter: a plain decay walked back into the failing margin every ~4 minutes)
             if (decayed_) marginFloorMs_ = std::min(kMarginMaxMs, std::max(marginFloorMs_, marginMs_ + kMarginDecayMs));
@@ -199,9 +217,22 @@ void AsyncInput::beginPeriod(int frames, double now) {
 void AsyncInput::read(float* left, float* right, int frames) {
     if (frames <= 0) return;
     if (!periodOk_) {
-        std::fill(left, left + frames, 0.0f);
-        std::fill(right, right + frames, 0.0f);
+        int n = 0;
+        if (fadeOut_ > 0) { // the rest after an underrun, raised-cosine down to silence
+            n = std::min(frames, fadeOut_);
+            interpolate(left, right, n);
+            for (int i = 0; i < n; ++i) {
+                const double done = static_cast<double>(fadeOutTotal_ - fadeOut_ + i + 1) / (fadeOutTotal_ + 1);
+                const float g = static_cast<float>(0.5 + 0.5 * std::cos(3.14159265358979 * done));
+                left[i] *= g;
+                right[i] *= g;
+            }
+            fadeOut_ -= n;
+        }
+        std::fill(left + n, left + frames, 0.0f);
+        std::fill(right + n, right + frames, 0.0f);
     } else {
+        fadeOut_ = 0;
         interpolate(left, right, frames);
     }
     oldestNeeded_.store(pos_ - (kHalfTaps - 1), std::memory_order_release);

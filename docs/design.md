@@ -321,7 +321,11 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
   speed; smoothed over 0.5 s; error corrected over 4 s, the drift estimate follows over 16 s (critically damped).
   Measured with simulated clocks at -500..+500 ppm and late callbacks (capture up to 2 ms, output up to 0.5 ms):
   drift found within 2 ppm, fill on target within 0.5 ms, read-speed wobble about 15 ppm (0.03 cent), no xruns.
-- Target fill = largest capture block + ASIO period + 17 frames (half the taps + 1) + margin 3 ms (each underrun adds
+- Target fill = largest capture burst + output burst + 17 frames (half the taps + 1) + margin 3 ms; a burst =
+  callbacks within a quarter of the last one's length, the largest of the last 20-40 s, at most 50 ms (2026-10-27,
+  fourth and fifth outside reviews: underruns after the start; a stall's catch-up kept the buffer up). The PI loop's
+  integral learns only while the read speed is inside its limits. An underrun fades out what is left (up to 3 ms).
+  (Each underrun adds
   2 ms up to 20; each minute without one takes 0.5 ms back - 2026-10-26, after an outside review: the margin only
   grew); about 19 ms for
   10 ms capture blocks and 256-frame periods at 48 kHz. The deck gets silence until the fill is reached (start,

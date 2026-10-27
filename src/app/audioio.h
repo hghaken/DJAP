@@ -92,10 +92,10 @@ public:
     AsyncInputState asyncState(int d) const { return async_[d].state(); }
 
     // WASAPI / DirectSound / MME (GUI thread): one duplex stream per deck that has devices, or with `driftCorrection`
-    // a capture and a playback stream with the deck's AsyncInput between them. Ends a simulation and closes an open
-    // ASIO driver first.
+    // (Settings::kDrift...) a capture and a playback stream with the deck's AsyncInput between them. Ends a simulation
+    // and closes an open ASIO driver first.
     bool startSystem(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames, bool exclusive,
-                     bool driftCorrection, std::string& error);
+                     int driftCorrection, std::string& error);
     bool systemRunning() const { return sys_.running() && !sys_.capturing(); }
     const SysAudio& sys() const { return sys_; }
     // Health of what runs (ASIO: the engine's counters; other APIs: both decks' streams).

@@ -117,6 +117,7 @@ struct DeckConfig {
     ColourConfig colour;
     // soft clipper
     double clipDrive = 1.0, clipCeiling = 1.0;
+    double clipBend = 1.0; // the clipper's curve against its ceiling: 1, or under it with the limiter off (deck.cpp)
     // limiter
     double limCeiling = 1.0, limRelease = 0.0;
 };

@@ -116,9 +116,9 @@ bool wavNeedsRf64(uint64_t dataBytes) {
     return dataBytes + 37 > 0xFFFFFFFFull;
 }
 
-bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, std::string& error, bool rf64) {
+std::vector<unsigned char> wavHeader(uint64_t dataSize, uint64_t frames, int channels, int sampleRate, bool pcm24,
+                                     bool rf64) {
     const int bytes = pcm24 ? 3 : 4;
-    const uint64_t dataSize = static_cast<uint64_t>(d.samples.size()) * static_cast<uint64_t>(bytes);
     if (wavNeedsRf64(dataSize)) rf64 = true;
     std::vector<unsigned char> b;
     const char* tag = rf64 ? "RF64" : "RIFF";
@@ -132,19 +132,29 @@ bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, s
         put32(b, 28);
         put64(b, riffSize);
         put64(b, dataSize);
-        put64(b, d.channels ? static_cast<uint64_t>(d.samples.size()) / static_cast<uint64_t>(d.channels) : 0);
+        put64(b, frames);
         put32(b, 0); // no table
     }
     b.insert(b.end(), {'f', 'm', 't', ' '});
     put32(b, 16);
     put16(b, pcm24 ? 1 : 3);
-    put16(b, static_cast<uint16_t>(d.channels));
-    put32(b, static_cast<uint32_t>(d.sampleRate));
-    put32(b, static_cast<uint32_t>(d.sampleRate * d.channels * bytes));
-    put16(b, static_cast<uint16_t>(d.channels * bytes));
+    put16(b, static_cast<uint16_t>(channels));
+    put32(b, static_cast<uint32_t>(sampleRate));
+    put32(b, static_cast<uint32_t>(sampleRate * channels * bytes));
+    put16(b, static_cast<uint16_t>(channels * bytes));
     put16(b, static_cast<uint16_t>(bytes * 8));
     b.insert(b.end(), {'d', 'a', 't', 'a'});
     put32(b, rf64 ? 0xFFFFFFFFu : static_cast<uint32_t>(dataSize));
+    return b;
+}
+
+bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, std::string& error, bool rf64) {
+    const int bytes = pcm24 ? 3 : 4;
+    const uint64_t dataSize = static_cast<uint64_t>(d.samples.size()) * static_cast<uint64_t>(bytes);
+    const uint64_t pad = dataSize & 1;
+    std::vector<unsigned char> b = wavHeader(
+        dataSize, d.channels ? static_cast<uint64_t>(d.samples.size()) / static_cast<uint64_t>(d.channels) : 0,
+        d.channels, d.sampleRate, pcm24, rf64);
 
     // the samples in pieces (no second copy of a long file in memory), into "<file>.part"; renamed when complete
     std::filesystem::path part = file;

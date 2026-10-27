@@ -39,6 +39,14 @@ public:
     static constexpr double kMarginCalmS = 60.0;
     static constexpr double kFadeInMs = 10.0;        // reading starts (or starts again after an underrun) with a
                                                      // raised-cosine fade-in: else silence -> music is a step (a click)
+    static constexpr double kFadeOutMs = 3.0;        // an underrun ends with what is still there, faded out over at
+                                                     // most this (else the music stops with a step)
+    // Blocks (or output periods) that come within a quarter of the last one's length after it count as one burst - a
+    // device period cut into short callbacks arrives at once, and the fill must hold all of it. The largest burst of
+    // the last kBurstWindowS .. 2 x kBurstWindowS seconds counts, at most kBurstCapMs: the catch-up after a stall is
+    // one burst too, and it must not raise the buffer for the rest of the session (fifth outside review).
+    static constexpr double kBurstWindowS = 20.0;
+    static constexpr double kBurstCapMs = 50.0;
 
     AsyncInput();
     AsyncInput(const AsyncInput&) = delete;
@@ -64,6 +72,13 @@ public:
 private:
     void interpolate(float* left, float* right, int frames);
 
+    // The largest burst (see kBurstWindowS) of one side: blocks closer than a quarter of the last one's length.
+    struct Bursts {
+        int burst = 0, lastFrames = 0, now = 0, before = 0;
+        double lastTime = -1.0, windowStart = -1.0;
+        int add(int frames, double time, double fs);
+    };
+
     double fs_ = 48000.0;
     double fixedRatio_ = 0.0;
     std::unique_ptr<float[]> ring_;                    // interleaved; (kCapacity + 2 * kHalfTaps) frames, mirrored
@@ -72,9 +87,7 @@ private:
     std::atomic<double> writeTime_{0.0};
     std::atomic<int> maxBlock_{0};
     std::atomic<long long> overruns_{0}, writes_{0};
-    // writer only: blocks that come straight after each other (burst_ frames so far, the last one's time and size)
-    int burst_ = 0, lastFrames_ = 0;
-    double lastWrite_ = -1.0;
+    Bursts writeBursts_; // writer only
     // reader -> writer
     std::atomic<int64_t> oldestNeeded_{0};
     // reader only
@@ -87,7 +100,9 @@ private:
     double calmS_ = 0.0; // seconds of reading since the last underrun or margin step down
     double marginFloorMs_ = 0.0; // the decay stops here: the margin that held before a step down that failed
     bool decayed_ = false;       // a step down since the last underrun
-    int period_ = 0;
+    int period_ = 0;        // the largest output burst lately (playBursts_)
+    Bursts playBursts_;
+    int fadeOut_ = 0, fadeOutTotal_ = 0; // after an underrun: frames still to read while fading out, of so many
     double fade_ = 1.0;     // fade-in position 0..1 (1: done)
     bool active_ = false, periodOk_ = false, haveAvg_ = false;
     // reader -> display

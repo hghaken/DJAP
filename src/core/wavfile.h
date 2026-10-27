@@ -24,5 +24,9 @@ bool readWav(const std::filesystem::path& file, WavData& out, std::string& error
 bool writeWav(const std::filesystem::path& file, const WavData& data, bool pcm24, std::string& error, bool rf64 = false);
 // The rule writeWav uses: data of this many bytes does not fit a WAV's 32-bit sizes.
 bool wavNeedsRf64(uint64_t dataBytes);
+// The header writeWav puts before `dataBytes` of samples (`frames` frames): RIFF, or RF64 when asked or when the sizes
+// need it (wavNeedsRf64). Separate so a test can check the 4 GB switch without writing 4 GB.
+std::vector<unsigned char> wavHeader(uint64_t dataBytes, uint64_t frames, int channels, int sampleRate, bool pcm24,
+                                     bool rf64);
 
 } // namespace ap

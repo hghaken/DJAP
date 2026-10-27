@@ -27,7 +27,7 @@ void run(bool drift, const SysRoute& route) {
     SysAudio sys;
     std::string err;
     bool published = false;
-    const bool ok = sys.start(AudioApi::Wasapi, routes, 48000.0, 480, false, targets, engine,
+    const bool ok = sys.start(AudioApi::Wasapi, routes, 48000.0, 480, false, targets, true, engine,
                               [&](double) { published = true; }, err);
     CHECK(ok);
     CHECK(published);
@@ -84,13 +84,13 @@ void failures(const SysRoute& good) {
             const SysRoute routes[2] = {good, bad}; // deck A opens first, deck B fails
             SysAudio sys;
             std::string err;
-            const bool ok = sys.start(AudioApi::Wasapi, routes, 48000.0, 480, false, targets, engine, nullptr, err);
+            const bool ok = sys.start(AudioApi::Wasapi, routes, 48000.0, 480, false, targets, true, engine, nullptr, err);
             std::printf("   %s, %s missing: %s\n", drift ? "drift correction" : "duplex", which == 0 ? "input" : "output",
                         err.c_str());
             CHECK(!ok && !err.empty());
             CHECK(!sys.running() && !sys.info(0).running && !sys.info(1).running);
             const SysRoute fine[2] = {good, SysRoute()};
-            CHECK(sys.start(AudioApi::Wasapi, fine, 48000.0, 480, false, targets, engine, nullptr, err));
+            CHECK(sys.start(AudioApi::Wasapi, fine, 48000.0, 480, false, targets, true, engine, nullptr, err));
             CHECK(sys.running() && sys.info(0).running);
             sys.stop();
             CHECK(!sys.running());

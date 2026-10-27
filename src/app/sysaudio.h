@@ -39,6 +39,9 @@ struct SysStreamInfo {
     std::string input, output;    // device names in use (output empty: a capture-only stream)
     double deviceRate = 0;        // the output device's own rate (capture-only: the input device's)
     unsigned periodFrames = 0;    // output device period (at its own rate; capture-only: the input's)
+    unsigned askedFrames = 0;     // the period asked for (the Setup window's buffer size; 0: the default). Shared
+                                  // WASAPI gives it only when Windows' low-latency engine takes it (a multiple of the
+                                  // device's own step, at its own rate) - else a longer one (fifth outside review)
     unsigned periods = 0;
     double latencyMs = 0;         // estimate: input period + output buffer (capture-only: input period); with
                                   // drift correction the AsyncInput's buffer comes on top
@@ -60,9 +63,10 @@ public:
 
     // GUI thread. Prepares the engine at `sampleRate`, calls beforeStart(rate) (publish the decks' configurations),
     // opens and starts one duplex stream per deck that has devices. periodFrames 0 = the API's low-latency default.
-    // drift[d] (may be null; reset by the caller): deck d runs drift-corrected through it instead.
+    // drift[d] (may be null; reset by the caller): deck d runs drift-corrected through it instead - unless
+    // `oneDeviceDuplex` and WASAPI finds its input and output on one device (one clock: one duplex stream).
     bool start(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames, bool exclusive,
-               AsyncInput* const drift[2], AudioEngine& engine, const std::function<void(double)>& beforeStart,
+               AsyncInput* const drift[2], bool oneDeviceDuplex, AudioEngine& engine, const std::function<void(double)>& beforeStart,
                std::string& error);
     // GUI thread, with the ASIO stream already running at `sampleRate`: one capture-only stream per deck that has a
     // device name, writing into targets[d] (reset by the caller; the deck reads it in the ASIO buffer switch).

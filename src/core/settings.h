@@ -46,9 +46,11 @@ public:
     bool exclusive = false;      // WASAPI exclusive mode
     // WASAPI / DirectSound / MME: each deck's input read with drift correction (a capture and a playback stream with
     // the deck's AsyncInput between them: the input and output device may run on different clocks; adds a buffer of
-    // about 10-20 ms). Off: one duplex stream, no added buffer, but devices on different clocks drift apart (a glitch
-    // now and then).
-    bool driftCorrection = true;
+    // about 8-23 ms). kDriftAuto: so unless WASAPI finds input and output on one device (one clock: one duplex
+    // stream); kDriftAlways: also then (a device that holds two clocks after all); kDriftOff: always one duplex
+    // stream, no added buffer, but devices on different clocks drift apart (a glitch now and then).
+    static constexpr int kDriftOff = 0, kDriftAuto = 1, kDriftAlways = 2;
+    int driftCorrection = kDriftAuto;
     int sampleRate = 48000;      // requested rate
     int inputA = 1, inputB = 3;  // first channel (1-based) of each deck's input pair
     int outputA = 1, outputB = 3;

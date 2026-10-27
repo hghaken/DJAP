@@ -97,6 +97,9 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     hwnd_ = CreateWindowExW(0, kClass, title.c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                             CW_USEDEFAULT, nullptr, nullptr, instance, this);
     if (!hwnd_) return false;
+    // a second start may come from a program at a lower integrity level than this one (this one run as administrator):
+    // let its "show the window" through (fifth outside review: Windows dropped it and the second start just ended)
+    ChangeWindowMessageFilterEx(hwnd_, showMessage(), MSGFLT_ALLOW, nullptr);
     // the first size for the window's DPI; then its remembered place (or centred on the screen)
     RECT r{0, 0, px(1180), px(640)};
     AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_); // no menu bar
