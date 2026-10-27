@@ -3,8 +3,10 @@
 // stream, or with drift correction a capture stream into the deck's AsyncInput and a playback stream that reads it -
 // starts, runs the deck, fills the buffer, counts its periods and stops cleanly.
 #include "check.h"
+#include "settingslock.h"
 #include "sysaudio.h"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <string>
@@ -67,6 +69,62 @@ void run(bool drift, const SysRoute& route) {
     CHECK(engine.deck(0).processedFrames() == after); // stopped: no callback any more
 }
 
+// A start that cannot open a device fails with a reason, leaves nothing running (a stream opened before the failing
+// one is closed again) and the next start works (fourth outside review: these paths were untested).
+void failures(const SysRoute& good) {
+    std::printf("-- a device that is not there: the start fails, nothing runs, the next start works\n");
+    for (bool drift : {false, true})
+        for (int which = 0; which < 2; ++which) {
+            AudioEngine engine;
+            AsyncInput async;
+            async.reset(48000.0);
+            AsyncInput* targets[2] = {drift ? &async : nullptr, nullptr};
+            SysRoute bad = good;
+            (which == 0 ? bad.input : bad.output) = "no such device";
+            const SysRoute routes[2] = {good, bad}; // deck A opens first, deck B fails
+            SysAudio sys;
+            std::string err;
+            const bool ok = sys.start(AudioApi::Wasapi, routes, 48000.0, 480, false, targets, engine, nullptr, err);
+            std::printf("   %s, %s missing: %s\n", drift ? "drift correction" : "duplex", which == 0 ? "input" : "output",
+                        err.c_str());
+            CHECK(!ok && !err.empty());
+            CHECK(!sys.running() && !sys.info(0).running && !sys.info(1).running);
+            const SysRoute fine[2] = {good, SysRoute()};
+            CHECK(sys.start(AudioApi::Wasapi, fine, 48000.0, 480, false, targets, engine, nullptr, err));
+            CHECK(sys.running() && sys.info(0).running);
+            sys.stop();
+            CHECK(!sys.running());
+        }
+}
+
+// The settings lock: a second taker waits until the first lets go (the program and a plug-in saving at once).
+void settingsLock() {
+    std::printf("-- the settings lock: one writer at a time\n");
+    std::atomic<bool> held{false};
+    std::thread first([&] {
+        const SettingsLock lock;
+        CHECK(lock.owned());
+        held = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    });
+    while (!held) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    const auto t0 = std::chrono::steady_clock::now();
+    {
+        const SettingsLock lock;
+        const double waited = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("   the second taker waited %.0f ms (the first held it 300 ms)\n", waited * 1000.0);
+        CHECK(lock.owned());
+        CHECK(waited > 0.2 && waited < 1.5);
+    }
+    first.join();
+    const HANDLE a = createUserMutex(L"Local\\DJAP.test.lock");
+    CHECK(a && GetLastError() != ERROR_ALREADY_EXISTS);
+    const HANDLE b = createUserMutex(L"Local\\DJAP.test.lock");
+    CHECK(b && GetLastError() == ERROR_ALREADY_EXISTS);
+    if (a) CloseHandle(a);
+    if (b) CloseHandle(b);
+}
+
 } // namespace
 
 int main() {
@@ -82,5 +140,7 @@ int main() {
     const SysRoute route{inputs[0].name, outputs[0].name};
     run(false, route);
     run(true, route);
+    failures(route);
+    settingsLock();
     return test::finish("sysaudio_test");
 }

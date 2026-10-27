@@ -304,12 +304,48 @@ int compareVersions(const std::string& a, const std::string& b) {
         const unsigned long u = i < x.size() ? x[i] : 0, v = i < y.size() ? y[i] : 0;
         if (u != v) return u < v ? -1 : 1;
     }
-    // the same numbers: a pre-release ("1.0.0-rc1") comes before the release itself; "+build" does not count
+    // the same numbers: a pre-release ("1.0.0-rc1") comes before the release itself; "+build" does not count. Two
+    // pre-releases compare as SemVer 11.4 says: field by field (split at '.'), numbers as numbers and under words,
+    // words in ASCII order, and with all fields equal the shorter list first ("-rc.1" < "-rc.2" < "-rc.10"; "-beta" <
+    // "-rc"; before: all pre-releases of one version were equal - fourth outside review)
     auto pre = [](const std::string& s) {
+        const size_t cut = s.find_first_of("+-");
+        if (cut == std::string::npos || s[cut] != '-') return std::vector<std::string>();
+        const size_t end = s.find('+', cut);
+        const std::string tag = s.substr(cut + 1, end == std::string::npos ? std::string::npos : end - cut - 1);
+        std::vector<std::string> f;
+        size_t i = 0;
+        while (true) {
+            const size_t dot = tag.find('.', i);
+            f.push_back(tag.substr(i, dot == std::string::npos ? std::string::npos : dot - i));
+            if (dot == std::string::npos) break;
+            i = dot + 1;
+        }
+        return f;
+    };
+    auto isPre = [](const std::string& s) {
         const size_t cut = s.find_first_of("+-");
         return cut != std::string::npos && s[cut] == '-';
     };
-    if (pre(a) != pre(b)) return pre(a) ? -1 : 1;
+    const bool preA = isPre(a), preB = isPre(b);
+    if (preA != preB) return preA ? -1 : 1;
+    if (!preA) return 0;
+    const std::vector<std::string> p = pre(a), q = pre(b);
+    auto numeric = [](const std::string& f) {
+        return !f.empty() && f.size() <= 18 && f.find_first_not_of("0123456789") == std::string::npos;
+    };
+    for (size_t i = 0; i < p.size() && i < q.size(); ++i) {
+        const bool np = numeric(p[i]), nq = numeric(q[i]);
+        if (np && nq) {
+            const unsigned long long u = std::stoull(p[i]), v = std::stoull(q[i]);
+            if (u != v) return u < v ? -1 : 1;
+        } else if (np != nq) {
+            return np ? -1 : 1;
+        } else if (p[i] != q[i]) {
+            return p[i] < q[i] ? -1 : 1;
+        }
+    }
+    if (p.size() != q.size()) return p.size() < q.size() ? -1 : 1;
     return 0;
 }
 

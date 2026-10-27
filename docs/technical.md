@@ -547,8 +547,13 @@ clipper and limiter, a 13 kHz tone driven 6 dB in at 48 kHz: its fold-back at 9 
 at -1.2 dBFS (`dynamics_test`). The hardest case, tones of 12-16 kHz driven 9 dB in at -6 dBFS: at 2x a rest of
 39.8 dB under the tone at 15 kHz (at the base rate: about 16 dB under), at the default 4x 62 dB under in the whole
 chain. With the limiter switched
-off in a loudness preset, the clipper holds the ceiling itself (a hard hold after the down filter): the ceiling then
-stands on its own, at the price of that fold-back for the highs. The exciter's saturation: a 10 kHz tone at -6 dBFS,
+off in a loudness preset, the clipper holds the ceiling itself (a hard hold after the down filter), and its curve then
+bends 1.5 dB under the ceiling, so that the hold seldom has a peak to cut: 10 and 15 kHz tones driven 9 dB in at
+-6 dBFS fold back 59.7 dB under the tone (with the curve at the ceiling: about 25 dB under - fourth outside review;
+1 dB under gave about 37), the sample peak stays at the ceiling. The price: the clipped peaks come out about 1.5 dB
+lower. The curve's ceiling glides (5 ms) when the limiter is switched. The sample peak is all the clipper can hold:
+the true peak between the samples can rise 2-5 dB over the ceiling on noise - for a true-peak ceiling keep the
+limiter on. The exciter's saturation: a 10 kHz tone at -6 dBFS,
 100 %, its fold-back at 18 kHz 90.2 dB under the tone (20.6 dB at the base rate).
 - The meter shows how far the clipper took the deepest peak down.
 
@@ -585,8 +590,11 @@ fast enough to create small inter-sample peaks of its own (full-band noise went 
 **Guarantee.** The sample peak never passes the ceiling. The true peak stays within the ceiling + 0.1 dB for
 material below about 0.48 x the sample rate (all music in practice), with any look-ahead above 0. The detector rolls
 off above that: an outside review measured, against an ideal 16x reference, +0.25..+0.46 dB on clipped pink noise,
-+0.5..+0.7 dB on full-band noise and up to +1.4 dB on a sine at 0.495 x the rate. At 0 ms the limiter holds the
-sample peak only.
++0.5..+0.7 dB on full-band noise and up to +1.4 dB on a sine at 0.495 x the rate. The soft clipper before the
+limiter does not change that much: a fourth review measured +0.2..+0.3 dB at 0.48-0.495 x the rate with the clipper
+on, and up to +1.6 dB in a loudness preset without it - a limit of the detector's look-ahead (a longer detector would
+cost latency), met only by test tones just under the Nyquist frequency. At 0 ms the limiter holds the sample peak
+only.
 Tests: single +12 dBFS samples at look-aheads of 1.5, 0.2, 0.1 and 0 ms; a +6 dBFS sine; an fs/4 square wave (large
 inter-sample peaks); +9.5 dBFS full-band noise bursts - all measured with a 16x reference true-peak meter.
 
@@ -607,8 +615,11 @@ steady faint noise instead (about -98 dBFS at 16 bits) [26]. A value already on 
 stays silent and a bypassed 16-bit input leaves bit-exact. 24 bits and more are only rounded: that rounding lies
 under any converter's own noise. Measured (`engine_test`): a tone of 0.4 steps, lost to rounding, comes out at 0.399
 steps, without an offset; the error variance is 1/4 step^2 for any value (TPDF; rectangular dither would give
-1/6). A block of the device period that stays under one step everywhere gets no dither: the faint remains of a
-filter or a release after the music round to digital silence instead of a lasting +-1 step of noise.
+1/6). A block of the device period that stays under a quarter step everywhere gets no dither: the faint remains of
+a filter or a release after the music round to digital silence instead of a lasting +-1 step of noise (the tail
+after the music is about 1 ms). Below a quarter step the output is silence (about -102 dBFS rms at 16 bits); above
+it a steady tone is dithered (a 0.9-step tone: 3rd harmonic -47 dBc; with the old limit of one step it came out
+undithered at -22 dBc, and a 0.4-step tone vanished - fourth outside review, measured).
 
 ### 14.2 Bypass
 

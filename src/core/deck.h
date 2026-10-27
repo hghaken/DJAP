@@ -39,19 +39,21 @@ constexpr double kTpBetaLimiter = 5.0;
 // window of 16 let full-band noise bursts 0.10-0.11 dB over the ceiling, past the 0.1 dB margin (limiter_test).
 constexpr int kMinTpWindow = 19;
 constexpr int kMinLookFrames = kTpTapsLimiter / 2 + kMinTpWindow - 1;
-// The look-ahead in frames for `lookMs` at `fs`: 0 stays 0 (sample-peak limiting, no delay - the user's choice);
-// anything else is at least kMinLookFrames. One rule for the deck, the latency a plug-in reports and the status bar.
-// The look-ahead choices of the Setup window and the plug-in's window, ms: 0 (sample peak, no delay), 1.5, 2, 3, 5.
+// The look-ahead choices of the Setup window, the plug-in's window and the plug-in's list parameter, ms: 0 (sample
+// peak, no delay), 1.5, 2, 3, 5 - this one list for all of them.
+constexpr double kLookChoicesMs[] = {0.0, 1.5, 2.0, 3.0, 5.0};
+constexpr int kLookChoiceCount = static_cast<int>(sizeof kLookChoicesMs / sizeof kLookChoicesMs[0]);
 // `snapLook` takes any value to one of them - a value above 0 under 1.5 to 1.5 (the old 0.5 / 1.0, a host's
 // automation of the plug-in's 0..5 ms parameter), else the nearest - so what a window shows is what runs.
 inline double snapLook(double ms) {
     if (!(ms > 0.0)) return 0.0;
-    const double choices[] = {1.5, 2.0, 3.0, 5.0};
-    double best = choices[0];
-    for (double c : choices)
-        if (std::fabs(c - ms) < std::fabs(best - ms)) best = c;
+    double best = kLookChoicesMs[1];
+    for (int i = 1; i < kLookChoiceCount; ++i)
+        if (std::fabs(kLookChoicesMs[i] - ms) < std::fabs(best - ms)) best = kLookChoicesMs[i];
     return best;
 }
+// The look-ahead in frames for `lookMs` at `fs`: 0 stays 0 (sample-peak limiting, no delay - the user's choice);
+// anything else is at least kMinLookFrames. One rule for the deck, the latency a plug-in reports and the status bar.
 inline int lookFrames(double lookMs, double fs) {
     const double ms = lookMs >= 0.0 ? (lookMs <= kMaxLookMs ? lookMs : kMaxLookMs) : 0.0; // NaN: 0
     if (ms <= 0.0) return 0;
@@ -332,6 +334,8 @@ private:
     ColourProcessor colour_;
     // soft clipper
     double clipDriveS_ = 1.0;
+    double clipBendS_ = 1.0; // the curve's ceiling against the configured one (smoothed): 1, or under it with the
+                             // limiter off (kClipOwnHeadroomDb)
     // limiter
     Limiter limiter_;
     // volume after the chain and factor on the input (setVolume), smoothed

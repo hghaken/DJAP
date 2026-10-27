@@ -31,16 +31,15 @@ namespace {
 constexpr int32 kStateVersion = 2;
 // The look-ahead parameter: a list of the Setup window's choices (ms; deck.h snapLook) - the host shows what runs
 // (outside review: a 0..5 ms range in steps of 0.1 showed 0.5 or 1.0 while 1.5 ran).
-constexpr double kLookChoices[] = {0.0, 1.5, 2.0, 3.0, 5.0};
-constexpr int kLookSteps = static_cast<int>(sizeof kLookChoices / sizeof kLookChoices[0]) - 1;
+constexpr int kLookSteps = kLookChoiceCount - 1;
 double lookOfNormalized(double v) {
     const double c = v >= 0.0 ? (v <= 1.0 ? v : 1.0) : 0.0; // NaN: 0
-    return kLookChoices[std::lround(c * kLookSteps)];
+    return kLookChoicesMs[std::lround(c * kLookSteps)];
 }
 double normalizedOfLook(double ms) {
     const double s = snapLook(ms);
     for (int i = 0; i <= kLookSteps; ++i)
-        if (kLookChoices[i] == s) return static_cast<double>(i) / kLookSteps;
+        if (kLookChoicesMs[i] == s) return static_cast<double>(i) / kLookSteps;
     return 1.0 / kLookSteps; // (not reached: snapLook gives one of the choices)
 }
 

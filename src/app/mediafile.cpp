@@ -72,10 +72,12 @@ bool decode(const std::filesystem::path& file, WavData& out, std::string& error)
                     break;
                 }
                 if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) {
-                    // a new type that is still float at the same rate and channel count (a channel mask or a codec
-                    // flag changed) reads on; another rate or channel count stops (outside review)
+                    // a new type that is still 32-bit float at the same rate and channel count (a channel mask or a
+                    // codec flag changed) reads on; another sample type, rate or channel count stops (outside reviews)
                     IMFMediaType* now = nullptr;
+                    GUID sub{};
                     const bool same = SUCCEEDED(reader->GetCurrentMediaType(audio, &now)) &&
+                                      SUCCEEDED(now->GetGUID(MF_MT_SUBTYPE, &sub)) && sub == MFAudioFormat_Float &&
                                       MFGetAttributeUINT32(now, MF_MT_AUDIO_NUM_CHANNELS, 0) == channels &&
                                       MFGetAttributeUINT32(now, MF_MT_AUDIO_SAMPLES_PER_SECOND, 0) == rate &&
                                       MFGetAttributeUINT32(now, MF_MT_AUDIO_BITS_PER_SAMPLE, 0) == 32;

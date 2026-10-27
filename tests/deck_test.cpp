@@ -693,6 +693,27 @@ void clicks() {
     std::printf("   oversampling 4x -> 8x -> 2x: %.2f\n", ratio);
     CHECK(ratio < 1.5);
 
+    // oversampling 4x -> 8x -> back to 4x within the fade: the change is called off and the stages fade straight back
+    // in, no 40 ms gap of fade out - fade in for a factor that runs anyway (outside review; fourth: untested)
+    {
+        PresetValues v = base;
+        v[pClipOn] = 1;
+        v[pExcOn] = 1;
+        const Stereo ref = runLive(v, ctl, l, r, {});
+        const Stereo aba = runLive(v, ctl, l, r, {{frames(3.0), v, o8}, {frames(3.005), v, ctl}});
+        size_t first = 0, last = 0;
+        for (size_t i = frames(3.0); i < ref.l.size(); ++i)
+            if (std::fabs(aba.l[i] - ref.l[i]) > 1e-3 || std::fabs(aba.r[i] - ref.r[i]) > 1e-3) {
+                if (!first) first = i;
+                last = i;
+            }
+        const double ms = first ? (static_cast<double>(last - first) + 1.0) / fs * 1000.0 : 0.0;
+        ratio = clickRatio(v, ctl, {{frames(3.0), v, o8}, {frames(3.005), v, ctl}}, 3.0, 4.0, l, r);
+        std::printf("   oversampling 4x -> 8x -> 4x (5 ms apart): output differs for %.1f ms, click ratio %.2f\n", ms, ratio);
+        CHECK(ms < 25.0);
+        CHECK(ratio < 1.5);
+    }
+
     // bypass on and off, freeze on and off
     DeckControl by = ctl, fr = ctl;
     by.processing = false;

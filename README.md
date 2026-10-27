@@ -63,7 +63,7 @@ colours are managed like loudness presets.
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
   decks the same loudness preset, start / stop, latency, real-time health). With ASIO a deck's input may also come from a
   WASAPI, DirectSound or MME device (for example a player sending into a virtual cable): the two clocks' drift is
-  corrected by a slightly adjusted read speed (at most 0.2 %), at the cost of a buffer of about 10-20 ms, shown
+  corrected by a slightly adjusted read speed (at most 0.2 %), at the cost of a buffer of about 8-23 ms, shown
   with the measured drift. The outputs can follow the Windows volume and mute (the keyboard's volume keys; on by
   default with one channel), applied after the processing.
   The program lives in the notification area (system tray): closing or minimising the window hides it there while

@@ -9,6 +9,11 @@
 #include <map>
 #include <sstream>
 #include <thread>
+#ifdef _WIN32
+#include <io.h> // _commit (the C runtime, not Windows' headers)
+#else
+#include <unistd.h>
+#endif
 
 namespace ap {
 
@@ -541,13 +546,24 @@ bool Settings::save(const std::filesystem::path& file) const {
            ".tmp";
     std::error_code ec;
     {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-        if (!out) return false;
+        std::FILE* f = nullptr;
+#ifdef _WIN32
+        if (_wfopen_s(&f, tmp.c_str(), L"wb") != 0) f = nullptr;
+#else
+        f = std::fopen(tmp.c_str(), "wb");
+#endif
+        if (!f) return false;
         const std::string text = toText();
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        out.flush();
-        out.close(); // a full disk shows here, not in the destructor
-        if (!out) {
+        bool ok = std::fwrite(text.data(), 1, text.size(), f) == text.size() && std::fflush(f) == 0;
+        // on the disk before the rename: after a power cut the file is the old one or the new one, never an empty
+        // one - it holds the user's presets (fourth outside review)
+#ifdef _WIN32
+        ok = ok && _commit(_fileno(f)) == 0;
+#else
+        ok = ok && fsync(fileno(f)) == 0;
+#endif
+        ok = std::fclose(f) == 0 && ok; // a full disk shows here at the latest
+        if (!ok) {
             std::filesystem::remove(tmp, ec);
             return false;
         }

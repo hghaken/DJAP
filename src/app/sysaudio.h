@@ -43,6 +43,8 @@ struct SysStreamInfo {
     double latencyMs = 0;         // estimate: input period + output buffer (capture-only: input period); with
                                   // drift correction the AsyncInput's buffer comes on top
     bool driftCorrected = false;  // a capture and a playback stream with the deck's AsyncInput between them
+    bool sameDevice = false;      // drift correction asked for, but input and output are one device (one clock):
+                                  // one duplex stream (WASAPI only can tell)
 };
 
 class SysAudio {

@@ -25,7 +25,6 @@ enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB,
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 // limiter look-ahead choices (ms; 1.5 the default). Nothing between 0 and 1.5: below about 1.3 ms the true-peak
 // detector does not fit (deck.h, kMinLookFrames) - 0.5 and 1.0 limited the sample peak only, without a word
-const double kLooks[] = {0.0, 1.5, 2.0, 3.0, 5.0};
 const long kPeriods[] = {64, 128, 192, 256, 480, 512, 1024}; // frames, for WASAPI / DirectSound / MME
 const AudioApi kApis[] = {AudioApi::Asio, AudioApi::Wasapi, AudioApi::DirectSound, AudioApi::Mme};
 const LPARAM kNone = -1;                                     // "(none)" in a device list
@@ -226,9 +225,10 @@ void AudioWindow::createControls() {
     tips_.add(drift_, L"WASAPI, DirectSound, MME: each deck's input and output device usually run on clocks of their "
                       L"own, which drift apart - without correction a glitch now and then. On (the default): the "
                       L"program reads the input a little faster or slower (at most 0.2 %, inaudible) so they never "
-                      L"drift apart, at the cost of a buffer of about 10-20 ms (shown while running). Off: one "
-                      L"stream from input to output, no buffer - for an input and output of the same device (one "
-                      L"clock).");
+                      L"drift apart, at the cost of a buffer of about 8 ms (128-frame periods) to 23 ms (10 ms "
+                      L"periods), shown while running. WASAPI recognises an input and output of the same device (one "
+                      L"clock) and leaves them one stream without the buffer. Off: always one stream from input to "
+                      L"output, no buffer.");
     tips_.add(inputs_, L"With ASIO: where the decks' inputs come from - the interface's ASIO input pairs, or per "
                        L"deck an input device of WASAPI, DirectSound or MME (for example a player sending into a "
                        L"virtual cable). The outputs stay ASIO.\nSuch an input runs on its own clock: the program "
@@ -424,12 +424,12 @@ void AudioWindow::fillAll() {
     filling_ = true;
     // program-wide: limiter look-ahead, start with Windows (read from Windows' list each time: it can change there)
     SendMessageW(look_, CB_RESETCONTENT, 0, 0);
-    for (int i = 0; i < static_cast<int>(std::size(kLooks)); ++i) {
+    for (int i = 0; i < static_cast<int>(std::size(kLookChoicesMs)); ++i) {
         wchar_t t[48];
-        const double l = kLooks[i];
+        const double l = kLookChoicesMs[i];
         swprintf(t, 48, l == 0.0 ? L"0 ms (sample peak, no delay)" : l == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", l);
         addItem(look_, t, i);
-        if (std::fabs(kLooks[i] - settings_.lookAheadMs) < 1e-9) SendMessageW(look_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
+        if (std::fabs(kLookChoicesMs[i] - settings_.lookAheadMs) < 1e-9) SendMessageW(look_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
     }
     SendMessageW(oversampling_, CB_RESETCONTENT, 0, 0);
     for (int f : {2, 4, 8}) {
@@ -709,7 +709,7 @@ void AudioWindow::command(int id, int code) {
     // program-wide settings first (they never restart the audio: the decks change look-ahead with a short fade)
     if (id == idLook && code == CBN_SELCHANGE && !filling_) {
         const LPARAM i = selectedData(look_, -1);
-        if (i >= 0 && i < static_cast<LPARAM>(std::size(kLooks))) settings_.lookAheadMs = kLooks[i];
+        if (i >= 0 && i < static_cast<LPARAM>(std::size(kLookChoicesMs))) settings_.lookAheadMs = kLookChoicesMs[i];
         onChange_();
         refresh();
         return;
@@ -957,9 +957,10 @@ void AudioWindow::refresh() {
                              s.latencyMs, a.targetMs, look, a.driftPpm, a.active ? L"" : L" (filling up)", a.underruns,
                              a.overruns);
                 } else {
-                    swprintf(line, 480, L"\n%s: %s \x2192 %s; device %s, %u x %u frames; latency \x2248 %.1f ms + %.2f ms",
+                    swprintf(line, 480, L"\n%s: %s \x2192 %s; device %s, %u x %u frames; latency \x2248 %.1f ms + %.2f ms%s",
                              d == 0 ? L"Deck A" : L"Deck B", fromUtf8(s.input).c_str(), fromUtf8(s.output).c_str(),
-                             khz(s.deviceRate).c_str(), s.periodFrames, s.periods, s.latencyMs, look);
+                             khz(s.deviceRate).c_str(), s.periodFrames, s.periods, s.latencyMs, look,
+                             s.sameDevice ? L" (one device, one clock: no drift correction needed)" : L"");
                 }
                 state += line;
             }

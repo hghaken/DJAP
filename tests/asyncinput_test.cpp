@@ -53,6 +53,8 @@ struct Sim {
     double fs = 48000.0;
     double driftPpm = 0.0;    // the capture clock's rate against the output clock
     int block = 480;          // capture frames per callback
+    int split = 1;            // ... delivered as this many callbacks straight after each other (a 10 ms packet in
+                              // short callbacks, or a long device period in callbacks of at most 512 frames)
     int period = 256;         // output frames per period
     double capJitter = 0.0;   // s: capture callbacks come up to this late
     double outJitter = 0.0;   // s: output callbacks come up to this late
@@ -78,7 +80,9 @@ struct Sim {
         while (std::min(tc, to) < t0 + seconds) {
             if (tc <= to) { // a capture block is complete
                 for (int i = 0; i < block; ++i) signal(capIndex++, buf[2 * static_cast<size_t>(i)], buf[2 * static_cast<size_t>(i) + 1]);
-                if (!paused(capPause, tc - t0)) ai.write(buf.data(), block, tc);
+                if (!paused(capPause, tc - t0))
+                    for (int part = 0; part < split; ++part) // 20 us apart
+                        ai.write(buf.data() + 2 * static_cast<size_t>(part * block / split), block / split, tc + 2e-5 * part);
                 ++k;
                 tc = capTime();
             } else {
@@ -359,6 +363,33 @@ void faults() {
     }
 }
 
+void bursts() {
+    std::printf("-- bursts: blocks that come straight after each other count as one block\n");
+    struct Case {
+        int block, split, period;
+    };
+    for (const Case& c : {Case{480, 4, 128}, Case{1024, 2, 256}, Case{480, 1, 128}}) {
+        AsyncInput ai;
+        ai.reset(48000);
+        Sim s;
+        s.block = c.block;
+        s.split = c.split;
+        s.period = c.period;
+        s.driftPpm = 50.0;
+        s.capJitter = 0.001;
+        s.signal = sine(440.0, 0.5, 48000);
+        s.run(ai, 60.0);
+        const AsyncInputState st = ai.state();
+        const double least = (c.block + c.period) / 48.0; // ms: the whole burst and the output period
+        std::printf("   %d frames as %d callbacks, output %d frames: buffer %.2f ms (at least %.2f), underruns %lld\n",
+                    c.block, c.split, c.period, st.targetMs, least, st.underruns);
+        // an outside review measured 5-6 underruns after the start when only the callback's size counted
+        CHECK(st.underruns == 0);
+        CHECK(st.targetMs > least);
+        CHECK(st.active && st.overruns == 0 && st.resyncs == 0);
+    }
+}
+
 void throughEngine() {
     std::printf("-- the engine: deck A from an async input, deck B from the device; bypass exact, no allocation\n");
     const double fs = 48000;
@@ -443,6 +474,7 @@ int main() {
     driftTracking();
     quality();
     faults();
+    bursts();
     throughEngine();
     return test::finish("asyncinput_test");
 }

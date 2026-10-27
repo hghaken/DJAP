@@ -72,6 +72,8 @@ void AsyncInput::reset(double fs) {
     maxBlock_.store(0, std::memory_order_relaxed);
     overruns_.store(0, std::memory_order_relaxed);
     writes_.store(0, std::memory_order_relaxed);
+    burst_ = lastFrames_ = 0;
+    lastWrite_ = -1.0;
     oldestNeeded_.store(0, std::memory_order_relaxed);
     pos_ = 0;
     frac_ = 0.0;
@@ -96,7 +98,14 @@ void AsyncInput::reset(double fs) {
 void AsyncInput::write(const float* in, int frames, double now) {
     if (frames <= 0) return;
     bump(writes_);
-    if (frames > maxBlock_.load(std::memory_order_relaxed)) maxBlock_.store(frames, std::memory_order_relaxed);
+    // a block that comes within a quarter of the last one's length after it belongs to the same burst: a device
+    // period cut into short callbacks (a 10 ms packet in 128-frame callbacks, 1024 frames in two of 512) arrives at
+    // once, and the fill must hold the whole of it (fourth outside review: 5-6 underruns after each start when only
+    // the callback's size counted)
+    burst_ = lastWrite_ >= 0.0 && now - lastWrite_ < 0.25 * lastFrames_ / fs_ ? burst_ + frames : frames;
+    lastWrite_ = now;
+    lastFrames_ = frames;
+    if (burst_ > maxBlock_.load(std::memory_order_relaxed)) maxBlock_.store(burst_, std::memory_order_relaxed);
     const int64_t w = written_.load(std::memory_order_relaxed);
     const int64_t space = kCapacity - (w - oldestNeeded_.load(std::memory_order_acquire));
     if (frames > space) { // the reader is not reading (stopped, or far behind): drop the block

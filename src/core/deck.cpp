@@ -76,6 +76,13 @@ double softClip(double u) {
     return u < 0.0 ? -y : y;
 }
 
+// The clipper's curve against its ceiling: 1 with the limiter on (it holds the ceiling), else this far under it - the
+// clipper's hard hold on the ceiling then seldom cuts a peak (deck.cpp, the clipper; fourth outside review)
+constexpr double kClipOwnHeadroomDb = 1.5;
+static double clipBendFor(const DeckConfig& c) {
+    return c.on[sLimiter] ? 1.0 : std::pow(10.0, -kClipOwnHeadroomDb / 20.0);
+}
+
 DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double fs) {
     PresetValues v = in;
     normaliseValues(v);
@@ -483,6 +490,7 @@ void DeckProcessor::resetStage(int s) {
         break;
     case sClipper:
         clipOs_.setFactor(cfg_.oversampling);
+        clipBendS_ = clipBendFor(cfg_);
         break;
     case sDeEsser:
         dessHp_.reset();
@@ -530,6 +538,7 @@ void DeckProcessor::resetStates() {
     musicTime_ = 0.0;
     quiet_ = true;
     clipDriveS_ = cfg_.clipDrive;
+    clipBendS_ = clipBendFor(cfg_);
     rec_ = MeterRecord();
     recIn_ = recOut_ = 0.0;
     recClipRatio_ = 1.0;
@@ -939,18 +948,22 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         // phase delay at low frequencies - an IIR filter's phase, like the crossovers', no look-ahead)
         if (running_[sClipper]) {
             clipDriveS_ = toward(clipDriveS_, c.clipDrive, c.gainSmooth);
-            const double ceil = c.clipCeiling, d = clipDriveS_ / ceil, inv = 1.0 / ceil;
+            clipBendS_ = toward(clipBendS_, clipBendFor(c), c.gainSmooth);
+            // `bend`: the curve's own ceiling - the configured one, or under it with the limiter off (see below)
+            const double ceil = c.clipCeiling, bend = ceil * clipBendS_, d = clipDriveS_ / bend, inv = 1.0 / bend;
             const double ul = l * d, ur = r * d;
             // the filters see the driven signal only; the ceiling enters per sample in the curve itself, so a new
             // ceiling does not meet samples of the old scale in the filters' memory (a click)
             Pair os[StereoOversampler::kMaxFactor];
             clipOs_.up(makePair(l * clipDriveS_, r * clipDriveS_), os);
             for (int k = 0; k < clipOs_.factor(); ++k)
-                os[k] = makePair(ceil * softClip(leftOf(os[k]) * inv), ceil * softClip(rightOf(os[k]) * inv));
+                os[k] = makePair(bend * softClip(leftOf(os[k]) * inv), bend * softClip(rightOf(os[k]) * inv));
             // a flattened peak, its overtones above the audio band removed, rises a little over the ceiling again
             // (0.36 dB on a 3 kHz tone 6 dB in): the limiter after it holds the ceiling. Holding it here as well
             // brought the fold-back of the highs back (-24 dBc on 13 kHz), so only a loudness preset with the
-            // limiter off gets that hold (outside review: the clipper's ceiling must stand on its own then)
+            // limiter off gets that hold (outside review: the clipper's ceiling must stand on its own then) - and
+            // its curve bends 1.5 dB under the ceiling, so that the hold seldom cuts a peak: the fold-back of a tone
+            // 6 dB in went from -25 to about -60 dBc (fourth outside review, measured; 1 dB under gave -36 dBc)
             const Pair y = clipOs_.down(os);
             double yl = leftOf(y), yr = rightOf(y);
             if (!running_[sLimiter]) {

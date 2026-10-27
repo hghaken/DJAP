@@ -50,11 +50,14 @@ inline double ditherUnit() {
     gDither = s;
     return static_cast<double>(s) * (1.0 / 4294967296.0) - 0.5; // [-0.5, 0.5)
 }
-// A block that stays under one step everywhere gets no dither: the faint remains of a filter or a release after the
-// music (1e-7 and less) round to digital silence instead of a lasting +-1 step of noise (outside review). A quiet
-// passage above one step keeps its dither.
+// A block that stays under a quarter step everywhere gets no dither: the faint remains of a filter or a release after
+// the music (1e-7 and less) round to digital silence instead of a lasting +-1 step of noise (outside review). A quiet
+// passage above it keeps its dither. A quarter, not one step: at one step a steady tone of 0.4 steps vanished and one
+// of 0.9 steps came out undithered (3rd harmonic -22 dBc); at a quarter both are dithered (-47 dBc) and the tail after
+// the music is still about 1 ms (fourth outside review, measured; 0.1 step gave a 12 ms tail of noise).
+constexpr double kDitherFloorSteps = 0.25;
 inline bool underOneStep(const float* in, int frames, double scale) {
-    const double limit = 1.0 / scale;
+    const double limit = kDitherFloorSteps / scale;
     for (int i = 0; i < frames; ++i)
         if (!(std::fabs(in[i]) < limit)) return false;
     return true;

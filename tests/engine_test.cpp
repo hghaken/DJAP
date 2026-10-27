@@ -168,6 +168,26 @@ void formats() {
     CHECK(std::fabs(mean / n - 3.0) < 0.01);
     CHECK(std::fabs(ev - 0.25) < 0.01 && std::fabs(em) < 0.01);
     CHECK(silent(z) && silent(r));
+
+    // a steady tone of 0.4 steps around zero (no level under it) is dithered too, not cut to silence: the blocks that
+    // get no dither are only those under a quarter step (outside review: at one step this tone vanished)
+    std::vector<float> soft(4800);
+    for (size_t i = 0; i < soft.size(); ++i)
+        soft[i] = static_cast<float>(0.4 * std::sin(2.0 * pi * 1000.0 * static_cast<double>(i) / 48000.0) / 32768.0);
+    double softAmp = 0.0, softRef = 0.0;
+    std::vector<int16_t> sq(soft.size());
+    for (int rep = 0; rep < 100; ++rep) {
+        for (size_t b = 0; b < soft.size(); b += 480) // device periods of 480 frames
+            fromFloat(soft.data() + b, SampleFormat::Int16, sq.data() + b, 0, 480);
+        for (size_t i = 0; i < soft.size(); ++i) {
+            const double s = std::sin(2.0 * pi * 1000.0 * static_cast<double>(i) / 48000.0);
+            softAmp += sq[i] * s;
+            softRef += s * s;
+        }
+    }
+    softAmp /= softRef;
+    std::printf("   16-bit dither: a 0.4-step tone alone comes out at %.3f steps\n", softAmp);
+    CHECK(std::fabs(softAmp - 0.4) < 0.03);
 }
 
 // A fake driver: four input and four output channel buffers of one format, `period` frames per buffer switch.

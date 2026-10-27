@@ -3,6 +3,7 @@
 #include "appstate.h"
 
 #include <windows.h>
+#include <mmdeviceapi.h>
 
 #pragma warning(push, 0)
 #include "miniaudio.h"
@@ -185,6 +186,44 @@ void notificationCallback(const ma_device_notification* n) {
         s->failed.store(true, std::memory_order_release); // stopped without being asked: unplugged, taken over, error
 }
 
+// The physical device a WASAPI endpoint belongs to (its container id), or a zero GUID when unknown - or when it is the
+// computer's own container: every built-in device (an on-board codec, a graphics card's HDMI output) and every software
+// device (a virtual cable) shares that one, on clocks of their own.
+GUID containerOf(IMMDeviceEnumerator* e, const wchar_t* id) {
+    static const PROPERTYKEY kContainerId = {{0x8c7ed206, 0x3f8a, 0x4827, {0xb3, 0xab, 0xae, 0x9e, 0x1f, 0xae, 0xfc, 0x6c}}, 2};
+    static const GUID kComputer = {0x00000000, 0x0000, 0x0000, {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}};
+    GUID g{};
+    IMMDevice* dev = nullptr;
+    if (FAILED(e->GetDevice(id, &dev))) return g;
+    IPropertyStore* ps = nullptr;
+    if (SUCCEEDED(dev->OpenPropertyStore(STGM_READ, &ps))) {
+        PROPVARIANT v;
+        PropVariantInit(&v);
+        if (SUCCEEDED(ps->GetValue(kContainerId, &v)) && v.vt == VT_CLSID && v.puuid) g = *v.puuid;
+        PropVariantClear(&v);
+        ps->Release();
+    }
+    dev->Release();
+    return g == kComputer ? GUID{} : g;
+}
+
+// A deck's input and output on one physical device (WASAPI: the same container, not the computer's own): one clock, so
+// nothing drifts - drift correction would only add its buffer (fourth outside review). DirectSound and MME do not say.
+bool oneClock(AudioApi api, const ma_device_id& in, const ma_device_id& out) {
+    if (api != AudioApi::Wasapi || g_nullBackend.load()) return false;
+    const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED); // the helper thread (miniaudio joined it already)
+    bool same = false;
+    IMMDeviceEnumerator* e = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                   reinterpret_cast<void**>(&e)))) {
+        const GUID a = containerOf(e, in.wasapi), b = containerOf(e, out.wasapi);
+        same = a != GUID{} && a == b;
+        e->Release();
+    }
+    if (SUCCEEDED(co)) CoUninitialize();
+    return same;
+}
+
 const ma_device_id* findDevice(AudioApi api, const ma_device_info* list, ma_uint32 count, const std::string& name) {
     for (ma_uint32 i = 0; i < count; ++i)
         if (name == nameOf(api, list[i].name)) return &list[i].id;
@@ -279,7 +318,8 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
             auto s = std::make_unique<DeckStream>();
             s->deck = &engine.deck(d);
             s->rate = sampleRate;
-            if (drift && drift[d]) { // a capture stream into the AsyncInput, a playback stream reading it
+            const bool sameDevice = drift && drift[d] && oneClock(api, *inId, *outId);
+            if (drift && drift[d] && !sameDevice) { // a capture stream into the AsyncInput, a playback stream reading it
                 s->capture = drift[d];
                 ma_device_config c = ma_device_config_init(ma_device_type_capture);
                 c.sampleRate = static_cast<ma_uint32>(sampleRate);
@@ -297,9 +337,15 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
                 p.playback.pDeviceID = outId;
                 p.playback.format = ma_format_f32;
                 p.playback.channels = 2;
+                // the output's own thread only reads the drift buffer (it never waits for the input): 2 periods are
+                // enough for WASAPI, one period less latency (fourth outside review). DirectSound and MME keep 3.
+                if (api == AudioApi::Wasapi) p.periods = 2;
                 if (exclusive && api == AudioApi::Wasapi) {
                     c.capture.shareMode = p.playback.shareMode = ma_share_mode_exclusive;
                     c.periods = p.periods = 2;
+                    // exclusive streams run at the device's own rate: when it is not the decks' rate, miniaudio's
+                    // converter takes it - with its steepest low-pass (the default order 4 lets more alias through)
+                    c.resampling.linear.lpfOrder = p.resampling.linear.lpfOrder = MA_MAX_FILTER_ORDER;
                 }
                 c.dataCallback = captureCallback;
                 p.dataCallback = playbackCallback;
@@ -350,6 +396,7 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
             if (exclusive && api == AudioApi::Wasapi) {
                 c.capture.shareMode = c.playback.shareMode = ma_share_mode_exclusive;
                 c.periods = 2;
+                c.resampling.linear.lpfOrder = MA_MAX_FILTER_ORDER; // see above
             }
             c.dataCallback = dataCallback;
             c.notificationCallback = notificationCallback;
@@ -363,6 +410,7 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
             SysStreamInfo& in = s->info;
             in.input = routes[d].input;
             in.output = routes[d].output;
+            in.sameDevice = sameDevice;
             in.deviceRate = s->dev.playback.internalSampleRate;
             in.periodFrames = s->dev.playback.internalPeriodSizeInFrames;
             in.periods = s->dev.playback.internalPeriods;

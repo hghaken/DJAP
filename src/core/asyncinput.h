@@ -72,6 +72,9 @@ private:
     std::atomic<double> writeTime_{0.0};
     std::atomic<int> maxBlock_{0};
     std::atomic<long long> overruns_{0}, writes_{0};
+    // writer only: blocks that come straight after each other (burst_ frames so far, the last one's time and size)
+    int burst_ = 0, lastFrames_ = 0;
+    double lastWrite_ = -1.0;
     // reader -> writer
     std::atomic<int64_t> oldestNeeded_{0};
     // reader only

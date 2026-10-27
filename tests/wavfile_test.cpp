@@ -10,10 +10,30 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <cstdlib>
 #include <iterator>
 #include <limits>
+#include <new>
 #include <string>
 #include <vector>
+
+// Allocation failure on demand: the n-th allocation from now throws (-1: never) - for the clean-up after an exception
+// in the middle of a write.
+long gFailIn = -1;
+void* operator new(std::size_t n) {
+    if (gFailIn == 0) {
+        gFailIn = -1;
+        throw std::bad_alloc();
+    }
+    if (gFailIn > 0) --gFailIn;
+    if (void* p = std::malloc(n ? n : 1)) return p;
+    throw std::bad_alloc();
+}
+void* operator new[](std::size_t n) { return operator new(n); }
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete[](void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
+void operator delete[](void* p, std::size_t) noexcept { std::free(p); }
 
 using namespace ap;
 namespace fs = std::filesystem;
@@ -153,7 +173,8 @@ void brokenRf64(const fs::path& dir) {
     writeBytes(noDs64);
     CHECK(readWav(f, r, err) && r.samples.size() == w.samples.size());
     // ds64 sizes larger than the file, up to 2^64 - 1: what is there, at once (no endless loop, no huge allocation)
-    for (const uint64_t hostile : {~0ull, ~0ull - 7, 1ull << 63, static_cast<uint64_t>(good.size()) + 1}) {
+    // (one type in the list: GCC refused unsigned long long next to uint64_t - fourth outside review)
+    for (const uint64_t hostile : {uint64_t(~0ull), uint64_t(~0ull - 7), uint64_t(1ull << 63), uint64_t(good.size()) + 1}) {
         std::string b = good;
         for (int i = 0; i < 8; ++i) b[28 + static_cast<size_t>(i)] = static_cast<char>(hostile >> (8 * i));
         writeBytes(b);
@@ -180,6 +201,35 @@ void brokenRf64(const fs::path& dir) {
     std::printf("   all read to the end of what is there\n");
 }
 
+// Out of memory at each allocation of a write in turn: whatever fails, neither "<file>.part" nor a half file is left
+// (fourth outside review: removing the clean-up in the exception path was not caught).
+void outOfMemory(const fs::path& dir) {
+    std::printf("-- out of memory part-way through a write: nothing left behind\n");
+    const WavData w = tone(2, 100000); // several pieces of 64 Ki samples
+    const fs::path f = dir / "oom.wav";
+    int failed = 0, caught = 0, worked = 0;
+    for (long k = 0; k < 60; ++k) {
+        std::error_code ec;
+        fs::remove(f, ec);
+        std::string err;
+        bool ok = false;
+        gFailIn = k;
+        try {
+            ok = writeWav(f, w, false, err);
+        } catch (const std::bad_alloc&) { // before the file is opened (the name): nothing written
+            ++caught;
+        }
+        gFailIn = -1;
+        if (ok) ++worked;
+        else if (!err.empty()) ++failed;
+        CHECK(!fs::exists(fs::path(f.string() + ".part")));
+        CHECK(ok == fs::exists(f));
+    }
+    std::printf("   60 writes, each failing at its n-th allocation: %d refused with a reason, %d threw before the file, "
+                "%d had all they needed\n", failed, caught, worked);
+    CHECK(failed > 0 && worked > 0);
+}
+
 } // namespace
 
 int main() {
@@ -190,6 +240,7 @@ int main() {
     oddAndBad(dir);
     headers(dir);
     brokenRf64(dir);
+    outOfMemory(dir);
     fs::remove_all(dir, ec);
     return test::finish("wavfile_test");
 }

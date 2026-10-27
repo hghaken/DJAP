@@ -45,6 +45,14 @@ void versions() {
     CHECK(compareVersions("1.0.0-rc1", "1.0.0") < 0); // a pre-release before its release
     CHECK(compareVersions("1.0.0", "1.0.0-rc1") > 0);
     CHECK(compareVersions("1.0.0-rc1", "0.9.9") > 0);
+    // two pre-releases: SemVer 11.4 (fourth outside review: all were equal)
+    CHECK(compareVersions("1.0.0-rc1", "1.0.0-rc2") < 0);
+    CHECK(compareVersions("1.0.0-beta", "1.0.0-rc") < 0);
+    CHECK(compareVersions("1.0.0-rc.2", "1.0.0-rc.10") < 0);  // numbers as numbers
+    CHECK(compareVersions("1.0.0-1", "1.0.0-alpha") < 0);     // numbers under words
+    CHECK(compareVersions("1.0.0-rc", "1.0.0-rc.1") < 0);     // the shorter list first
+    CHECK(compareVersions("1.0.0-rc.1+b7", "1.0.0-rc.1") == 0);
+    CHECK(compareVersions("1.0.0-rc.1", "1.0.0-rc.1") == 0);
 }
 
 const char* kRelease = R"({

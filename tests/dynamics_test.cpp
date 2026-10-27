@@ -555,6 +555,23 @@ void colour() {
                 -worst, worstF);
     CHECK(worst < -55.0); // at the default 4x (2x: about -40, the rest the 4x and 8x choices take away)
 
+    // the same with the limiter off: the clipper's hard hold on the ceiling cut the band-limited peaks and brought the
+    // fold-back back (-25 dBc, fourth outside review); its curve now bends 1.5 dB under the ceiling, the hold stays
+    v[pLimOn] = 0;
+    double worstOff = -300, peakOff = 0;
+    for (double f : {10000.0, 15000.0}) {
+        Buffer t = sig::sine(fs, f, -6, 1.0);
+        o = run(fs, v, t, t);
+        const double tone = sig::amplitudeAt(o.l, fs, f, from);
+        for (double g = 100; g < 24000; g += 100)
+            if (g != f) worstOff = std::max(worstOff, linToDb(sig::amplitudeAt(o.l, fs, g, from) / tone));
+        peakOff = std::max(peakOff, sig::peak(o.l));
+    }
+    std::printf("   soft clipper, limiter off, 10 / 15 kHz driven 9 dB in: strongest fold-back %.1f dB under the tone, "
+                "peak %.3f dBFS (ceiling -1)\n", -worstOff, linToDb(peakOff));
+    CHECK(worstOff < -45.0);
+    CHECK(peakOff <= dbToLin(-1.0) + 1e-6);
+
     // the exciter's saturation runs at twice the rate too: a 10 kHz tone's 3rd overtone (30 kHz) folded back to
     // 18 kHz at the base rate (-20.6 dBc in the outside review)
     v = allOff();

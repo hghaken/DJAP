@@ -26,7 +26,6 @@ namespace ap::plugin {
 namespace {
 
 const wchar_t* const kClass = L"DJAPPluginView";
-const double kLooks[] = {0.0, 1.5, 2.0, 3.0, 5.0}; // the Setup window's choices (ms; see audiodlg.cpp)
 enum Id { idPreset = 1, idColour, idLook, idBypass, idEdit, idEditColour, idOversampling, idSlider0 = 10, idMeter = 20 };
 enum Slider { slLevel, slEnhancer, slWidth, slFreq, kSliders };
 const wchar_t* const kSliderName[kSliders] = {L"Bass level", L"Bass enhancer", L"Bass width", L"Bass frequency"};
@@ -214,7 +213,7 @@ void PluginView::create() {
     for (HWND c : {preset_, colour_, look_, oversampling_}) theme::makeCombo(c);
 
     fillLists();
-    for (double l : kLooks) {
+    for (double l : kLookChoicesMs) {
         wchar_t t[48];
         swprintf(t, 48, l == 0.0 ? L"0 ms (sample peak, no delay)" : l == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", l);
         SendMessageW(look_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(t));
@@ -333,8 +332,8 @@ void PluginView::fill() {
     if (SendMessageW(colour_, CB_GETCURSEL, 0, 0) != ci) SendMessageW(colour_, CB_SETCURSEL, static_cast<WPARAM>(ci), 0);
     const double look = plugin_->plainOf(kLookId);
     int li = 0;
-    for (int i = 0; i < static_cast<int>(std::size(kLooks)); ++i)
-        if (std::fabs(kLooks[i] - look) < std::fabs(kLooks[li] - look)) li = i;
+    for (int i = 0; i < static_cast<int>(std::size(kLookChoicesMs)); ++i)
+        if (std::fabs(kLookChoicesMs[i] - look) < std::fabs(kLookChoicesMs[li] - look)) li = i;
     if (SendMessageW(look_, CB_GETCURSEL, 0, 0) != li) SendMessageW(look_, CB_SETCURSEL, static_cast<WPARAM>(li), 0);
     const int os = static_cast<int>(plugin_->plainOf(kOversamplingId)), oi = os == 8 ? 2 : os == 4 ? 1 : 0;
     if (SendMessageW(oversampling_, CB_GETCURSEL, 0, 0) != oi)
@@ -424,8 +423,8 @@ void PluginView::command(int id, int code) {
         fill();
     } else if (id == idLook && code == CBN_SELCHANGE) {
         const int sel = static_cast<int>(SendMessageW(look_, CB_GETCURSEL, 0, 0));
-        if (sel >= 0 && sel < static_cast<int>(std::size(kLooks))) // the parameter is a list of the same five
-            plugin_->edit(kLookId, sel / static_cast<double>(std::size(kLooks) - 1));
+        if (sel >= 0 && sel < static_cast<int>(std::size(kLookChoicesMs))) // the parameter is a list of the same five
+            plugin_->edit(kLookId, sel / static_cast<double>(std::size(kLookChoicesMs) - 1));
     } else if (id == idOversampling && code == CBN_SELCHANGE) {
         const int sel = static_cast<int>(SendMessageW(oversampling_, CB_GETCURSEL, 0, 0));
         if (sel >= 0 && sel <= 2) plugin_->edit(kOversamplingId, sel / 2.0);

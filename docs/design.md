@@ -579,9 +579,14 @@ miniaudio's duplex stream of these synchronous backends has no drift correction,
 ends in a glitch now and then (outside review). Hence **Drift correction** (`[Audio] DriftCorrection`, on by
 default; client, 2026-10-27: "look at this one especially"): a deck is then a capture stream into its `AsyncInput`
 and a playback stream that reads it with the drift loop of 6.1 - the same code as the ASIO case, at the cost of its
-buffer (input block + output period + 3 ms margin: about 23 ms at 10 ms periods, about 8 ms at 128 frames). Off: the
-duplex stream, for an input and output of one device (one clock). The processing itself still adds only the
-look-ahead; `sysaudio_test` runs both routes on miniaudio's null devices.
+buffer (input block + output period + 3 ms margin: about 23 ms at 10 ms periods, about 8 ms at 128 frames; the
+input block is a burst - callbacks that come straight after each other count as one, so a 10 ms packet cut into
+128-frame callbacks or 1024 frames in two callbacks of 512 is held whole). The playback stream of this route has 2
+periods with WASAPI (it only reads the buffer), 3 with DirectSound and MME. WASAPI recognises an input and output of
+the same physical device by their container id (not the computer's own container, which every built-in and software
+device shares) and leaves them the duplex stream: one clock, nothing to correct (fourth outside review). Off: always
+the duplex stream. The processing itself still adds only the look-ahead; `sysaudio_test` runs both routes on
+miniaudio's null devices, and a start with a device that is not there.
 
 Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), an "About DJAP..." button, and the audio API and, for WASAPI, the exclusive switch. ASIO:
 "Deck inputs" (ASIO input pairs, or WASAPI / DirectSound / MME devices, 6.1), the driver (installed drivers from the
