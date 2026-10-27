@@ -17,7 +17,10 @@ namespace ap {
 
 namespace {
 
+std::atomic<bool> g_nullBackend{false};
+
 ma_backend backendOf(AudioApi api) {
+    if (g_nullBackend.load()) return ma_backend_null;
     switch (api) {
     case AudioApi::DirectSound:
         return ma_backend_dsound;
@@ -84,10 +87,11 @@ bool apiFromName(const std::string& name, AudioApi& api) {
     return false;
 }
 
-// One deck's duplex stream.
+// One deck's stream: duplex, capture-only (into `capture`), or - with drift correction - a capture stream (`dev`, into
+// `capture`) and a playback stream (`play`, reading `capture`).
 struct DeckStream {
-    ma_device dev{};
-    bool inited = false;
+    ma_device dev{}, play{};
+    bool inited = false, playInited = false;
     DeckProcessor* deck = nullptr;
     AsyncInput* capture = nullptr; // capture-only stream: writes here
     double rate = 48000;
@@ -107,15 +111,30 @@ struct SysAudio::Impl {
 
 namespace {
 
-void dataCallback(ma_device* dev, void* output, const void* input, ma_uint32 frames) {
-    DeckStream* s = static_cast<DeckStream*>(dev->pUserData);
-    const auto t0 = std::chrono::steady_clock::now();
+// The period's health (processing time against the period, blocks counted).
+void account(DeckStream* s, std::chrono::steady_clock::time_point t0, ma_uint32 frames) {
+    const double used = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    const uint32_t permille = static_cast<uint32_t>(std::min(1e9, used / (frames / s->rate) * 1000.0));
+    s->last.store(permille, std::memory_order_relaxed);
+    if (permille > s->heaviest.load(std::memory_order_relaxed)) s->heaviest.store(permille, std::memory_order_relaxed);
+    if (permille > 500) s->overHalf.store(s->overHalf.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+    if (permille > 1000) s->late.store(s->late.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+    s->blocks.store(s->blocks.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+}
+
+void resetIfAsked(DeckStream* s) {
     if (s->resetHealth.exchange(false, std::memory_order_acq_rel)) {
         s->blocks.store(0, std::memory_order_relaxed);
         s->overHalf.store(0, std::memory_order_relaxed);
         s->late.store(0, std::memory_order_relaxed);
         s->heaviest.store(0, std::memory_order_relaxed);
     }
+}
+
+void dataCallback(ma_device* dev, void* output, const void* input, ma_uint32 frames) {
+    DeckStream* s = static_cast<DeckStream*>(dev->pUserData);
+    const auto t0 = std::chrono::steady_clock::now();
+    resetIfAsked(s);
     const float* in = static_cast<const float*>(input);
     float* out = static_cast<float*>(output);
     for (ma_uint32 pos = 0; pos < frames; pos += AudioEngine::kChunk) {
@@ -130,20 +149,34 @@ void dataCallback(ma_device* dev, void* output, const void* input, ma_uint32 fra
             out[2 * (pos + i) + 1] = s->r[i];
         }
     }
-    const double used = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-    const uint32_t permille = static_cast<uint32_t>(std::min(1e9, used / (frames / s->rate) * 1000.0));
-    s->last.store(permille, std::memory_order_relaxed);
-    if (permille > s->heaviest.load(std::memory_order_relaxed)) s->heaviest.store(permille, std::memory_order_relaxed);
-    if (permille > 500) s->overHalf.store(s->overHalf.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
-    if (permille > 1000) s->late.store(s->late.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
-    s->blocks.store(s->blocks.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+    account(s, t0, frames);
 }
 
 void captureCallback(ma_device* dev, void*, const void* input, ma_uint32 frames) {
     DeckStream* s = static_cast<DeckStream*>(dev->pUserData);
     const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
     if (input) s->capture->write(static_cast<const float*>(input), static_cast<int>(frames), now);
-    s->blocks.store(s->blocks.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+    // with a playback stream of its own the deck's periods are that stream's (counted there)
+    if (!s->playInited) s->blocks.store(s->blocks.load(std::memory_order_relaxed) + 1, std::memory_order_release);
+}
+
+// Drift correction: the output device's period reads the deck's input from the AsyncInput (docs/design.md 6.1).
+void playbackCallback(ma_device* dev, void* output, const void*, ma_uint32 frames) {
+    DeckStream* s = static_cast<DeckStream*>(dev->pUserData);
+    const auto t0 = std::chrono::steady_clock::now();
+    resetIfAsked(s);
+    s->capture->beginPeriod(static_cast<int>(frames), std::chrono::duration<double>(t0.time_since_epoch()).count());
+    float* out = static_cast<float*>(output);
+    for (ma_uint32 pos = 0; pos < frames; pos += AudioEngine::kChunk) {
+        const ma_uint32 n = std::min<ma_uint32>(AudioEngine::kChunk, frames - pos);
+        s->capture->read(s->l, s->r, static_cast<int>(n));
+        s->deck->process(s->l, s->r, static_cast<int>(n));
+        for (ma_uint32 i = 0; i < n; ++i) {
+            out[2 * (pos + i)] = s->l[i];
+            out[2 * (pos + i) + 1] = s->r[i];
+        }
+    }
+    account(s, t0, frames);
 }
 
 void notificationCallback(const ma_device_notification* n) {
@@ -161,6 +194,8 @@ const ma_device_id* findDevice(AudioApi api, const ma_device_info* list, ma_uint
 } // namespace
 
 SysAudio::SysAudio() : impl_(new Impl()) {}
+
+void SysAudio::useNullBackend(bool on) { g_nullBackend.store(on); }
 
 SysAudio::~SysAudio() { stop(); }
 
@@ -198,7 +233,8 @@ bool SysAudio::devices(AudioApi api, std::vector<SysDevice>& inputs, std::vector
 }
 
 bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames, bool exclusive,
-                     AudioEngine& engine, const std::function<void(double)>& beforeStart, std::string& error) {
+                     AsyncInput* const drift[2], AudioEngine& engine, const std::function<void(double)>& beforeStart,
+                     std::string& error) {
     stop();
     for (int d = 0; d < 2; ++d)
         if (routes[d].input.empty() != routes[d].output.empty()) {
@@ -243,6 +279,60 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
             auto s = std::make_unique<DeckStream>();
             s->deck = &engine.deck(d);
             s->rate = sampleRate;
+            if (drift && drift[d]) { // a capture stream into the AsyncInput, a playback stream reading it
+                s->capture = drift[d];
+                ma_device_config c = ma_device_config_init(ma_device_type_capture);
+                c.sampleRate = static_cast<ma_uint32>(sampleRate);
+                c.periodSizeInFrames = periodFrames;
+                c.performanceProfile = ma_performance_profile_low_latency;
+                c.wasapi.usage = ma_wasapi_usage_pro_audio;
+                c.capture.pDeviceID = inId;
+                c.capture.format = ma_format_f32;
+                c.capture.channels = 2;
+                ma_device_config p = ma_device_config_init(ma_device_type_playback);
+                p.sampleRate = static_cast<ma_uint32>(sampleRate);
+                p.periodSizeInFrames = periodFrames;
+                p.performanceProfile = ma_performance_profile_low_latency;
+                p.wasapi.usage = ma_wasapi_usage_pro_audio;
+                p.playback.pDeviceID = outId;
+                p.playback.format = ma_format_f32;
+                p.playback.channels = 2;
+                if (exclusive && api == AudioApi::Wasapi) {
+                    c.capture.shareMode = p.playback.shareMode = ma_share_mode_exclusive;
+                    c.periods = p.periods = 2;
+                }
+                c.dataCallback = captureCallback;
+                p.dataCallback = playbackCallback;
+                c.notificationCallback = p.notificationCallback = notificationCallback;
+                c.pUserData = p.pUserData = s.get();
+                r = ma_device_init(&m.ctx, &c, &s->dev);
+                if (r != MA_SUCCESS) {
+                    error = std::string(deckName) + ": " + maError("opening the input device failed", r);
+                    return;
+                }
+                s->inited = true;
+                r = ma_device_init(&m.ctx, &p, &s->play);
+                if (r != MA_SUCCESS) {
+                    m.decks[d] = std::move(s); // stop() closes the input device
+                    error = std::string(deckName) + ": " + maError("opening the output device failed", r);
+                    return;
+                }
+                s->playInited = true;
+                SysStreamInfo& in = s->info;
+                in.input = routes[d].input;
+                in.output = routes[d].output;
+                in.driftCorrected = true;
+                in.deviceRate = s->play.playback.internalSampleRate;
+                in.periodFrames = s->play.playback.internalPeriodSizeInFrames;
+                in.periods = s->play.playback.internalPeriods;
+                const double capMs = s->dev.capture.internalSampleRate
+                                         ? 1000.0 * s->dev.capture.internalPeriodSizeInFrames / s->dev.capture.internalSampleRate
+                                         : 0.0;
+                const double playMs = in.deviceRate ? 1000.0 * in.periodFrames * in.periods / in.deviceRate : 0.0;
+                in.latencyMs = capMs + playMs; // the drift buffer comes on top (AsyncInputState::targetMs)
+                m.decks[d] = std::move(s);
+                continue;
+            }
             ma_device_config c = ma_device_config_init(ma_device_type_duplex);
             c.sampleRate = static_cast<ma_uint32>(sampleRate);
             c.periodSizeInFrames = periodFrames;
@@ -285,7 +375,9 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
         }
         for (int d = 0; d < 2; ++d) {
             if (!m.decks[d]) continue;
+            // the input first: the output then finds it filling up (it plays silence until the buffer is full)
             r = ma_device_start(&m.decks[d]->dev);
+            if (r == MA_SUCCESS && m.decks[d]->playInited) r = ma_device_start(&m.decks[d]->play);
             if (r != MA_SUCCESS) {
                 error = std::string(d == 0 ? "deck A" : "deck B") + ": " + maError("starting failed", r);
                 return;
@@ -384,6 +476,7 @@ void SysAudio::stop() {
         for (auto& s : m.decks) {
             if (!s) continue;
             s->stopping.store(true, std::memory_order_release);
+            if (s->playInited) ma_device_uninit(&s->play); // the reader first, then the input it reads
             if (s->inited) ma_device_uninit(&s->dev); // stops the stream first
             s.reset();
         }

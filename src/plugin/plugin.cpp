@@ -2,6 +2,7 @@
 
 #include "pluginids.h"
 #include "pluginview.h"
+#include "settingslock.h"
 
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/base/ibstream.h"
@@ -28,7 +29,20 @@ namespace {
 
 // 2 (0.1.145): the oversampling after the values; a version 1 state (without it) loads with the default
 constexpr int32 kStateVersion = 2;
-constexpr double kMaxLook = 5.0; // ms, the look-ahead parameter's range (Setup window: 0 .. 5 ms)
+// The look-ahead parameter: a list of the Setup window's choices (ms; deck.h snapLook) - the host shows what runs
+// (outside review: a 0..5 ms range in steps of 0.1 showed 0.5 or 1.0 while 1.5 ran).
+constexpr double kLookChoices[] = {0.0, 1.5, 2.0, 3.0, 5.0};
+constexpr int kLookSteps = static_cast<int>(sizeof kLookChoices / sizeof kLookChoices[0]) - 1;
+double lookOfNormalized(double v) {
+    const double c = v >= 0.0 ? (v <= 1.0 ? v : 1.0) : 0.0; // NaN: 0
+    return kLookChoices[std::lround(c * kLookSteps)];
+}
+double normalizedOfLook(double ms) {
+    const double s = snapLook(ms);
+    for (int i = 0; i <= kLookSteps; ++i)
+        if (kLookChoices[i] == s) return static_cast<double>(i) / kLookSteps;
+    return 1.0 / kLookSteps; // (not reached: snapLook gives one of the choices)
+}
 
 // The stages as the host's groups (units), in chain order; the extra parameters stay in the root.
 const char* const kStages[] = {"General",      "Leveller",      "Compressor", "Density",  "Bass enhancer",
@@ -106,7 +120,7 @@ private:
     int p_;
 };
 
-// The look-ahead in ms, 0 .. 5 in steps of 0.1 (the SDK's RangeParameter counts whole steps from its minimum).
+// The look-ahead in ms: a list of 0, 1.5, 2, 3, 5.
 class LookParameter : public Parameter {
 public:
     explicit LookParameter(double ms) {
@@ -115,13 +129,13 @@ public:
         ascii(info.units, "ms");
         info.id = kLookId;
         info.unitId = kRootUnitId;
-        info.stepCount = static_cast<int32>(kMaxLook * 10);
-        info.flags = ParameterInfo::kCanAutomate;
-        info.defaultNormalizedValue = 1.5 / kMaxLook;
+        info.stepCount = kLookSteps;
+        info.flags = ParameterInfo::kCanAutomate | ParameterInfo::kIsList;
+        info.defaultNormalizedValue = normalizedOfLook(1.5);
         setNormalized(toNormalized(ms));
     }
-    ParamValue toPlain(ParamValue v) const override { return std::round(v * kMaxLook * 10.0) / 10.0; }
-    ParamValue toNormalized(ParamValue ms) const override { return std::min(kMaxLook, std::max(0.0, ms)) / kMaxLook; }
+    ParamValue toPlain(ParamValue v) const override { return lookOfNormalized(v); }
+    ParamValue toNormalized(ParamValue ms) const override { return normalizedOfLook(ms); }
     void toString(ParamValue v, String128 out) const override {
         char text[32];
         std::snprintf(text, sizeof text, "%.1f", toPlain(v));
@@ -350,7 +364,7 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
             } else if (id == kBypassId) {
                 bypass_ = v >= 0.5;
             } else if (id == kLookId) {
-                lookMs_ = snapLook(v * kMaxLook); // the window's choices (deck.h)
+                lookMs_ = lookOfNormalized(v); // the window's choices (deck.h)
             } else if (id == kOversamplingId) {
                 oversampling_ = 2 << std::lround(std::min(1.0, std::max(0.0, v)) * 2.0);
             } else {
@@ -447,7 +461,8 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     SingleComponentEffect::setParamNormalized(kPresetId, static_cast<double>(presetIndex()) / settings_.presets.size());
     SingleComponentEffect::setParamNormalized(kColourId, static_cast<double>(colourIndex()) / settings_.colours.size());
     SingleComponentEffect::setParamNormalized(kBypassId, bypass ? 1.0 : 0.0);
-    SingleComponentEffect::setParamNormalized(kLookId, std::min(kMaxLook, std::max(0.0, look)) / kMaxLook);
+    look = snapLook(look); // an old project's 0.5 / 1.0 ms runs - and is reported - as 1.5 from the start
+    SingleComponentEffect::setParamNormalized(kLookId, normalizedOfLook(look));
     SingleComponentEffect::setParamNormalized(kOversamplingId, oversampling == 8 ? 1.0 : oversampling == 4 ? 0.5 : 0.0);
     for (int p = 0; p < kParamCount; ++p)
         SingleComponentEffect::setParamNormalized(paramId(p), normalizedOf(p, v[static_cast<size_t>(p)]));
@@ -456,7 +471,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     setLatencyFrom(look);
 
     // the processing (exactly the stored values, not their positions)
-    incoming_.publish(Snapshot{v, std::min(kMaxLook, std::max(0.0, look)), bypass != 0, oversampling});
+    incoming_.publish(Snapshot{v, look, bypass != 0, oversampling});
     if (view_) view_->refresh();
     return kResultOk;
 }
@@ -477,7 +492,7 @@ int Plugin::colourIndex() const {
 
 double Plugin::plainOf(ParamID id) const {
     const ParamValue v = const_cast<Plugin*>(this)->getParamNormalized(id);
-    if (id == kLookId) return snapLook(v * kMaxLook); // what runs (deck.h)
+    if (id == kLookId) return lookOfNormalized(v); // what runs (deck.h)
     if (id == kBypassId) return v >= 0.5 ? 1.0 : 0.0;
     if (id == kOversamplingId) return static_cast<double>(2 << std::lround(v * 2.0));
     const int p = paramIndex(id);
@@ -525,7 +540,11 @@ bool Plugin::saveSettings() {
     };
     const std::vector<std::string> before = names();
     // as a guest: only the plug-in's preset and colour changes; the program's other settings stay as they are
-    const bool ok = settings_.saveMerged(ini_, base_, Settings::SaveRole::Guest);
+    bool ok = false;
+    {
+        const SettingsLock lock; // the program or another instance saving at the same moment waits (settingslock.h)
+        ok = settings_.saveMerged(ini_, base_, Settings::SaveRole::Guest);
+    }
     if (names() != before) listsChanged(); // another plug-in's or the program's presets came in
     return ok;
 }
@@ -634,6 +653,7 @@ void Plugin::choose(bool colour, int index) {
 
 IPlugView* PLUGIN_API Plugin::createView(FIDString name) {
     if (!name || std::strcmp(name, ViewType::kEditor) != 0) return nullptr;
+    if (view_) view_->detach(); // one window at a time: an older one still alive goes empty, never unowned
     view_ = new PluginView(this);
     return view_;
 }

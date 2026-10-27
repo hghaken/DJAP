@@ -58,10 +58,13 @@ bool renderOffline(const WavData& in, const RenderDeck decks[2], bool align, int
     result.latency = latency;
 
     const size_t frames = in.frames();
-    const size_t total = align ? frames + static_cast<size_t>(latency) : frames;
+    // the input and then silence for the look-ahead, so the music's last frames come out too; aligned, the output
+    // is as long as the input, else the delay longer (outside review: the end was cut off by the delay)
+    const size_t total = frames + static_cast<size_t>(latency);
+    const size_t outFrames = align ? frames : total;
     out.channels = in.channels;
     out.sampleRate = in.sampleRate;
-    out.samples.assign(frames * static_cast<size_t>(in.channels), 0.0f);
+    out.samples.assign(outFrames * static_cast<size_t>(in.channels), 0.0f);
     std::vector<float> l(static_cast<size_t>(chunkFrames)), r(static_cast<size_t>(chunkFrames));
     double limSum[2] = {0, 0}, levSum[2] = {0, 0};
     double seconds = 0.0;
@@ -79,7 +82,7 @@ bool renderOffline(const WavData& in, const RenderDeck decks[2], bool align, int
             seconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
             for (int i = 0; i < n; ++i) {
                 const long long f = static_cast<long long>(pos) + i - (align ? latency : 0);
-                if (f < 0 || f >= static_cast<long long>(frames)) continue;
+                if (f < 0 || f >= static_cast<long long>(outFrames)) continue;
                 out.samples[static_cast<size_t>(f) * in.channels + 2 * d] = l[static_cast<size_t>(i)];
                 out.samples[static_cast<size_t>(f) * in.channels + 2 * d + 1] = r[static_cast<size_t>(i)];
             }

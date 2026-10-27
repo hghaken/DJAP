@@ -4,6 +4,7 @@
 #include "settings.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -47,7 +48,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK_NEAR(a.lookAheadMs, b.lookAheadMs, 1e-12);
     CHECK(a.oversampling == b.oversampling);
     CHECK(a.bufferSize == b.bufferSize && a.startAudio == b.startAudio);
-    CHECK(a.api == b.api && a.exclusive == b.exclusive);
+    CHECK(a.api == b.api && a.exclusive == b.exclusive && a.driftCorrection == b.driftCorrection);
     for (int d = 0; d < 2; ++d) CHECK(a.inDevice[d] == b.inDevice[d] && a.outDevice[d] == b.outDevice[d]);
     CHECK(a.asioInputs == b.asioInputs && a.decks == b.decks);
     CHECK(a.followVolume[0] == b.followVolume[0] && a.followVolume[1] == b.followVolume[1]);
@@ -90,7 +91,9 @@ void checkSame(const Settings& a, const Settings& b) {
 }
 
 fs::path tempDir() {
-    const fs::path d = fs::temp_directory_path() / "DJAP_settings_test";
+    // a folder of this run's own (two runs at once, or one stopped half-way, do not meet)
+    const fs::path d = fs::temp_directory_path() /
+                       ("DJAP_settings_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::error_code ec;
     fs::remove_all(d, ec);
     fs::create_directories(d);
@@ -168,6 +171,7 @@ Settings busy() {
     s.followVolume[1] = true;
     s.api = "WASAPI";
     s.exclusive = true;
+    s.driftCorrection = false; // the other way round than the default
     s.inDevice[0] = "FOC-Analogue 1 + 2 (2- Focusrite USB Audio)"; // device names with + ( ) - and UTF-8
     s.outDevice[0] = "ROD-Headphones (R\xC3\x98" "DE PodMic USB)";
     s.inDevice[1] = s.outDevice[1] = "";
@@ -457,6 +461,7 @@ void unreadable(const fs::path& dir) {
     // a file that cannot be read but could be replaced (an ACL refusing "read data" to everyone): saveMerged refuses
     // and leaves it. (A folder of that name, the first version of this test, could not fail: a rename cannot
     // replace a folder either - outside review.) Merged against the shipped lists alone, the file lost "Mine".
+#ifdef _WIN32 // Windows' ACLs (icacls); the core's other tests also build elsewhere
     const fs::path locked = dir / "locked.ini";
     std::error_code ec;
     {
@@ -466,13 +471,21 @@ void unreadable(const fs::path& dir) {
     }
     const std::string path = locked.string();
     CHECK(std::system(("icacls \"" + path + "\" /deny *S-1-1-0:(RD) >nul").c_str()) == 0);
+    struct Restore { // the deny goes again however this block ends: no file left that nobody can read
+        std::string path;
+        void now() {
+            if (!path.empty()) std::system(("icacls \"" + path + "\" /remove:d *S-1-1-0 >nul").c_str());
+            path.clear();
+        }
+        ~Restore() { now(); }
+    } restore{path};
     Settings probe;
     const bool unreadable = !probe.load(locked);
     Settings other; // a writer that never saw "Mine" (its base: the shipped lists)
     Settings base = other;
     other.driver = "changed";
     const bool saved = other.saveMerged(locked, base, Settings::SaveRole::Owner);
-    std::system(("icacls \"" + path + "\" /remove:d *S-1-1-0 >nul").c_str());
+    restore.now();
     Settings after;
     CHECK(after.load(locked));
     std::printf("   unreadable file: load %s, saveMerged %s, \"Mine\" %s\n", unreadable ? "refused" : "WORKED",
@@ -481,6 +494,7 @@ void unreadable(const fs::path& dir) {
     CHECK(!saved);
     CHECK(after.find("Mine") != nullptr && after.driver.empty());
     fs::remove(locked, ec);
+#endif
 }
 
 // The positions of every parameter (the GUI's sliders, the plug-in's host steps): the ends are the range (or "auto" /

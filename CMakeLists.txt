@@ -84,7 +84,8 @@ add_library(miniaudio STATIC src/app/miniaudio_build.cpp)
 target_include_directories(miniaudio PUBLIC third_party/miniaudio)
 # These options change miniaudio's struct layouts: PUBLIC, so every file that includes miniaudio.h gets the same.
 target_compile_definitions(miniaudio PUBLIC MA_NO_DECODING MA_NO_ENCODING MA_NO_GENERATION MA_NO_RESOURCE_MANAGER
-    MA_NO_NODE_GRAPH MA_NO_ENGINE MA_ENABLE_ONLY_SPECIFIC_BACKENDS MA_ENABLE_WASAPI MA_ENABLE_DSOUND MA_ENABLE_WINMM)
+    MA_NO_NODE_GRAPH MA_NO_ENGINE MA_ENABLE_ONLY_SPECIFIC_BACKENDS MA_ENABLE_WASAPI MA_ENABLE_DSOUND MA_ENABLE_WINMM
+    MA_ENABLE_NULL) # the null backend: devices without sound, for sysaudio_test only
 target_compile_options(miniaudio PRIVATE /W0)
 target_link_libraries(miniaudio PUBLIC ole32 winmm)
 
@@ -133,6 +134,11 @@ endif()
 add_executable(DJAPCmd src/app/cli.cpp)
 ap_own(DJAPCmd)
 target_link_libraries(DJAPCmd PRIVATE apapp)
+# the streams of the other APIs on miniaudio's null devices (no sound): needs apapp, so not in the core-only build
+add_executable(sysaudio_test tests/app/sysaudio_test.cpp)
+target_include_directories(sysaudio_test PRIVATE tests)
+ap_own(sysaudio_test)
+target_link_libraries(sysaudio_test PRIVATE apapp)
 target_link_options(DJAPCmd PRIVATE /PDBALTPATH:%_PDB%)
 
 # ---- Plug-in for DJ software (src/plugin): the Steinberg SDK in third_party/vst3sdk (MIT; not committed) ----

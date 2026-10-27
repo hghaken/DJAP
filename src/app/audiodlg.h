@@ -62,7 +62,7 @@ private:
     Changed onChange_;
     HWND hwnd_ = nullptr, owner_ = nullptr;
     HWND labels_[14] = {};
-    HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
+    HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, drift_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
     HWND driver_ = nullptr, open_ = nullptr, close_ = nullptr, panel_ = nullptr, info_ = nullptr;
     HWND inA_ = nullptr, outA_ = nullptr, inB_ = nullptr, outB_ = nullptr, rate_ = nullptr, buffer_ = nullptr;
     HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, health_ = nullptr, resetHealth_ = nullptr,

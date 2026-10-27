@@ -71,8 +71,9 @@ so they share the same latency (they are mixed after DJAP, and a difference woul
   float. The two channels of a filter run side by side in one SSE2 register (`StereoBiquad`), with the same
   operations in the same order as the scalar version, so each channel is bit-identical to it.
 - **Two rates.** The audio runs per sample; detectors that do not need sample rate (leveller, density, de-esser,
-  auto tone) update every 16 samples (the *control block*, 0.33 ms at 48 kHz), and the gains they produce are ramped
-  linearly across the next block.
+  auto tone) update every 16 samples (the *control block*, 0.33 ms at 48 kHz). The density and de-esser gains are
+  ramped linearly across the next block; the leveller's gain is held for the block - it moves at most a few dB per
+  second, so a step is under 0.003 dB.
 - **One look-ahead.** Only the limiter looks ahead (default 1.5 ms; 0, 1.5, 2, 3 or 5 ms). No other stage buffers, so the
   latency the processing reports - and the delay of a click or a drum hit's attack - is exactly the look-ahead. The
   filters do shift low frequencies a little later than that (their phase; 1.5).
@@ -125,6 +126,12 @@ kick's attack and every click still come out after the look-ahead alone; the low
 milliseconds later, as it does in an analogue multiband processor. Both decks run the same code, so two decks on the
 same loudness preset stay aligned; two different presets differ by the difference of their rows. Linear-phase
 crossovers would remove this but add 10-20 ms of latency to everything - DJAP's latency rule wins.
+
+The oversampled clipper and exciter add their halfband filters' phase on top: about 2.6, 4.0 and 4.75 samples at 2x,
+4x and 8x (0.05-0.1 ms at 48 kHz). It is not part of the latency a plug-in reports (an IIR filter's phase, like the
+crossovers', not a fixed delay); while such a stage fades in or out (20 ms) its delayed and undelayed signal are
+mixed for that moment - a comb at about 10 kHz and up for 20 ms, which an outside review measured but which is not
+audible as such.
 
 ## 2. Building blocks
 
@@ -691,8 +698,11 @@ the driver. Only the channels in use get buffers. Driver reset requests and buff
 fades out first, and when the driver is not ready yet (a USB interface that enumerates again, a new rate set in its
 control panel) it is tried again every second for a minute; the status bar says so meanwhile.
 
-The other APIs (WASAPI, DirectSound, MME) run through miniaudio [22]: each deck is one duplex stream from its input
-device to its output device on its own thread, registered with Windows' multimedia scheduler (MMCSS) as
+The other APIs (WASAPI, DirectSound, MME) run through miniaudio [22]. With Drift correction (the default) each deck
+is a capture stream from its input device into its drift buffer (`AsyncInput`, chapter 17, as for an ASIO output) and a
+playback stream that reads it, processes and plays; without it, one duplex stream from its input device to its
+output device - no buffer, but two devices on different clocks drift apart and give a glitch now and then. Each
+stream runs on its own thread, registered with Windows' multimedia scheduler (MMCSS) as
 "Pro Audio" for WASAPI. In shared mode, when the rate asked for is the device's own, miniaudio uses Windows'
 low-latency audio engine (IAudioClient3) by itself; in exclusive mode the stream has 2 periods instead of 3, one
 period less latency. DJAP also asks Windows not to throttle it for power (EcoQoS): it usually sits hidden in the
@@ -705,7 +715,8 @@ period in %, the periods over half their time, the late periods (dropouts) and t
 
 ### 16.5 Cost
 
-Both decks with the full chain at 48 kHz use about 4.3 % of one CPU core at the default 4x oversampling (target under
+Both decks with the full chain at 48 kHz use about 4.3-5.9 % of one CPU core at the default 4x oversampling, depending
+on the machine and its load (target under
 3 %; the test fails above 7 % - client, 2026-10-27: "CPU is not a problem"). The deck
 is bound by latency, not by arithmetic: each sample runs one long chain of dependent operations through all stages
 (a biquad's feedback is about 12 CPU cycles), so faster maths did not help; processing both channels in one SSE2
@@ -714,7 +725,8 @@ register and using fewer serial filters did.
 ## 17. Inputs on another clock
 
 With ASIO output, a deck's input may come from a WASAPI, DirectSound or MME device - for example a player sending
-into a virtual cable. The two devices run on their own crystals, so their sample rates differ by tens of ppm
+into a virtual cable; with those APIs as output too, Drift correction (on by default) puts the same buffer between a
+deck's input and output device (16.3). The two devices run on their own crystals, so their sample rates differ by tens of ppm
 (typically up to +-100 ppm); a buffer read at the nominal rate would run dry or overflow within minutes.
 `AsyncInput` (`src/core/asyncinput.*`) solves this:
 
@@ -838,7 +850,7 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Robustness | NaN / Inf input; FTZ restored | recovers within a block; processor mode unchanged |
 | Real time | allocation counter during processing and changes | 0 allocations |
 | Decks | deck A's processing does not change deck B; equal latency | bit-exact; the same delay |
-| CPU | both decks, full chain, 48 kHz | < 3 % of one core is the goal (fail > 7 %); measured 4.3 % at 4x oversampling |
+| CPU | both decks, full chain, 48 kHz | < 3 % of one core is the goal (fail > 7 %); measured 4.3-5.9 % at 4x oversampling |
 | Inputs on another clock | simulated clocks -500..+500 ppm, late callbacks, pauses | no xruns, drift within 3 ppm, fill within 0.5 ms |
 | Graphs | FFT against a DFT; sines 50 Hz - 18 kHz; correlation and width of known signals | 1e-12; within a bin; +-0.05 / 1 % |
 | Offline | synthetic songs through every loudness preset, checked with an independent meter | integrated loudness within 1 LU of the target, true peak <= ceiling |

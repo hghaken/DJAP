@@ -4,6 +4,7 @@
 #include "meterview.h"
 #include "placement.h"
 #include "resource.h"
+#include "settingslock.h"
 #include "stages.h"
 #include "version.h"
 
@@ -150,7 +151,7 @@ void MainWindow::startSavedAudio() {
         SysRoute routes[2];
         sysRoutesFrom(settings_, routes);
         ok = audio_.startSystem(api, routes, settings_.sampleRate, static_cast<unsigned>(settings_.bufferSize),
-                                settings_.exclusive, err);
+                                settings_.exclusive, settings_.driftCorrection, err);
     }
     if (ok) {
         startTries_ = 0;
@@ -602,8 +603,10 @@ void MainWindow::updateStatus() {
     if (audio_.simulating()) {
         left = L"Simulation (no sound): " + audio_.simulationFile().filename().wstring();
     } else if (audio_.systemRunning()) {
-        double latency = 0;
-        for (int d = 0; d < 2; ++d) latency = std::max(latency, audio_.sys().info(d).latencyMs);
+        double latency = 0; // with drift correction its buffer too
+        for (int d = 0; d < 2; ++d)
+            latency = std::max(latency, audio_.sys().info(d).latencyMs +
+                                            (audio_.asyncInput(d) ? audio_.asyncState(d).targetMs : 0.0));
         const EngineHealth h = audio_.health();
         wchar_t b[256];
         swprintf(b, 256, L"%hs: decks at %.1f kHz, device latency \x2248 %.1f ms   |   heaviest period %.0f %%, late %lld",
@@ -814,9 +817,12 @@ void MainWindow::save() {
         return n;
     };
     const std::vector<std::string> before = names();
-    saveError_ = settings_.saveMerged(ini_, base_, Settings::SaveRole::Owner)
-                     ? std::string()
-                     : "settings not saved: " + toUtf8(ini_.wstring());
+    {
+        const SettingsLock lock; // a plug-in saving at the same moment waits (settingslock.h)
+        saveError_ = settings_.saveMerged(ini_, base_, Settings::SaveRole::Owner)
+                         ? std::string()
+                         : "settings not saved: " + toUtf8(ini_.wstring());
+    }
     if (names() != before) { // a plug-in's new, renamed or deleted presets: the lists show them
         fillPresets(0);
         fillPresets(1);

@@ -38,11 +38,18 @@ AudioIO::~AudioIO() {
 }
 
 bool AudioIO::startSystem(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames,
-                          bool exclusive, std::string& error) {
+                          bool exclusive, bool driftCorrection, std::string& error) {
     fadeOutDecks(); // a running stream (another device or API) stops first
     stopSimulation(); // one source at a time; the engine is prepared again
     closeDriver();
-    const bool ok = sys_.start(api, routes, sampleRate, periodFrames, exclusive, engine_,
+    sys_.stop(); // the streams that may read the AsyncInputs end before they are reset
+    AsyncInput* drift[2] = {nullptr, nullptr};
+    for (int d = 0; d < 2; ++d)
+        if (driftCorrection && !routes[d].input.empty()) {
+            async_[d].reset(sampleRate); // the capture stream converts its device's rate to the decks' rate
+            drift[d] = &async_[d];
+        }
+    const bool ok = sys_.start(api, routes, sampleRate, periodFrames, exclusive, drift, engine_,
                                [this](double) {
                                    publish(0); // the decks' configurations for the rate in use
                                    publish(1);
@@ -244,7 +251,12 @@ bool AudioIO::simulate(const std::filesystem::path& file, std::string& error) {
     stopSimulation();
     stopDevice(); // the engine is prepared again below: the driver must not be using it
     WavData w;
-    if (!readWav(file, w, error)) return false;
+    try { // a file too large for memory: a message, not the end of the program
+        if (!readWav(file, w, error)) return false;
+    } catch (const std::exception& e) {
+        error = std::string("cannot read the file: ") + e.what();
+        return false;
+    }
     if (w.channels != 2 && w.channels != 4) {
         error = "the simulation needs a 2-channel (deck A) or 4-channel (deck A + B) WAV file";
         return false;

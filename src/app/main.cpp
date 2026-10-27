@@ -105,8 +105,17 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     // shows the first one's window and ends. Test runs with --ini or --simulate are left alone.
     HANDLE running = nullptr;
     if (!testRun) {
-        running =CreateMutexW(nullptr, FALSE, L"Local\\DJAP.Running");
-        if (running && GetLastError() == ERROR_ALREADY_EXISTS) {
+        running = CreateMutexW(nullptr, FALSE, L"Local\\DJAP.Running");
+        bool another = running && GetLastError() == ERROR_ALREADY_EXISTS;
+        // the first one may be ending (its window gone, the driver not yet let go - a quick restart): wait for it,
+        // up to 5 s, instead of ending with nothing running (outside review)
+        for (int i = 0; i < 25 && another && !FindWindowW(MainWindow::windowClass(), nullptr); ++i) {
+            CloseHandle(running);
+            Sleep(200);
+            running = CreateMutexW(nullptr, FALSE, L"Local\\DJAP.Running");
+            another = running && GetLastError() == ERROR_ALREADY_EXISTS;
+        }
+        if (another) {
             if (HWND first = FindWindowW(MainWindow::windowClass(), nullptr)) {
                 DWORD pid = 0;
                 GetWindowThreadProcessId(first, &pid);

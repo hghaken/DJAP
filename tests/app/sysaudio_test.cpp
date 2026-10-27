@@ -1,0 +1,86 @@
+// The streams of WASAPI / DirectSound / MME (sysaudio.*) on miniaudio's null backend: devices that make no sound and
+// run on a timer, so nothing is heard and no real device is opened. Checks the route a deck takes - one duplex
+// stream, or with drift correction a capture stream into the deck's AsyncInput and a playback stream that reads it -
+// starts, runs the deck, fills the buffer, counts its periods and stops cleanly.
+#include "check.h"
+#include "sysaudio.h"
+
+#include <chrono>
+#include <cstdio>
+#include <string>
+#include <thread>
+#include <vector>
+
+using namespace ap;
+
+namespace {
+
+void run(bool drift, const SysRoute& route) {
+    std::printf("-- %s\n", drift ? "drift correction: capture stream -> AsyncInput -> playback stream" : "one duplex stream");
+    AudioEngine engine;
+    AsyncInput async;
+    async.reset(48000.0);
+    AsyncInput* targets[2] = {drift ? &async : nullptr, nullptr};
+    const SysRoute routes[2] = {route, SysRoute()};
+    SysAudio sys;
+    std::string err;
+    bool published = false;
+    const bool ok = sys.start(AudioApi::Wasapi, routes, 48000.0, 480, false, targets, engine,
+                              [&](double) { published = true; }, err);
+    CHECK(ok);
+    CHECK(published);
+    if (!ok) {
+        std::printf("   start failed: %s\n", err.c_str());
+        return;
+    }
+    const SysStreamInfo info = sys.info(0);
+    CHECK(info.running && info.driftCorrected == drift);
+    CHECK(!sys.info(1).running); // a deck without devices does not run
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    const EngineHealth h = sys.health();
+    const uint64_t frames = engine.deck(0).processedFrames();
+    const AsyncInputState a = async.state();
+    std::printf("   %lld periods, deck A processed %llu frames (%.1f s), deck B %llu; device %u x %u frames, %.1f ms\n",
+                h.blocks, static_cast<unsigned long long>(frames), frames / 48000.0,
+                static_cast<unsigned long long>(engine.deck(1).processedFrames()), info.periodFrames, info.periods,
+                info.latencyMs);
+    CHECK(h.blocks > 0);
+    CHECK(frames > 48000); // more than one of the three seconds (the buffer fills first)
+    CHECK(engine.deck(1).processedFrames() == 0);
+    CHECK(!sys.failed());
+    if (drift) {
+        std::printf("   AsyncInput: %s, buffer %.1f ms (fill %.1f), drift %+.1f ppm, %lld input blocks, underruns %lld, "
+                    "overruns %lld\n",
+                    a.active ? "reading" : "filling up", a.targetMs, a.fillMs, a.driftPpm, a.writes, a.underruns,
+                    a.overruns);
+        CHECK(a.active);
+        CHECK(a.writes > 0);
+        CHECK(a.overruns == 0);
+        CHECK(a.targetMs > 0.0 && a.targetMs < 60.0);
+    } else {
+        CHECK(a.writes == 0); // the AsyncInput is not used
+    }
+    sys.stop();
+    CHECK(!sys.running());
+    const uint64_t after = engine.deck(0).processedFrames();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    CHECK(engine.deck(0).processedFrames() == after); // stopped: no callback any more
+}
+
+} // namespace
+
+int main() {
+    SysAudio::useNullBackend(true);
+    std::vector<SysDevice> inputs, outputs;
+    std::string err;
+    CHECK(SysAudio::devices(AudioApi::Wasapi, inputs, outputs, err));
+    if (inputs.empty() || outputs.empty()) {
+        std::printf("FAIL no null devices: %s\n", err.c_str());
+        return test::finish("sysaudio_test") + 1;
+    }
+    std::printf("null devices: \"%s\" -> \"%s\"\n", inputs[0].name.c_str(), outputs[0].name.c_str());
+    const SysRoute route{inputs[0].name, outputs[0].name};
+    run(false, route);
+    run(true, route);
+    return test::finish("sysaudio_test");
+}

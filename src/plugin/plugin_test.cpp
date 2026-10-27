@@ -374,14 +374,47 @@ int main(int argc, char** argv) {
     {
         Instance a;
         CHECK(a.open(module, &host));
-        a.controller->setParamNormalized(ap::plugin::kLookId, 3.0 / 5.0);
+        // a list of the window's choices 0, 1.5, 2, 3, 5 ms: 3 ms is the fourth (0.75)
+        ParameterInfo pi{};
+        for (int32 i = 0; i < a.controller->getParameterCount(); ++i)
+            if (a.controller->getParameterInfo(i, pi) == kResultOk && pi.id == ap::plugin::kLookId) break;
+        CHECK(pi.id == ap::plugin::kLookId && pi.stepCount == 4 && (pi.flags & ParameterInfo::kIsList));
+        a.controller->setParamNormalized(ap::plugin::kLookId, 0.75);
         std::printf("-- look-ahead 3.0 ms: latency %u samples\n", a.processor->getLatencySamples());
         CHECK(a.processor->getLatencySamples() == 144);
-        // a value between the window's choices (an old project's 0.5 ms, a host's automation) runs - and is
-        // reported - as the choice it snaps to: 1.5 ms, never a look-ahead under the true-peak minimum
-        a.controller->setParamNormalized(ap::plugin::kLookId, 0.5 / 5.0);
-        std::printf("-- look-ahead 0.5 ms asked: latency %u samples (1.5 ms)\n", a.processor->getLatencySamples());
+        String128 shown{};
+        a.controller->getParamStringByValue(ap::plugin::kLookId, 0.75, shown);
+        CHECK(shown[0] == '3' && shown[1] == '.' && shown[2] == '0' && shown[3] == 0);
+        // a value between the list's points (a host's automation) runs - and is reported - as the nearest point
+        a.controller->setParamNormalized(ap::plugin::kLookId, 0.3);
         CHECK(a.processor->getLatencySamples() == static_cast<uint32>(ap::lookFrames(1.5, kRate)));
+        a.close();
+    }
+
+    // 4a. an old project's look-ahead under 1.5 ms (0.5 and 1.0 were choices once) runs, shows and is reported as
+    // 1.5 ms from the start - not first 66 frames and 72 after the next edit (outside review)
+    {
+        Instance a;
+        CHECK(a.open(module, &host));
+        MemoryStream m;
+        {
+            IBStreamer s(&m, kLittleEndian);
+            s.writeInt32(2);
+            s.writeStr8("");
+            s.writeStr8("");
+            s.writeDouble(1.0);
+            s.writeInt8(0);
+            s.writeInt32(0); // no values: the defaults
+            s.writeInt32(4);
+        }
+        m.seek(0, IBStream::kIBSeekSet, nullptr);
+        CHECK(a.component->setState(&m) == kResultOk);
+        const uint32 before = a.processor->getLatencySamples();
+        CHECK(before == static_cast<uint32>(ap::lookFrames(1.5, kRate)));
+        CHECK(a.controller->getParamNormalized(ap::plugin::kLookId) == 0.25); // 1.5 ms in the list
+        a.controller->setParamNormalized(ap::plugin::kBypassId, 1.0); // another edit
+        CHECK(a.processor->getLatencySamples() == before);
+        std::printf("-- an old project's 1.0 ms: %u samples (1.5 ms) from the start\n", before);
         a.close();
     }
 

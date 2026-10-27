@@ -44,6 +44,11 @@ public:
     std::string driver;          // ASIO driver name; empty = none chosen
     std::string inDevice[2], outDevice[2]; // WASAPI / DirectSound / MME: each deck's devices (empty = deck unused)
     bool exclusive = false;      // WASAPI exclusive mode
+    // WASAPI / DirectSound / MME: each deck's input read with drift correction (a capture and a playback stream with
+    // the deck's AsyncInput between them: the input and output device may run on different clocks; adds a buffer of
+    // about 10-20 ms). Off: one duplex stream, no added buffer, but devices on different clocks drift apart (a glitch
+    // now and then).
+    bool driftCorrection = true;
     int sampleRate = 48000;      // requested rate
     int inputA = 1, inputB = 3;  // first channel (1-based) of each deck's input pair
     int outputA = 1, outputB = 3;

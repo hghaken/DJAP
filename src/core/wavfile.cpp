@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <fstream>
 
 namespace ap {
@@ -47,15 +48,20 @@ bool readWav(const std::filesystem::path& file, WavData& out, std::string& error
     const unsigned char* data = nullptr;
     size_t dataSize = 0;
     uint64_t ds64Data = 0; // RF64: the data chunk's size from the ds64 chunk
+    bool haveDs64 = false;
     size_t pos = 12;
     while (pos + 8 <= buf.size()) {
         const unsigned char* ck = buf.data() + pos;
         uint64_t size = u32(ck + 4);
-        if (rf64 && std::memcmp(ck, "data", 4) == 0 && size == 0xFFFFFFFFu) size = ds64Data;
         const size_t body = pos + 8;
-        if (body + size > buf.size()) size = buf.size() - body; // tolerate a truncated last chunk
+        // RF64's data chunk says 0xFFFFFFFF: its size is in the ds64 chunk (without one: the rest of the file)
+        if (rf64 && std::memcmp(ck, "data", 4) == 0 && size == 0xFFFFFFFFu) size = haveDs64 ? ds64Data : buf.size() - body;
+        // a truncated last chunk, or a size larger than the file (a broken or hostile ds64): what is there - compared
+        // without adding, which could overflow and send the position backwards
+        if (size > buf.size() - body) size = buf.size() - body;
         if (std::memcmp(ck, "ds64", 4) == 0 && size >= 16) {
             ds64Data = u64(ck + 16);
+            haveDs64 = true;
         } else if (std::memcmp(ck, "fmt ", 4) == 0 && size >= 16) {
             format = u16(ck + 8);
             channels = u16(ck + 10);
@@ -66,7 +72,7 @@ bool readWav(const std::filesystem::path& file, WavData& out, std::string& error
             data = buf.data() + body;
             dataSize = static_cast<size_t>(size);
         }
-        pos = body + static_cast<size_t>(size) + static_cast<size_t>(size & 1);
+        pos = body + static_cast<size_t>(size) + static_cast<size_t>(size & 1); // always forward: size <= the rest
     }
     if (!data || channels <= 0 || rate <= 0) {
         error = "no fmt or data chunk";
@@ -105,11 +111,15 @@ bool readWav(const std::filesystem::path& file, WavData& out, std::string& error
     return true;
 }
 
+bool wavNeedsRf64(uint64_t dataBytes) {
+    // a WAV's sizes are 32 bits; the RIFF size counts the header after it too (36 bytes, plus a pad byte)
+    return dataBytes + 37 > 0xFFFFFFFFull;
+}
+
 bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, std::string& error, bool rf64) {
     const int bytes = pcm24 ? 3 : 4;
     const uint64_t dataSize = static_cast<uint64_t>(d.samples.size()) * static_cast<uint64_t>(bytes);
-    // a WAV's sizes are 32 bits; the RIFF size counts the header after it too (36 bytes, plus a pad byte)
-    if (dataSize + 37 > 0xFFFFFFFFull) rf64 = true;
+    if (wavNeedsRf64(dataSize)) rf64 = true;
     std::vector<unsigned char> b;
     const char* tag = rf64 ? "RF64" : "RIFF";
     b.insert(b.end(), tag, tag + 4);
@@ -140,7 +150,7 @@ bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, s
     std::filesystem::path part = file;
     part += ".part";
     std::error_code ec;
-    {
+    try {
         std::ofstream out(part, std::ios::binary | std::ios::trunc);
         if (!out) {
             error = "cannot create the file";
@@ -177,6 +187,10 @@ bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, s
             error = "write failed (disk full?)";
             return false;
         }
+    } catch (const std::exception& e) { // out of memory for a piece: no half file left behind
+        std::filesystem::remove(part, ec);
+        error = std::string("write failed: ") + e.what();
+        return false;
     }
     std::filesystem::rename(part, file, ec);
     if (ec) {

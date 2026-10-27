@@ -84,14 +84,18 @@ public:
     const std::string& driverName() const { return driver_; }
     bool deviceRunning() const; // ASIO or another API
     bool audioActive() const { return simulating() || deviceRunning(); }
-    // Deck d runs with an ASIO output and an input of another API (while the device runs).
-    bool asyncInput(int d) const { return deviceRunning() && engine_.asyncInput(d) != nullptr; }
+    // Deck d reads its input through its AsyncInput (while the device runs): an input of another API with an ASIO
+    // output, or a WASAPI / DirectSound / MME deck with drift correction.
+    bool asyncInput(int d) const {
+        return deviceRunning() && (engine_.asyncInput(d) != nullptr || (systemRunning() && sys_.info(d).driftCorrected));
+    }
     AsyncInputState asyncState(int d) const { return async_[d].state(); }
 
-    // WASAPI / DirectSound / MME (GUI thread): one duplex stream per deck that has devices. Ends a simulation and
-    // closes an open ASIO driver first.
+    // WASAPI / DirectSound / MME (GUI thread): one duplex stream per deck that has devices, or with `driftCorrection`
+    // a capture and a playback stream with the deck's AsyncInput between them. Ends a simulation and closes an open
+    // ASIO driver first.
     bool startSystem(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames, bool exclusive,
-                     std::string& error);
+                     bool driftCorrection, std::string& error);
     bool systemRunning() const { return sys_.running() && !sys_.capturing(); }
     const SysAudio& sys() const { return sys_; }
     // Health of what runs (ASIO: the engine's counters; other APIs: both decks' streams).
@@ -124,7 +128,7 @@ private:
     int simChannels_ = 0;
 
     SysAudio sys_;
-    AsyncInput async_[2]; // decks with an input of another API
+    AsyncInput async_[2]; // decks with an input of another API, or drift-corrected WASAPI / DirectSound / MME decks
 #if AP_HAVE_ASIO
     AsioHost host_;
 #endif

@@ -793,6 +793,20 @@ void twoDecks() {
         std::printf("   look-ahead %.1f ms: impulse at %zu / %zu / %zu / %zu, expected %zu\n", look, at[0], at[1], at[2],
                     at[3], want);
         CHECK(at[0] == want && at[1] == want && at[2] == want && at[3] == want);
+        CHECK(out.frames() == imp.size() + static_cast<size_t>(rr.latency)); // the delay kept: nothing cut off
+    }
+    // an impulse on the very last frame still comes out, with the delay kept and removed
+    for (const bool align : {false, true}) {
+        Buffer imp = sig::silence(fs, 0.1);
+        imp.back() = 0.5f;
+        RenderDeck d2[2];
+        d2[0].used = true;
+        d2[0].values = allOff();
+        WavData out;
+        RenderResult rr;
+        CHECK(render(interleave({&imp, &imp}), d2, align, out, rr));
+        const Buffer b = channel(out, 0);
+        CHECK(!b.empty() && b.back() != 0.0f);
     }
 }
 

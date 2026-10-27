@@ -394,6 +394,8 @@ void DeckProcessor::applyConfig(const DeckConfig& c) {
     } else if ((running_[sExciter] && excOs_.factor() != c.oversampling) ||
                (running_[sClipper] && clipOs_.factor() != c.oversampling)) {
         osRetune_ = true;
+    } else {
+        osRetune_ = false; // back to the factor they run at (A -> B -> A while fading): they fade straight back in
     }
     dessHp_.set(c.dessHp);
     if (first || !running_[sWidth]) {
@@ -933,8 +935,8 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             blockPost_ += a * a + b * b;
         }
 
-        // soft clipper at twice the rate (no fold-back of its overtones; about 2.6 frames of phase delay at low
-        // frequencies, no look-ahead)
+        // soft clipper at 2, 4 or 8 times the rate (no fold-back of its overtones; about 2.6 / 4.0 / 4.75 frames of
+        // phase delay at low frequencies - an IIR filter's phase, like the crossovers', no look-ahead)
         if (running_[sClipper]) {
             clipDriveS_ = toward(clipDriveS_, c.clipDrive, c.gainSmooth);
             const double ceil = c.clipCeiling, d = clipDriveS_ / ceil, inv = 1.0 / ceil;

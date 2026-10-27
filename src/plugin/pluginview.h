@@ -57,6 +57,10 @@ private:
          meter_ = nullptr, edit_ = nullptr, editColour_ = nullptr;
     HWND sliderLabel_[4] = {}, slider_[4] = {}, sliderValue_[4] = {};
     HFONT font_ = nullptr, bold_ = nullptr;
+    // counted in g_views (attached() succeeded so far): removed() and detach() share one teardown, so a host that
+    // calls removed() twice, or never after terminate(), cannot unbalance the count (outside review)
+    bool attached_ = false;
+    void teardown();
     UINT dpi_ = 96;
     std::atomic<bool> dirty_{true};
     theme::Metal metal_;

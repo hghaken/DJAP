@@ -68,12 +68,24 @@ PluginView::~PluginView() {
 }
 
 void PluginView::detach() {
+    teardown();
+    plugin_ = nullptr;
+}
+
+void PluginView::teardown() {
+    if (plugin_) plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
     if (hwnd_) {
         KillTimer(hwnd_, 1);
         DestroyWindow(hwnd_);
         hwnd_ = nullptr;
     }
-    plugin_ = nullptr;
+    if (font_) DeleteObject(font_);
+    if (bold_) DeleteObject(bold_);
+    font_ = bold_ = nullptr;
+    if (attached_) {
+        attached_ = false;
+        if (--g_views == 0) unregisterClasses();
+    }
 }
 
 void PluginView::registerClasses(HINSTANCE instance) {
@@ -102,8 +114,9 @@ tresult PLUGIN_API PluginView::isPlatformTypeSupported(FIDString type) {
 }
 
 tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
-    if (isPlatformTypeSupported(type) != kResultTrue || !parent || !plugin_) return kResultFalse;
+    if (isPlatformTypeSupported(type) != kResultTrue || !parent || !plugin_ || attached_) return kResultFalse;
     if (g_views++ == 0) registerClasses(ghInst);
+    attached_ = true;
     Tooltips::setEnabled(plugin_->tooltips()); // the program's Setup switch
     const tresult r = CPluginView::attached(parent, type);
     dpi_ = GetDpiForWindow(static_cast<HWND>(parent));
@@ -115,7 +128,10 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
     }
     hwnd_ = CreateWindowExW(WS_EX_CONTROLPARENT, kClass, L"DJAP", WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN, 0, 0,
                             rect.getWidth(), rect.getHeight(), static_cast<HWND>(parent), nullptr, ghInst, this);
-    if (!hwnd_) return kResultFalse;
+    if (!hwnd_) {
+        teardown();
+        return kResultFalse;
+    }
     create();
     layout();
     fill();
@@ -124,16 +140,7 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
 }
 
 tresult PLUGIN_API PluginView::removed() {
-    if (plugin_) plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
-    if (hwnd_) {
-        KillTimer(hwnd_, 1);
-        DestroyWindow(hwnd_);
-        hwnd_ = nullptr;
-    }
-    if (font_) DeleteObject(font_);
-    if (bold_) DeleteObject(bold_);
-    font_ = bold_ = nullptr;
-    if (--g_views == 0) unregisterClasses();
+    teardown();
     return CPluginView::removed();
 }
 
@@ -229,8 +236,8 @@ void PluginView::create() {
                      L"file the program uses too.");
     tips_.add(editColour_, L"Opens the colour window: every value of the colour; Save as, Rename, Delete and Reset.");
     tips_.add(look_, L"The limiter's look-ahead: the only delay the processing adds (the host is told, so it can "
-                     L"keep this channel in time with the others). Longer handles peaks more gently; true-peak "
-                     L"limiting needs at least 1.0 ms; 0 ms = no delay, sample peaks only.");
+                     L"keep this channel in time with the others). Longer handles peaks more gently; every choice "
+                     L"above 0 limits the true peak; 0 ms = no delay, sample peaks only.");
     tips_.add(lookLabel_, L"The limiter's look-ahead: the only delay the processing adds.");
     tips_.add(oversampling_, L"How many times the sample rate the soft clipper and the exciter work at (4x by default). "
                              L"Their overtones above the audio band would fold back as harsh tones that do not belong "
@@ -417,7 +424,8 @@ void PluginView::command(int id, int code) {
         fill();
     } else if (id == idLook && code == CBN_SELCHANGE) {
         const int sel = static_cast<int>(SendMessageW(look_, CB_GETCURSEL, 0, 0));
-        if (sel >= 0 && sel < static_cast<int>(std::size(kLooks))) plugin_->edit(kLookId, kLooks[sel] / 5.0);
+        if (sel >= 0 && sel < static_cast<int>(std::size(kLooks))) // the parameter is a list of the same five
+            plugin_->edit(kLookId, sel / static_cast<double>(std::size(kLooks) - 1));
     } else if (id == idOversampling && code == CBN_SELCHANGE) {
         const int sel = static_cast<int>(SendMessageW(oversampling_, CB_GETCURSEL, 0, 0));
         if (sel >= 0 && sel <= 2) plugin_->edit(kOversamplingId, sel / 2.0);

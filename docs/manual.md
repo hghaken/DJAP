@@ -206,6 +206,13 @@ the drift between them at the cost of a buffer of about 10-20 ms.
 With every API the processing itself adds only the limiter look-ahead; the rest of the latency is the devices'
 buffers (chapter 10).
 
+With WASAPI, DirectSound and MME a deck's input and output device usually run on clocks of their own (a virtual
+cable and a USB headset, a recording device and the PC's speakers), and two clocks always drift apart a little. With
+**Drift correction** on (the default, Setup window) DJAP reads the input a little faster or slower - at most 0.2 %,
+inaudible - so they never drift apart, at the cost of a buffer of about 10-20 ms (shown while running). Off, the
+input goes straight to the output with no buffer, but devices on different clocks give a short glitch now and then;
+switch it off only when the input and the output are the same device.
+
 ### 3.4 Test safely
 
 Opening a driver or a device in exclusive mode takes it from other programs, and outputs you think are silent may
@@ -304,6 +311,7 @@ the audio again (a short fade-out and fade-in).
 |---|---|
 | **Processing** | *Two decks* (deck A and deck B, each its own input, output and loudness preset) or *One channel* (one stereo processor, for example for what Windows plays). |
 | **Audio API** | ASIO, WASAPI, DirectSound or MME (see 3.3). Choosing another API stops the audio. **Exclusive** (WASAPI only): lower latency, but the devices are taken from other programs while the audio runs. |
+| **Drift correction** (WASAPI, DirectSound, MME) | On (default): each deck's input is read a little faster or slower so that an input and output device on different clocks never drift apart; adds a buffer of about 10-20 ms. Off: no buffer, but a glitch now and then unless input and output are the same device (see 3.3). Changing it while the audio runs starts the audio again. |
 | **Deck inputs** / **Input from** (ASIO only) | Where the decks' inputs come from: *ASIO input pairs*, or devices of WASAPI, DirectSound or MME (drift-corrected; adds a buffer of about 10-20 ms). The outputs stay ASIO. |
 | **ASIO driver** | The installed ASIO drivers. **Open driver** opens it (DJAP asks first: it may take the interface from other programs); **Close driver** releases it; **Control panel** opens the driver's own settings (buffer size, clock source). Under it: the driver's state. |
 | **Deck A / B input**, **output** | ASIO: a channel pair per deck, with the driver's channel names once it is open. Other APIs: an input and an output device per deck; *(none)* = the deck does not run. A saved device that is not connected shows "(not found)". |
@@ -657,9 +665,8 @@ The program and the plug-in can be installed and used together or apart.
 The window is one deck strip of the program:
 
 - **Oversampling** - 2x, 4x (default) or 8x, as in the Setup window (5.1); stored with the DJ software's project.
-- **Look-ahead** - the limiter's look-ahead, 0, 1.5, 2, 3 or 5 ms (see 5.1); the DJ software is told the new delay. A
-  value the DJ software sets in between (an automation, an old project's 0.5 ms) runs as the nearest of these - above
-  0 at least 1.5 ms - and the window shows what runs.
+- **Look-ahead** - the limiter's look-ahead, 0, 1.5, 2, 3 or 5 ms (see 5.1), a list of these five in the DJ software
+  too; the DJ software is told the new delay. An old project's 0.5 or 1.0 ms runs as 1.5 ms.
 - **Bypass** - lit: the input goes out unchanged, delayed by the same look-ahead.
 - **Loudness** and **Colour** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
   and colour windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
@@ -700,8 +707,9 @@ Windows starts.
   comes out after that, plus a fraction of a millisecond. The filters that split the spectrum let the lowest frequencies follow a few
   milliseconds later (Medium: about 6 ms at 100 Hz, 11 ms at 50 Hz; the technical manual, 1.5, lists each loudness
   preset), as in any multiband processor; both decks on the same loudness preset stay aligned.
-- with an input on another clock (an ASIO output fed from a WASAPI / DirectSound / MME input): that input's period
-  plus the drift buffer, about 10-20 ms.
+- with an input on another clock (an ASIO output fed from a WASAPI / DirectSound / MME input, or WASAPI /
+  DirectSound / MME with Drift correction on): the drift buffer, about 10-20 ms (the smaller the buffer size, the
+  smaller it is).
 
 The Setup window and the status bar show the total.
 
@@ -761,7 +769,7 @@ DJAPCmd --version | --help
   on both channels). A 2-channel file is deck A; a 4-channel file is deck A (channels 1-2) and deck B (3-4). Each deck
   uses its loudness preset and colour from the settings unless `--a` / `--b` (loudness preset, or `off` for unprocessed) and `--ca` /
   `--cb` (colour) say otherwise. The output is 32-bit float WAV (or 24-bit PCM with `--pcm24`), with the look-ahead
-  delay removed (kept with `--keep-delay`); over 4 GB (about three hours of 4-channel 24-bit audio) it is written as
+  delay removed (kept with `--keep-delay`: the file is then longer by the delay, nothing of the end is cut off); over 4 GB (about three hours of 4-channel 24-bit audio) it is written as
   RF64, the 64-bit form of WAV. The file is written under a temporary name first, so a failed render leaves no half
   file. `--oversampling` sets the clipper's and exciter's oversampling for this render (default: the settings'). After
   rendering it prints a report of input and output loudness.

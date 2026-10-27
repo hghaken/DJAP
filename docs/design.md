@@ -247,8 +247,8 @@ The handbook records that a 4x / 16-tap detector let full-band noise through by 
 oversampling (planned 4x at 88.2 / 96 kHz; built: 8x at every rate), windowed-sinc prototype of odd length centred on a tap, starting
 with 32 taps per phase (16 frames of detector delay, 0.36 ms) and going to 48 if the full-band noise test fails.
 Built: 96 taps per phase with a Kaiser window (beta 5), plus a 0.1 dB margin at 1.5 ms look-ahead - 32 taps let
-full-band noise 1.07 dB over the ceiling; true-peak mode needs a look-ahead of at least 48 frames, and the deck never
-uses less than 66 above 0 (`kMinLookFrames`, deck.h).
+full-band noise 1.07 dB over the ceiling; the detector's delay is 48 frames, and with the window of at least 19 frames
+the deck never uses less than 66 above 0 (`kMinLookFrames`, deck.h).
 The limiter uses the true peak when the look-ahead covers the detector delay, else the sample peak; window
 `W = look - D + 1` for a detector of delay D (generalising 10.10). Stated guarantee: sample peak always <= ceiling;
 true peak <= ceiling + 0.1 dB for any input when look-ahead >= detector delay.
@@ -574,11 +574,14 @@ both decks (below). The other APIs (through miniaudio, `src/app/sysaudio.*`): ea
 device to its own output device (Windows shows most interfaces as stereo devices per pair) as one duplex stream
 on its own thread; a deck with "(none)" does not run. The decks run at the sample rate chosen; miniaudio converts
 when a device runs at another rate or channel count. These paths add the devices' buffering (input period plus
-output buffer, shown as an estimate) and, when input and output are different devices, their clocks may drift
-apart: miniaudio's duplex stream of these synchronous backends has no drift correction, so a growing or emptying
-backlog ends in a glitch now and then (an outside review; not yet corrected - for different clocks use ASIO output
-with the drift-corrected deck inputs, 6.1). The processing itself still adds only
-the look-ahead.
+output buffer, shown as an estimate) and, when input and output are different devices, their clocks drift apart:
+miniaudio's duplex stream of these synchronous backends has no drift correction, so a growing or emptying backlog
+ends in a glitch now and then (outside review). Hence **Drift correction** (`[Audio] DriftCorrection`, on by
+default; client, 2026-10-27: "look at this one especially"): a deck is then a capture stream into its `AsyncInput`
+and a playback stream that reads it with the drift loop of 6.1 - the same code as the ASIO case, at the cost of its
+buffer (input block + output period + 3 ms margin: about 23 ms at 10 ms periods, about 8 ms at 128 frames). Off: the
+duplex stream, for an input and output of one device (one clock). The processing itself still adds only the
+look-ahead; `sysaudio_test` runs both routes on miniaudio's null devices.
 
 Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), an "About DJAP..." button, and the audio API and, for WASAPI, the exclusive switch. ASIO:
 "Deck inputs" (ASIO input pairs, or WASAPI / DirectSound / MME devices, 6.1), the driver (installed drivers from the
@@ -664,7 +667,7 @@ preset (`[Preset X]`) and per colour (`[Colour X]`), readable and editable by ha
 | Real time | global `operator new` counter during processing, parameter changes, switches, profile changes | 0 allocations |
 | Clicks | every parameter change on a sine | no step larger than the signal's own |
 | Decks | A processing does not change B; equal latency | bit-exact B; same delay |
-| CPU | both decks full chain, 48 kHz | goal < 3 %, fail > 7 % of one core (client, 2026-10-24; was < 1 % / > 2 %, measured 2.8-3.0 %: the deck is latency-bound; fail 5 -> 7 % on 2026-10-27, client: "CPU is not a problem" - 4.3 % with 4x oversampling) |
+| CPU | both decks full chain, 48 kHz | goal < 3 %, fail > 7 % of one core (client, 2026-10-24; was < 1 % / > 2 %, measured 2.8-3.0 %: the deck is latency-bound; fail 5 -> 7 % on 2026-10-27, client: "CPU is not a problem" - 4.3 % with 4x oversampling; an outside review measured 5.1-5.9 % on a busier machine) |
 | Offline | render synthetic + copied music, check with `audiotool.py measure / compare` | I within 1 LU of T, TP <= ceiling, bypass bit-exact |
 | Input on another clock | simulated clocks -500..+500 ppm, late callbacks, capture pause, output pause; read speed 1; fractional speed 1.0001 with tones; engine with one deck from an async input | no xruns in normal running, drift within 3 ppm, fill within 0.5 ms; recovers; bit-exact; +-0.1 dB to 16 kHz, residual < -85 dB to 10 kHz; 0 allocations |
 
@@ -691,9 +694,9 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   values can be added or reordered without breaking a host's project. Four more: the preset list and the colour list
   (the presets and colours of `%APPDATA%\DJAP\DJAP.ini`, or the shipped ones; a last entry "(other values)"; they
   grow and shrink with the preset window, announced with `restartComponent(kParamTitlesChanged)`), Bypass (the
-  host's bypass flag: the input delayed by the look-ahead) and the look-ahead (0..5 ms in steps of 0.1; it runs as the
-nearest of the window's choices 0, 1.5, 2, 3, 5 - above 0 at least 1.5 - and the latency reported follows). All can be
-  automated.
+  host's bypass flag: the input delayed by the look-ahead) and the look-ahead (a list of the window's choices 0, 1.5,
+  2, 3, 5 ms - so the host shows what runs; an old project's 0.5 or 1.0 ms runs as 1.5 - and the latency reported
+  follows). All can be automated.
 - **Choosing a preset or colour** (window or host): the controller loads that preset's values, tells the host to
   read them again (`restartComponent(kParamValuesChanged)`) and hands them to the processing as a whole (the
   processor never reads the lists: they change on the GUI thread). Choosing the preset that is already chosen loads

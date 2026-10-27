@@ -164,7 +164,7 @@ void AsyncInput::beginPeriod(int frames, double now) {
             active_ = false; // silence, fill up again with a larger margin
             // an underrun after a step down: that step was one too many - the margin never goes under the level
             // that held again (lasting jitter: a plain decay walked back into the failing margin every ~4 minutes)
-            if (decayed_) marginFloorMs_ = std::max(marginFloorMs_, marginMs_ + kMarginDecayMs);
+            if (decayed_) marginFloorMs_ = std::min(kMarginMaxMs, std::max(marginFloorMs_, marginMs_ + kMarginDecayMs));
             decayed_ = false;
             marginMs_ = std::min(kMarginMaxMs, marginMs_ + kMarginStepMs);
             calmS_ = 0.0;

@@ -2,6 +2,7 @@
 // more than 4 GB are RF64 (EBU Tech 3306, the 64-bit form of WAV), in and out.
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -21,5 +22,7 @@ bool readWav(const std::filesystem::path& file, WavData& out, std::string& error
 // 32-bit sizes (about 4 GB: three hours of 4-channel 24-bit audio at 48 kHz), or always with `rf64` (tests). Written
 // to "<file>.part" first and renamed when complete: a failed write leaves no half file under the name asked for.
 bool writeWav(const std::filesystem::path& file, const WavData& data, bool pcm24, std::string& error, bool rf64 = false);
+// The rule writeWav uses: data of this many bytes does not fit a WAV's 32-bit sizes.
+bool wavNeedsRf64(uint64_t dataBytes);
 
 } // namespace ap

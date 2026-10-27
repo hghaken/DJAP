@@ -388,7 +388,11 @@ int render(const Settings& s, const fs::path& in, const fs::path& out, const std
     if (fs::exists(out, ec) && fs::equivalent(in, out, ec)) return usageError("the output file is the input file");
     if (!trace.empty()) { // checked before the render (it once was after it, and could overwrite the input or output)
         const auto same = [&](const fs::path& x) {
-            return fs::absolute(trace, ec).lexically_normal() == fs::absolute(x, ec).lexically_normal() ||
+            // Windows' file names ignore case: OUT.WAV is out.wav (the output does not exist yet: equivalent() fails)
+            const std::wstring a = fs::absolute(trace, ec).lexically_normal().wstring(),
+                               b = fs::absolute(x, ec).lexically_normal().wstring();
+            return CompareStringOrdinal(a.c_str(), static_cast<int>(a.size()), b.c_str(), static_cast<int>(b.size()),
+                                        TRUE) == CSTR_EQUAL ||
                    (fs::exists(trace, ec) && fs::exists(x, ec) && fs::equivalent(trace, x, ec));
         };
         if (same(in) || same(out)) return usageError("--trace must name a file of its own, not the input or the output");

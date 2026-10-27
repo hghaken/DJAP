@@ -20,7 +20,7 @@ namespace {
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
           idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idAbout, idOversampling,
-          idCheckUpdates, idCheckNow, idInstall, idTooltips };
+          idCheckUpdates, idCheckNow, idInstall, idTooltips, idDrift };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 // limiter look-ahead choices (ms; 1.5 the default). Nothing between 0 and 1.5: below about 1.3 ms the true-peak
@@ -168,6 +168,8 @@ void AudioWindow::createControls() {
     inputs_ = make(WC_COMBOBOXW, L"", combo, idInputs);
     exclusive_ = make(L"BUTTON", L"Exclusive (WASAPI: lower latency)",
                       BS_AUTOCHECKBOX | WS_TABSTOP, idExclusive);
+    drift_ = make(L"BUTTON", L"Drift correction (input and output device on different clocks)",
+                  BS_AUTOCHECKBOX | WS_TABSTOP, idDrift);
     driver_ = make(WC_COMBOBOXW, L"", combo, idDriver);
     open_ = make(L"BUTTON", L"Open driver", BS_OWNERDRAW | WS_TABSTOP, idOpen);
     close_ = make(L"BUTTON", L"Close driver", BS_OWNERDRAW | WS_TABSTOP, idClose);
@@ -221,6 +223,12 @@ void AudioWindow::createControls() {
                     L"for devices without a good driver.\nChoosing another one stops the audio.");
     tips_.add(exclusive_, L"WASAPI only: take the devices for this program alone - lower latency and no Windows "
                           L"mixing, but other programs cannot use them while the audio runs (asks at Start).");
+    tips_.add(drift_, L"WASAPI, DirectSound, MME: each deck's input and output device usually run on clocks of their "
+                      L"own, which drift apart - without correction a glitch now and then. On (the default): the "
+                      L"program reads the input a little faster or slower (at most 0.2 %, inaudible) so they never "
+                      L"drift apart, at the cost of a buffer of about 10-20 ms (shown while running). Off: one "
+                      L"stream from input to output, no buffer - for an input and output of the same device (one "
+                      L"clock).");
     tips_.add(inputs_, L"With ASIO: where the decks' inputs come from - the interface's ASIO input pairs, or per "
                        L"deck an input device of WASAPI, DirectSound or MME (for example a player sending into a "
                        L"virtual cable). The outputs stay ASIO.\nSuch an input runs on its own clock: the program "
@@ -302,7 +310,7 @@ void AudioWindow::setFonts() {
     SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0, dpi_);
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
-    for (HWND h : {decks_, api_, inputs_, exclusive_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
+    for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
                    start_, stop_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, about_, checkUpdates_, tooltips_,
                    checkNow_, install_, updateInfo_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
@@ -332,6 +340,7 @@ void AudioWindow::layout() {
     y += h + g;
     MoveWindow(labels_[9], m, y, labelW, h, TRUE);
     MoveWindow(inputs_, m + labelW + g, y, px(300), px(200), TRUE);
+    MoveWindow(drift_, m + labelW + px(300) + 2 * g, y, W - labelW - px(300) - 2 * g, h, TRUE);
     y += h + g;
     MoveWindow(labels_[0], m, y, labelW, h, TRUE);
     const int comboW = W - labelW - 3 * (bw + g) - g;
@@ -445,6 +454,7 @@ void AudioWindow::fillAll() {
     for (int i = 0; i < 4; ++i)
         if (kApis[i] == current) SendMessageW(api_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
     SendMessageW(exclusive_, BM_SETCHECK, settings_.exclusive ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(drift_, BM_SETCHECK, settings_.driftCorrection ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(link_, BM_SETCHECK, settings_.linkPresets ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(follow_, BM_SETCHECK, settings_.followsVolume() ? BST_CHECKED : BST_UNCHECKED, 0);
     // ASIO: where the decks' inputs come from
@@ -458,6 +468,7 @@ void AudioWindow::fillAll() {
         if (kApis[i] == inApi) SendMessageW(inputs_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
     }
     EnableWindow(inputs_, current == AudioApi::Asio);
+    EnableWindow(drift_, current != AudioApi::Asio); // ASIO: one clock; its inputs of other APIs always correct
     EnableWindow(exclusive_, current == AudioApi::Wasapi || (current == AudioApi::Asio && inApi == AudioApi::Wasapi));
     // devices of an API (lists only; nothing is opened); the saved one stays listed when it is not there
     auto devices = [&](HWND combo, std::vector<SysDevice>& list, size_t listed, const std::string& value,
@@ -604,6 +615,7 @@ void AudioWindow::fillAll() {
 void AudioWindow::readChoices() {
     // the API is read in command(): the device / pair lists still belong to the API they were filled for
     settings_.exclusive = SendMessageW(exclusive_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+    settings_.driftCorrection = SendMessageW(drift_, BM_GETCHECK, 0, 0) == BST_CHECKED;
     const LRESULT d = SendMessageW(driver_, CB_GETCURSEL, 0, 0);
     if (d >= 0) {
         const int n = static_cast<int>(SendMessageW(driver_, CB_GETLBTEXTLEN, static_cast<WPARAM>(d), 0));
@@ -686,7 +698,7 @@ bool AudioWindow::startAudio(bool askExclusive) {
         SysRoute routes[2];
         sysRoutesFrom(settings_, routes);
         ok = audio_.startSystem(api, routes, settings_.sampleRate, static_cast<unsigned>(settings_.bufferSize),
-                                settings_.exclusive, err);
+                                settings_.exclusive, settings_.driftCorrection, err);
     }
     settings_.startAudio = ok;
     if (!ok) placement::messageBox(hwnd_, fromUtf8(err).c_str(), L"Start audio", MB_OK | MB_ICONERROR);
@@ -789,7 +801,7 @@ void AudioWindow::command(int id, int code) {
         onChange_();
         return;
     }
-    if ((code == CBN_SELCHANGE && !filling_) || (id == idExclusive && code == BN_CLICKED)) {
+    if ((code == CBN_SELCHANGE && !filling_) || ((id == idExclusive || id == idDrift) && code == BN_CLICKED)) {
         readChoices();
         // while the audio runs a new device, pair, rate or buffer size is taken at once: the audio starts again
         if (id != idDriver && audio_.deviceRunning()) startAudio(id == idExclusive);
@@ -933,11 +945,22 @@ void AudioWindow::refresh() {
             for (int d = 0; d < 2; ++d) {
                 const SysStreamInfo s = audio_.sys().info(d);
                 if (!s.running) continue;
-                wchar_t line[400];
-                swprintf(line, 400, L"\n%s: %s \x2192 %s; device %s, %u x %u frames; latency \x2248 %.1f ms + %.2f ms",
-                         d == 0 ? L"Deck A" : L"Deck B", fromUtf8(s.input).c_str(), fromUtf8(s.output).c_str(),
-                         khz(s.deviceRate).c_str(), s.periodFrames, s.periods, s.latencyMs,
-                         lookFrames(settings_.lookAheadMs, audio_.sampleRate()) * 1000.0 / audio_.sampleRate());
+                wchar_t line[480];
+                const double look = lookFrames(settings_.lookAheadMs, audio_.sampleRate()) * 1000.0 / audio_.sampleRate();
+                if (s.driftCorrected) { // the drift buffer between the two streams, the measured drift
+                    const AsyncInputState a = audio_.asyncState(d);
+                    swprintf(line, 480,
+                             L"\n%s: %s \x2192 %s; device %s, %u x %u frames; latency \x2248 %.1f ms (devices %.1f + "
+                             L"drift buffer %.1f + processing %.2f); drift %+.1f ppm%s; underruns %lld, overruns %lld",
+                             d == 0 ? L"Deck A" : L"Deck B", fromUtf8(s.input).c_str(), fromUtf8(s.output).c_str(),
+                             khz(s.deviceRate).c_str(), s.periodFrames, s.periods, s.latencyMs + a.targetMs + look,
+                             s.latencyMs, a.targetMs, look, a.driftPpm, a.active ? L"" : L" (filling up)", a.underruns,
+                             a.overruns);
+                } else {
+                    swprintf(line, 480, L"\n%s: %s \x2192 %s; device %s, %u x %u frames; latency \x2248 %.1f ms + %.2f ms",
+                             d == 0 ? L"Deck A" : L"Deck B", fromUtf8(s.input).c_str(), fromUtf8(s.output).c_str(),
+                             khz(s.deviceRate).c_str(), s.periodFrames, s.periods, s.latencyMs, look);
+                }
                 state += line;
             }
         }

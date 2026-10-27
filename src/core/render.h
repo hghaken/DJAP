@@ -36,7 +36,7 @@ using RecordSink = std::function<void(int deck, const MeterRecord& record)>;
 
 // Input: 2 channels = deck A; 4 channels = deck A (1-2) and deck B (3-4). A deck that is not `used` passes through
 // unprocessed (bypassed, delayed like the other). align = true removes the look-ahead delay from the output (same
-// length as the input); false keeps it like a live device (output = input length, delayed).
+// length as the input); false keeps it like a live device (the output longer by the delay: nothing cut off).
 bool renderOffline(const WavData& in, const RenderDeck decks[2], bool align, int chunkFrames, WavData& out,
                    RenderResult& result, std::string& error, const RecordSink& onRecord = {});
 

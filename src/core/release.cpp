@@ -264,7 +264,9 @@ bool parseLatestRelease(const std::string& json, ReleaseInfo& out, std::string& 
                 out.setupName = name;
                 out.setupUrl = a.text("browser_download_url");
                 const Json* size = a.get("size");
-                if (size && size->type == Json::Number && size->num > 0) out.setupSize = static_cast<uint64_t>(size->num);
+                // a size a setup can have (a huge number would not convert to an integer: undefined behaviour)
+                if (size && size->type == Json::Number && size->num > 0 && size->num < 1e12)
+                    out.setupSize = static_cast<uint64_t>(size->num);
                 const std::string digest = lower(a.text("digest"));
                 if (digest.compare(0, 7, "sha256:") == 0 && isHex64(digest.substr(7))) out.sha256 = digest.substr(7);
                 break;
@@ -302,6 +304,12 @@ int compareVersions(const std::string& a, const std::string& b) {
         const unsigned long u = i < x.size() ? x[i] : 0, v = i < y.size() ? y[i] : 0;
         if (u != v) return u < v ? -1 : 1;
     }
+    // the same numbers: a pre-release ("1.0.0-rc1") comes before the release itself; "+build" does not count
+    auto pre = [](const std::string& s) {
+        const size_t cut = s.find_first_of("+-");
+        return cut != std::string::npos && s[cut] == '-';
+    };
+    if (pre(a) != pre(b)) return pre(a) ? -1 : 1;
     return 0;
 }
 

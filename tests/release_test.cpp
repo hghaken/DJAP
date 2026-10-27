@@ -42,6 +42,9 @@ void versions() {
     CHECK(compareVersions("0.2", "0.1.99") > 0);
     CHECK(compareVersions("1.0", "1.0.0") == 0);      // a missing part is 0
     CHECK(compareVersions("0.1.93", "0.1.94") < 0);
+    CHECK(compareVersions("1.0.0-rc1", "1.0.0") < 0); // a pre-release before its release
+    CHECK(compareVersions("1.0.0", "1.0.0-rc1") > 0);
+    CHECK(compareVersions("1.0.0-rc1", "0.9.9") > 0);
 }
 
 const char* kRelease = R"({
@@ -97,6 +100,14 @@ void release() {
     }
     std::printf("   %d of %d refused\n", refused, static_cast<int>(sizeof bad / sizeof bad[0]));
     CHECK(refused == static_cast<int>(sizeof bad / sizeof bad[0]));
+
+    // a size no setup has (1e30 does not fit an integer: was undefined behaviour) counts as unknown
+    ReleaseInfo huge;
+    std::string e2;
+    CHECK(parseLatestRelease(R"({"tag_name": "v0.1.95", "assets": [{"name": "DJAP-Setup-0.1.95.exe", "size": 1e30,
+                                 "browser_download_url": "x"}]})",
+                             huge, e2));
+    CHECK(huge.setupSize == 0);
 
     // a digest that is not SHA-256 hex is not taken (the .sha256 asset is used then)
     ReleaseInfo y;
