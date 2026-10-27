@@ -19,7 +19,7 @@ namespace {
 
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
-          idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idAbout, idOversampling,
+          idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
           idCheckUpdates, idCheckNow, idInstall, idTooltips, idDrift };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
@@ -193,7 +193,6 @@ void AudioWindow::createControls() {
     startup_ = make(L"BUTTON", L"Start DJAP when Windows starts (in the notification area, with the audio of the last "
                                L"session)",
                     BS_AUTOCHECKBOX | WS_TABSTOP, idStartup);
-    about_ = make(L"BUTTON", L"About DJAP...", BS_OWNERDRAW | WS_TABSTOP, idAbout);
     tooltips_ = make(L"BUTTON", L"Show tooltips (what a control does, when the mouse rests on it)",
                      BS_AUTOCHECKBOX | WS_TABSTOP, idTooltips);
     checkUpdates_ = make(L"BUTTON", L"Check GitHub for a new version once a day (installed only when you click Install "
@@ -208,7 +207,7 @@ void AudioWindow::createControls() {
                  L"to speakers.",
                  SS_LEFT, 0);
 
-    for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_, about_, checkNow_, install_}) theme::makeButton(b);
+    for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_, checkNow_, install_}) theme::makeButton(b);
     for (HWND c : {decks_, api_, inputs_, drift_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
@@ -287,7 +286,6 @@ void AudioWindow::createControls() {
     tips_.add(startup_, L"On: DJAP starts when you log on to Windows, hidden in the notification area, and starts "
                         L"the audio of the last session (it retries for 2 minutes while the devices come up). "
                         L"Saved in Windows' list of startup programs, not in the settings file.");
-    tips_.add(about_, L"Version, the settings file in use and the licences.");
     tips_.add(tooltips_, L"On: every control of DJAP explains itself when the mouse rests on it (as this one). Off: no "
                          L"tooltips in any window. The plug-in follows the next time it is loaded.");
     tips_.add(checkUpdates_, L"On: once a day (and a little after the program starts) DJAP asks GitHub whether a newer "
@@ -310,7 +308,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, about_, checkUpdates_, tooltips_,
+                   start_, stop_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_,
                    checkNow_, install_, updateInfo_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
@@ -397,7 +395,6 @@ void AudioWindow::layout() {
     SetWindowTextW(labels_[2], two ? L"Deck A output" : L"Output");
     MoveWindow(start_, m + labelW + g, y, bw, h, TRUE);
     MoveWindow(stop_, m + labelW + bw + 2 * g, y, bw, h, TRUE);
-    MoveWindow(about_, m + W - bw, y, bw, h, TRUE);
     y += h + g;
     // the state: a line for the stream, then one per deck that may wrap to two
     const int stateLines = two ? 5 : 3;
@@ -730,10 +727,6 @@ void AudioWindow::command(int id, int code) {
         SendMessageW(startup_, BM_SETCHECK, !testRun_ && startsWithWindows() ? BST_CHECKED : BST_UNCHECKED, 0);
         return;
     }
-    if (id == idAbout && code == BN_CLICKED) {
-        if (onAbout_) onAbout_(hwnd_);
-        return;
-    }
     if (id == idTooltips && code == BN_CLICKED) {
         settings_.showTooltips = SendMessageW(tooltips_, BM_GETCHECK, 0, 0) == BST_CHECKED;
         Tooltips::setEnabled(settings_.showTooltips);
@@ -847,11 +840,12 @@ void AudioWindow::command(int id, int code) {
     refresh();
 }
 
-void AudioWindow::refresh() {
-    if (!hwnd_) return;
-    const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
-    // updates: this version and what the last check found; installing while the audio runs asks first
-    if (updater_) {
+// Updates: this version and what the last check found; installing while the audio runs asks first.
+UpdateView AudioWindow::updateView() const {
+    UpdateView v;
+    if (!updater_) return v;
+    const bool running = audio_.deviceRunning();
+    {
         const Updater::State st = updater_->state();
         const std::wstring me = fromUtf8(AP_VERSION_STRING), next = fromUtf8(updater_->release().version);
         const std::wstring when = updater_->checkedAt().empty() ? L"" : L", checked at " + fromUtf8(updater_->checkedAt());
@@ -875,13 +869,24 @@ void AudioWindow::refresh() {
             text = L"DJAP " + me + (settings_.checkUpdates ? L" - GitHub is asked once a day" : L" - the daily check is off");
             break;
         }
+        const bool newer = !next.empty() && compareVersions(updater_->release().version, AP_VERSION_STRING) > 0;
+        v.text = text;
+        v.canCheck = !updater_->busy() && st != Updater::State::Ready;
+        v.canInstall = newer && !audio_.simulating() && (st == Updater::State::Available || st == Updater::State::Failed);
+    }
+    return v;
+}
+
+void AudioWindow::refresh() {
+    if (!hwnd_) return;
+    const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
+    if (updater_) {
+        const UpdateView u = updateView();
         wchar_t old[512] = {};
         GetWindowTextW(updateInfo_, old, 512);
-        if (text != old) SetWindowTextW(updateInfo_, text.c_str());
-        const bool newer = !next.empty() && compareVersions(updater_->release().version, AP_VERSION_STRING) > 0;
-        EnableWindow(checkNow_, !updater_->busy() && st != Updater::State::Ready);
-        EnableWindow(install_, newer && !audio_.simulating() &&
-                                   (st == Updater::State::Available || st == Updater::State::Failed));
+        if (u.text != old) SetWindowTextW(updateInfo_, u.text.c_str());
+        EnableWindow(checkNow_, u.canCheck);
+        EnableWindow(install_, u.canInstall);
     }
     EnableWindow(close_, asio() && open);
     EnableWindow(panel_, asio() && open);

@@ -116,7 +116,7 @@ DJAP lives in the notification area (the icons next to the clock). Closing or mi
 there; **the audio goes on**. The first time this happens a message says so.
 
 - **Click** the icon to show the window again.
-- **Right-click** the icon for its menu: *Open DJAP*, *Setup...*, *Shutdown*.
+- **Right-click** the icon for its menu: *Open DJAP*, *Setup...*, *About DJAP...*, *Shutdown*.
 - The icon's tooltip shows whether the audio runs and each deck's loudness preset and colour (or "bypass").
 
 DJAP really ends only with **Shutdown** (from the icon's menu or the main window's right-click menu), when Windows shuts
@@ -227,7 +227,8 @@ amplifier, and watch the meters before you turn up.
 ![The main window with two decks](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
-no menu bar: **right-click anywhere in it** for *Setup...* and *Shutdown*. Every control has a tooltip that explains it
+no menu bar: **right-click anywhere in it** for *Setup...*, *About DJAP...* (the version, the settings file in use
+and the licences) and *Shutdown*. Every control has a tooltip that explains it
 when the mouse rests on it. The window can be made as large as you like; it cannot be made smaller than the size
 that still shows every meter row and a readable spectrum.
 
@@ -341,6 +342,8 @@ the audio again (a short fade-out and fade-in).
 - **Check now** asks at once.
 - **Install update** downloads and installs a newer version (chapter 11). Greyed when there is nothing newer.
 - The text beside the buttons shows this version and what the last check found.
+- **Check now** and **Install update** are in the **About DJAP** window too (right-click the main window or the
+  notification-area icon: *About DJAP...*).
 
 ### 5.4 Start, stop and state
 
@@ -348,8 +351,6 @@ the audio again (a short fade-out and fade-in).
 - **Stop audio** fades out and stops.
 - Under the buttons: the state - the driver or devices, rate, buffer, the latency of input, output and processing,
   and per deck the extra latency and drift of an input on another clock.
-- **About DJAP...** shows the version, the settings file in use and the licences.
-
 ### 5.5 Health
 
 Counters that show whether the computer keeps up with the audio (chapter 10). **Reset counters** sets them to 0.

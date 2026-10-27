@@ -78,7 +78,6 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     testRun_ = testRun;
     Tooltips::setEnabled(settings_.showTooltips); // before the first window makes its tooltips
     audioWindow_.setTestRun(testRun);
-    audioWindow_.onAbout([this](HWND owner) { about_.show(owner, ini_); }); // centred on the Setup window
     registerMeterView(instance);
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof wc;
@@ -115,6 +114,8 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     updateTrayTip();
     nextCheck_ = GetTickCount64() + 15000; // the first update check a little after the start
     audioWindow_.setUpdater(&updater_, [this] { checkForUpdate(); }, [this] { installUpdate(); });
+    about_.setUpdates([this] { return audioWindow_.updateView(); }, [this] { checkForUpdate(); },
+                      [this] { installUpdate(); });
     return true;
 }
 
@@ -259,6 +260,7 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             if (ticks_++ % 10 == 0) {
                 updateStatus();
                 audioWindow_.refresh();
+                about_.refresh(); // the download's percentage
                 // the daily update check (a test run asks only a test server of its own settings)
                 if (settings_.checkUpdates && GetTickCount64() >= nextCheck_ && !updater_.busy() &&
                     (!testRun_ || !settings_.updateUrl.empty()))
@@ -700,10 +702,11 @@ void MainWindow::checkForUpdate() {
     // would let anything that can edit the file point the updater at a server of its own (outside review)
     updater_.check(hwnd_, testRun_ ? settings_.updateUrl : std::string(), AP_VERSION_STRING);
     audioWindow_.refresh();
+    about_.refresh();
 }
 
 void MainWindow::installUpdate() {
-    HWND owner = audioWindow_.hwnd() ? audioWindow_.hwnd() : hwnd_;
+    HWND owner = about_.hwnd() ? about_.hwnd() : audioWindow_.hwnd() ? audioWindow_.hwnd() : hwnd_;
     if (audio_.simulating()) { // a test's simulation is never ended by an update
         placement::messageBox(owner, L"End the simulation first: the update closes DJAP.", L"Update",
                               MB_OK | MB_ICONINFORMATION);
@@ -722,6 +725,7 @@ void MainWindow::installUpdate() {
 
 void MainWindow::updateEvent(WPARAM what) {
     audioWindow_.refresh();
+    about_.refresh();
     updateStatus();
     if (what == 0 && updater_.state() == Updater::State::Available) { // once per new version
         const std::string v = updater_.release().version;
@@ -746,10 +750,11 @@ void MainWindow::updateEvent(WPARAM what) {
 }
 
 // The main window's right-click menu (client, 2026-10-25: no menu bar; "Exit and Setup"; 2026-10-26: Exit is
-// called Shutdown).
+// called Shutdown; 2026-10-27: About moved here from a button in the Setup window).
 void MainWindow::windowMenu(int x, int y) {
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, mAudio, L"&Setup...");
+    AppendMenuW(m, MF_STRING, mAbout, L"&About DJAP...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, mExit, L"Shut&down");
     TrackPopupMenuEx(m, TPM_RIGHTBUTTON, x, y, hwnd_, nullptr);
@@ -760,6 +765,7 @@ void MainWindow::trayMenu(int x, int y) {
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, mOpen, L"&Open DJAP");
     AppendMenuW(m, MF_STRING, mAudio, L"&Setup...");
+    AppendMenuW(m, MF_STRING, mAbout, L"&About DJAP...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, mExit, L"Shut&down");
     SetMenuDefaultItem(m, mOpen, FALSE);

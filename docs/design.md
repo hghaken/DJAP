@@ -486,7 +486,7 @@ amber). The small sizes (16-32 px: the notification area, title bars) are drawn 
 `tools/make_icon.py` writes `assets/DJAP.ico` (16-256 px; bitmaps below 256, PNG at 256) and the setup's
 header images; the program, its windows and the setup use it. It also draws the wide logo `assets/logo.png` (4:1:
 the icon and the name - "Audio" dark, "Processor" in teal, engraved - on a light brushed plate, over "Loudness and
-dynamics for two decks"). About (the Setup window's "About DJAP..." button; `aboutwnd.*`, client 2026-10-25: the large logo there, as in the client's
+dynamics for two decks"). About ("About DJAP..." in the right-click menus of the main window and the notification-area icon - a button in the Setup window until 2026-10-27, client; `aboutwnd.*`, client 2026-10-25: the large logo there, as in the client's
 player) shows it at the top on the metal, then the version, what the program does, the settings file (one line,
 shortened in the middle), the licence and the ASIO notice, and an OK button; modal.
 
@@ -594,7 +594,7 @@ stream. Any other ini value is Auto. The processing itself still adds only the l
 routes on miniaudio's null devices, Auto and Always for one device (`SysAudio::assumeOneDevice`), and a start with a
 device that is not there.
 
-Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), an "About DJAP..." button, and the audio API and, for WASAPI, the exclusive switch. ASIO:
+Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), and the audio API and, for WASAPI, the exclusive switch. ASIO:
 "Deck inputs" (ASIO input pairs, or WASAPI / DirectSound / MME devices, 6.1), the driver (installed drivers from the
 registry), Open /
 Close driver (opening asks first: it takes the interface from other programs), Control panel, the input and

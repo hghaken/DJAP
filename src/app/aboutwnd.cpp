@@ -22,7 +22,8 @@ namespace {
 
 const wchar_t* const kClass = L"APAboutWindow";
 const int kLogoW = 520, kLogoH = 130; // the wide logo (assets/logo.png, 4:1) at 100 %
-const int kWidth = 560, kHeight = 380;
+const int kWidth = 560, kHeight = 430;
+enum { idCheckNow = 201, idInstall };
 
 } // namespace
 
@@ -86,6 +87,7 @@ void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
     RECT r{0, 0, px(kWidth), px(kHeight)};
     AdjustWindowRectExForDpi(&r, style, FALSE, WS_EX_DLGMODALFRAME, dpi_);
     SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
+    refresh();
     placement::remember(hwnd_, "About", owner);
     EnableWindow(owner_, FALSE); // modal, as a message box
     ShowWindow(hwnd_, SW_SHOWNORMAL);
@@ -120,6 +122,17 @@ void AboutWindow::create() {
     legal_ = label(L"Licence: GPL-3.0; licences of components: THIRD_PARTY.md.\n"
                    L"ASIO is a trademark and software of Steinberg Media Technologies GmbH.",
                    0, 104, 36);
+    // the updates, as in the Setup window
+    auto button = [&](const wchar_t* text, int id, int bx) {
+        HWND b = CreateWindowExW(0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, bx, top + px(148),
+                                 px(110), px(30), hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
+        theme::makeButton(b);
+        return b;
+    };
+    checkNow_ = button(L"Check now", idCheckNow, x);
+    install_ = button(L"Install update", idInstall, x + px(118));
+    updateText_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX, x + px(240),
+                                  top + px(146), w - px(240), px(36), hwnd_, nullptr, inst, nullptr);
     ok_ = CreateWindowExW(0, L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                           px(kWidth - 20 - 96), px(kHeight - 20 - 30), px(96), px(30), hwnd_,
                           reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDOK)), inst, nullptr);
@@ -131,8 +144,18 @@ void AboutWindow::setFonts() {
     ncm.cbSize = sizeof ncm;
     SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0, dpi_);
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
-    for (HWND h : {text_, pathText_, legal_}) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
-    SendMessageW(ok_, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+    for (HWND h : {text_, pathText_, legal_, updateText_, checkNow_, install_, ok_})
+        SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+}
+
+void AboutWindow::refresh() {
+    if (!hwnd_ || !view_) return;
+    const UpdateView u = view_();
+    wchar_t old[512] = {};
+    GetWindowTextW(updateText_, old, 512);
+    if (u.text != old) SetWindowTextW(updateText_, u.text.c_str());
+    EnableWindow(checkNow_, u.canCheck);
+    EnableWindow(install_, u.canInstall);
 }
 
 void AboutWindow::close() {
@@ -164,6 +187,9 @@ LRESULT AboutWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_COMMAND:
         // OK, Enter, Escape; only clicks (an owner-drawn button also sends BN_SETFOCUS with its id)
         if ((LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) && HIWORD(wp) == BN_CLICKED) close();
+        if (LOWORD(wp) == idCheckNow && HIWORD(wp) == BN_CLICKED && checkNowDo_) checkNowDo_();
+        if (LOWORD(wp) == idInstall && HIWORD(wp) == BN_CLICKED && installDo_) installDo_();
+        refresh();
         return 0;
     case WM_CLOSE:
         close();

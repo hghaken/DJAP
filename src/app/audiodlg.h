@@ -1,5 +1,5 @@
 // Setup window (client, 2026-10-25: "all settings in one window"; was the Audio window, docs/design.md section 6):
-// the program-wide settings - limiter look-ahead, start with Windows, an About button - and the audio API - ASIO, WASAPI (shared or exclusive), DirectSound, MME.
+// the program-wide settings - limiter look-ahead, start with Windows - and the audio API - ASIO, WASAPI (shared or exclusive), DirectSound, MME.
 // ASIO: the driver (from the registry; opened only on request, after a warning), the channel pair of each deck's
 // input and output, sample rate, buffer size, the driver's control panel. Other APIs: each deck's input and output
 // device (or none), sample rate, period. With ASIO the decks' inputs may instead come from WASAPI / DirectSound /
@@ -32,14 +32,14 @@ public:
     HWND hwnd() const { return hwnd_; }
     // Test runs (--ini / --simulate) never change the user's logon programs: the start-with-Windows box is greyed.
     void setTestRun(bool testRun) { testRun_ = testRun; }
-    // The About button (the About window belongs to the main window).
-    void onAbout(std::function<void(HWND owner)> f) { onAbout_ = std::move(f); }
     // Updates: the main window's updater (its state is shown here) and what Check now / Install update do.
     void setUpdater(const Updater* updater, std::function<void()> checkNow, std::function<void()> install) {
         updater_ = updater;
         checkNowDo_ = std::move(checkNow);
         installDo_ = std::move(install);
     }
+    // The updater's state as these windows show it (also for the About window).
+    UpdateView updateView() const;
 
 private:
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -67,14 +67,13 @@ private:
     HWND inA_ = nullptr, outA_ = nullptr, inB_ = nullptr, outB_ = nullptr, rate_ = nullptr, buffer_ = nullptr;
     HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, health_ = nullptr, resetHealth_ = nullptr,
          note_ = nullptr;
-    HWND look_ = nullptr, startup_ = nullptr, about_ = nullptr; // look-ahead, start with Windows, About
+    HWND look_ = nullptr, startup_ = nullptr; // look-ahead, start with Windows
     HWND oversampling_ = nullptr; // the soft clipper's and the exciter's
     HWND tooltips_ = nullptr;                                    // the switch of all tooltips
     HWND checkUpdates_ = nullptr, checkNow_ = nullptr, install_ = nullptr, updateInfo_ = nullptr; // updates
     const Updater* updater_ = nullptr;
     std::function<void()> checkNowDo_, installDo_;
     bool testRun_ = false;
-    std::function<void(HWND)> onAbout_;
     HFONT font_ = nullptr;
     UINT dpi_ = 96;
     Tooltips tips_;

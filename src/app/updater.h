@@ -17,6 +17,12 @@
 
 namespace ap {
 
+// What the Setup and About windows show of the updater: a line of text and whether Check now / Install update work.
+struct UpdateView {
+    std::wstring text;
+    bool canCheck = false, canInstall = false;
+};
+
 class Updater {
 public:
     enum class State { Idle, Checking, UpToDate, Available, Downloading, Ready, Failed };
