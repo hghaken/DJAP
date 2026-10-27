@@ -131,28 +131,43 @@ void formats() {
     silence(SampleFormat::Int16, s16, 2, 3);
     CHECK(s16[1] == 2 && s16[2] == 0 && s16[4] == 0 && s16[5] == 6);
 
-    // 16-bit dither: a tone of 0.4 steps is gone when rounded, but lives on under the dither noise; no offset, and
-    // silence stays silent
+    // 16-bit dither: a tone of 0.4 steps on a level of 3 steps is gone when rounded (always 3), but lives on under the
+    // dither noise; no offset; silence and remains under one step stay silent
     const int n = 480000;
-    std::vector<float> tone(n), zeros(n, 0.0f);
-    for (int i = 0; i < n; ++i)
-        tone[static_cast<size_t>(i)] = static_cast<float>(0.4 / 32768.0 * std::sin(2.0 * 3.14159265358979 * 1000.0 * i / 48000.0));
-    std::vector<int16_t> q(n), z(n);
+    const double pi = 3.14159265358979;
+    std::vector<float> tone(n), zeros(n, 0.0f), remains(n), level(n, static_cast<float>(2.3 / 32768.0));
+    for (int i = 0; i < n; ++i) {
+        tone[static_cast<size_t>(i)] = static_cast<float>((3.0 + 0.4 * std::sin(2.0 * pi * 1000.0 * i / 48000.0)) / 32768.0);
+        remains[static_cast<size_t>(i)] = static_cast<float>(1e-7 * std::sin(2.0 * pi * 50.0 * i / 48000.0));
+    }
+    std::vector<int16_t> q(n), z(n), r(n), c(n);
     fromFloat(tone.data(), SampleFormat::Int16, q.data(), 0, n);
     fromFloat(zeros.data(), SampleFormat::Int16, z.data(), 0, n);
+    fromFloat(remains.data(), SampleFormat::Int16, r.data(), 0, n);
+    fromFloat(level.data(), SampleFormat::Int16, c.data(), 0, n);
     double corr = 0.0, mean = 0.0, ref = 0.0;
     for (int i = 0; i < n; ++i) {
-        const double s = std::sin(2.0 * 3.14159265358979 * 1000.0 * i / 48000.0);
+        const double s = std::sin(2.0 * pi * 1000.0 * i / 48000.0);
         corr += q[static_cast<size_t>(i)] * s;
         ref += s * s;
         mean += q[static_cast<size_t>(i)];
     }
     const double amp = corr / ref; // in steps; rounding alone gives 0 here
-    std::printf("   16-bit dither: a 0.4-step tone comes out at %.3f steps, offset %.4f steps, silence %s\n", amp,
-                mean / n, std::all_of(z.begin(), z.end(), [](int16_t v) { return v == 0; }) ? "silent" : "NOT silent");
+    auto silent = [](const std::vector<int16_t>& v) { return std::all_of(v.begin(), v.end(), [](int16_t x) { return x == 0; }); };
+    // TPDF (+-1 step triangular) plus the rounding: an error variance of 1/4 step^2 for any value between steps
+    // (rectangular dither would give 1/6, rounding alone 0 for a steady value)
+    double em = 0.0, ev = 0.0;
+    for (int16_t x : c) em += x - 2.3;
+    em /= n;
+    for (int16_t x : c) ev += (x - 2.3 - em) * (x - 2.3 - em);
+    ev /= n;
+    std::printf("   16-bit dither: a 0.4-step tone on 3 steps comes out at %.3f steps, offset %.4f steps; error variance "
+                "%.3f step^2 (TPDF 0.25); silence %s, remains under a step %s\n",
+                amp, mean / n - 3.0, ev, silent(z) ? "silent" : "NOT silent", silent(r) ? "silent" : "NOT silent");
     CHECK(std::fabs(amp - 0.4) < 0.02);
-    CHECK(std::fabs(mean / n) < 0.01);
-    CHECK(std::all_of(z.begin(), z.end(), [](int16_t v) { return v == 0; }));
+    CHECK(std::fabs(mean / n - 3.0) < 0.01);
+    CHECK(std::fabs(ev - 0.25) < 0.01 && std::fabs(em) < 0.01);
+    CHECK(silent(z) && silent(r));
 }
 
 // A fake driver: four input and four output channel buffers of one format, `period` frames per buffer switch.

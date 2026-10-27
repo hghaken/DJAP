@@ -133,7 +133,7 @@ private:
     // A driver's reset request: the driver is opened (and started, when it ran) again every second for up to
     // kResetTries - a USB interface that enumerates again, or a new rate set in its control panel, is not ready at once.
     static constexpr int kResetTries = 60;
-    bool resetPending_ = false, resetWasRunning_ = false;
+    bool resetPending_ = false, resetWasRunning_ = false, retrying_ = false;
     int resetTries_ = 0;
     std::chrono::steady_clock::time_point resetDue_{};
     double rate_ = 0;

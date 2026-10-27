@@ -404,29 +404,46 @@ std::string checksumFor(const std::string& text, const std::string& setupName) {
             if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
         return true;
     };
-    std::vector<std::string> all;
-    std::string named;
+    // the name a line gives, compared whole (after a "*" binary marker and any folder): "old-DJAP-Setup-1.exe.sig"
+    // does not name "DJAP-Setup-1.exe" (outside review: it matched as a part of the line)
+    const std::string want = lower(setupName);
+    auto names = [&](std::string w) {
+        if (!w.empty() && w[0] == '*') w.erase(0, 1);
+        const size_t slash = w.find_last_of("/\\");
+        if (slash != std::string::npos) w.erase(0, slash + 1);
+        return !want.empty() && w == want;
+    };
+    std::vector<std::string> all, named;
     size_t start = 0;
     while (start <= text.size()) {
         size_t end = text.find('\n', start);
         if (end == std::string::npos) end = text.size();
         const std::string line = lower(text.substr(start, end - start));
+        std::vector<std::string> words;
         std::string word;
         for (size_t i = 0; i <= line.size(); ++i) {
             const char c = i < line.size() ? line[i] : ' ';
-            if (c == ' ' || c == '\t' || c == '\r' || c == '*') {
-                if (hexWord(word)) {
-                    all.push_back(word);
-                    if (!setupName.empty() && line.find(lower(setupName)) != std::string::npos) named = word;
-                }
+            if (c == ' ' || c == '\t' || c == '\r') {
+                if (!word.empty()) words.push_back(word);
                 word.clear();
             } else {
                 word += c;
             }
         }
+        std::string hash;
+        bool namesSetup = false;
+        for (const std::string& w : words) {
+            if (hash.empty() && hexWord(w)) hash = w;
+            else if (names(w)) namesSetup = true;
+        }
+        if (!hash.empty()) {
+            all.push_back(hash);
+            if (namesSetup) named.push_back(hash);
+        }
         start = end + 1;
     }
-    if (!named.empty()) return named;
+    if (!named.empty()) // two lines naming the setup with different hashes: not clear which one
+        return std::all_of(named.begin(), named.end(), [&](const std::string& h) { return h == named[0]; }) ? named[0] : std::string();
     return all.size() == 1 ? all[0] : std::string();
 }
 

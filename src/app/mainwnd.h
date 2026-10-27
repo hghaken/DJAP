@@ -38,6 +38,8 @@ public:
     HWND editor() const { return editor_.hwnd(); }
     // Shows a message in the status bar (e.g. an audio start at program start that failed).
     void setMessage(const std::string& text);
+    // Saves nothing from now on (the settings file could not be read at the start); `why` shows in the status bar.
+    void holdSaves(const std::string& why);
     // Publishes both decks' configurations (after the audio side changed its sample rate).
     void applyAll();
     void openAudioWindow(); // the first start: no device chosen yet
@@ -99,7 +101,7 @@ private:
     AnalysisWindow analysisWindow_;
     SpectrumWindow spectrumWindow_;
     AboutWindow about_;
-    std::string saveError_, message_;
+    std::string saveError_, message_, holdSaves_;
     int ticks_ = 0;
     WindowsVolume winVolume_;
     double shownVolume_ = -3.0; // the volume in the status bar (-2 not following, -1 muted)

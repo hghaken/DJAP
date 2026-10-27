@@ -82,6 +82,8 @@ private:
     double integ_ = 0.0;    // the loop's integral part (= the drift estimate)
     double marginMs_ = kMarginMs;
     double calmS_ = 0.0; // seconds of reading since the last underrun or margin step down
+    double marginFloorMs_ = 0.0; // the decay stops here: the margin that held before a step down that failed
+    bool decayed_ = false;       // a step down since the last underrun
     int period_ = 0;
     double fade_ = 1.0;     // fade-in position 0..1 (1: done)
     bool active_ = false, periodOk_ = false, haveAvg_ = false;

@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -376,6 +377,32 @@ int main(int argc, char** argv) {
         a.controller->setParamNormalized(ap::plugin::kLookId, 3.0 / 5.0);
         std::printf("-- look-ahead 3.0 ms: latency %u samples\n", a.processor->getLatencySamples());
         CHECK(a.processor->getLatencySamples() == 144);
+        // a value between the window's choices (an old project's 0.5 ms, a host's automation) runs - and is
+        // reported - as the choice it snaps to: 1.5 ms, never a look-ahead under the true-peak minimum
+        a.controller->setParamNormalized(ap::plugin::kLookId, 0.5 / 5.0);
+        std::printf("-- look-ahead 0.5 ms asked: latency %u samples (1.5 ms)\n", a.processor->getLatencySamples());
+        CHECK(a.processor->getLatencySamples() == static_cast<uint32>(ap::lookFrames(1.5, kRate)));
+        a.close();
+    }
+
+    // 5. an input the host marks silent may hold anything: it is processed as silence
+    {
+        Instance a;
+        CHECK(a.open(module, &host));
+        a.start();
+        const int n = 4800;
+        std::vector<float> junk(n, 1e30f), ol(n), orr(n);
+        junk[7] = std::numeric_limits<float>::quiet_NaN();
+        for (int pos = 0; pos < n; pos += kMaxBlock) { // the host's blocks are at most kMaxBlock
+            a.data.inputs[0].silenceFlags = 3;
+            a.run(&junk[static_cast<size_t>(pos)], &junk[static_cast<size_t>(pos)], &ol[static_cast<size_t>(pos)],
+                  &orr[static_cast<size_t>(pos)], std::min(kMaxBlock, n - pos), nullptr);
+        }
+        a.data.inputs[0].silenceFlags = 0;
+        int loud = 0;
+        for (int i = 0; i < n; ++i) loud += !(ol[static_cast<size_t>(i)] == 0.0f && orr[static_cast<size_t>(i)] == 0.0f);
+        std::printf("-- an input marked silent (holding junk): %d of %d output samples not silent\n", loud, n);
+        CHECK(loud == 0);
         a.close();
     }
     return test::finish("plugin_test");

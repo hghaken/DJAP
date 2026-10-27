@@ -233,11 +233,18 @@ tresult PLUGIN_API Plugin::initialize(FUnknown* context) {
 
 tresult PLUGIN_API Plugin::terminate() {
     closeEditors();
+    // a host that ends the plug-in before its window: the window goes now and never calls the plug-in again
+    if (view_) view_->detach();
+    view_ = nullptr;
     return SingleComponentEffect::terminate();
 }
 
-// (the base class answers "not implemented"; a host may take that as a failure)
-tresult PLUGIN_API Plugin::setProcessing(TBool) { return kResultOk; }
+// Processing starts again after a pause of the host: the deck fades in (its delay line and filters still hold the
+// audio from before the pause - outside review), at the next process() on the audio thread.
+tresult PLUGIN_API Plugin::setProcessing(TBool state) {
+    if (state) restart_.store(true, std::memory_order_release);
+    return kResultOk;
+}
 
 tresult PLUGIN_API Plugin::setupProcessing(ProcessSetup& setup) {
     fs_ = setup.sampleRate > 0 ? setup.sampleRate : 48000.0;
@@ -311,7 +318,7 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
             } else if (id == kBypassId) {
                 bypass_ = v >= 0.5;
             } else if (id == kLookId) {
-                lookMs_ = std::round(v * kMaxLook * 10.0) / 10.0;
+                lookMs_ = snapLook(v * kMaxLook); // the window's choices (deck.h)
             } else {
                 const int p = paramIndex(id);
                 if (p < 0) continue;
@@ -320,8 +327,6 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
             dirty_ = true;
         }
     }
-    if (!active_) return kResultOk;
-    if (dirty_) publishConfig();
     if (data.numSamples <= 0 || data.numInputs < 1 || data.numOutputs < 1) return kResultOk;
     if (data.symbolicSampleSize != kSample32) return kResultOk; // never 64-bit buffers read as 32-bit ones
     AudioBusBuffers& in = data.inputs[0];
@@ -331,10 +336,20 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
     float* r = out.channelBuffers32[1];
     const int n = data.numSamples;
     const size_t bytes = static_cast<size_t>(n) * sizeof(float);
-    if (l != in.channelBuffers32[0]) std::memcpy(l, in.channelBuffers32[0], bytes);
-    if (r != in.channelBuffers32[1]) std::memcpy(r, in.channelBuffers32[1], bytes);
+    // an input the host marks silent may hold anything: it is read as silence (outside review)
+    const bool silentIn = (in.silenceFlags & 3) == 3;
+    if (silentIn) {
+        std::memset(l, 0, bytes);
+        std::memset(r, 0, bytes);
+    } else {
+        if (l != in.channelBuffers32[0]) std::memcpy(l, in.channelBuffers32[0], bytes);
+        if (r != in.channelBuffers32[1]) std::memcpy(r, in.channelBuffers32[1], bytes);
+    }
+    out.silenceFlags = 0; // the deck's tail (look-ahead, release) may still sound
+    if (!active_) return kResultOk; // not prepared: the input passes (never the host's leftovers)
+    if (dirty_) publishConfig();
+    if (restart_.exchange(false, std::memory_order_acq_rel)) deck_.startFadeIn();
     deck_.process(l, r, n);
-    out.silenceFlags = 0;
     return kResultOk;
 }
 
@@ -423,7 +438,7 @@ int Plugin::colourIndex() const {
 
 double Plugin::plainOf(ParamID id) const {
     const ParamValue v = const_cast<Plugin*>(this)->getParamNormalized(id);
-    if (id == kLookId) return std::round(v * kMaxLook * 10.0) / 10.0;
+    if (id == kLookId) return snapLook(v * kMaxLook); // what runs (deck.h)
     if (id == kBypassId) return v >= 0.5 ? 1.0 : 0.0;
     const int p = paramIndex(id);
     return p >= 0 ? exact_[static_cast<size_t>(p)] : v;

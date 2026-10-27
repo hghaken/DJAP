@@ -103,7 +103,7 @@ analysis.
 | Soft clipper | drive | dB | 2 | 0..9 | 10.9; runs at 2x the rate (polyphase IIR halfbands, about 2.6 frames of phase delay, no latency) - its aliases were -16..-44 dBc on 10-15 kHz tones (outside review, client 2026-10-26); the exciter's saturation too |
 | Limiter | ceiling | dBTP | -1.0 | -6..0 | R 128 / AES |
 | | release | ms | 80 | 10..500 | 10.10 |
-| | look-ahead | ms | 1.5 | 0, 1.5, 2, 3, 5 | the only latency; one value for both decks (R4). Above 0 never under the true-peak detector's delay + 15 frames (`lookFrames`: 63 frames; the former 0.5 and 1.0 ms fell back to the sample peak without a word, true peaks up to 3 dB over - outside review, client 2026-10-26); 0 = sample peak only |
+| | look-ahead | ms | 1.5 | 0, 1.5, 2, 3, 5 | the only latency; one value for both decks (R4). Above 0 never under the true-peak detector's delay + 18 frames (`lookFrames`: 66 frames, a limiter window of 19 - with 16 full-band noise went 0.10 dB past the margin; the former 0.5 and 1.0 ms fell back to the sample peak without a word, true peaks up to 3 dB over - outside review, client 2026-10-26); 0 = sample peak only |
 
 ### 3.1 Presets
 
@@ -243,10 +243,11 @@ colour. Cost: every colour stage on adds about 0.7 % of a core per deck (`deck_t
 ## 4. True-peak detection in the limiter
 
 The handbook records that a 4x / 16-tap detector let full-band noise through by ~1.4 dB (fault 25). Plan: 8x
-oversampling at 44.1 / 48 kHz (4x at 88.2 / 96), windowed-sinc prototype of odd length centred on a tap, starting
+oversampling (planned 4x at 88.2 / 96 kHz; built: 8x at every rate), windowed-sinc prototype of odd length centred on a tap, starting
 with 32 taps per phase (16 frames of detector delay, 0.36 ms) and going to 48 if the full-band noise test fails.
 Built: 96 taps per phase with a Kaiser window (beta 5), plus a 0.1 dB margin at 1.5 ms look-ahead - 32 taps let
-full-band noise 1.07 dB over the ceiling; true-peak mode needs a look-ahead of at least 48 frames.
+full-band noise 1.07 dB over the ceiling; true-peak mode needs a look-ahead of at least 48 frames, and the deck never
+uses less than 66 above 0 (`kMinLookFrames`, deck.h).
 The limiter uses the true peak when the look-ahead covers the detector delay, else the sample peak; window
 `W = look - D + 1` for a detector of delay D (generalising 10.10). Stated guarantee: sample peak always <= ceiling;
 true peak <= ceiling + 0.1 dB for any input when look-ahead >= detector delay.
@@ -258,7 +259,7 @@ true peak <= ceiling + 0.1 dB for any input when look-ahead >= detector delay.
 | Limiter look-ahead 1.5 ms (0..5) | 66 frames | 72 frames |
 | Every other stage | 0 | 0 |
 | ASIO input + output buffer | driver (e.g. 2 x 64 frames) | |
-| Input of another API with ASIO output (6.1) | capture period + drift buffer, about 10 + 19 ms | |
+| Input of another API with ASIO output (6.1) | capture period + drift buffer, about 10 + 19 ms, plus Windows' own audio engine and the devices | |
 
 Shown in the GUI ("added by processing: 1.5 ms"). Changing the look-ahead: fade out 5 ms, reconfigure both decks,
 refill, fade in (9.4).
@@ -573,7 +574,9 @@ device to its own output device (Windows shows most interfaces as stereo devices
 on its own thread; a deck with "(none)" does not run. The decks run at the sample rate chosen; miniaudio converts
 when a device runs at another rate or channel count. These paths add the devices' buffering (input period plus
 output buffer, shown as an estimate) and, when input and output are different devices, their clocks may drift
-apart (miniaudio's duplex buffer absorbs it until it over- or under-runs). The processing itself still adds only
+apart: miniaudio's duplex stream of these synchronous backends has no drift correction, so a growing or emptying
+backlog ends in a glitch now and then (an outside review; not yet corrected - for different clocks use ASIO output
+with the drift-corrected deck inputs, 6.1). The processing itself still adds only
 the look-ahead.
 
 Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), an "About DJAP..." button, and the audio API and, for WASAPI, the exclusive switch. ASIO:
@@ -598,7 +601,10 @@ and Windows' startup apps list has not switched it off (switching it on clears t
 (ticked) and its uninstall removes the value. With `--autostart` the program starts hidden in the notification area
 (the window only when no audio device has been chosen yet). Greyed out in test runs (`--ini`, `--simulate`). A driver reset request (or buffer-size change) fades a running
 stream out, closes, opens and starts the driver again with the same choices; when that fails (the driver not ready
-yet) it is tried every second for a minute, the status bar saying so. Start with another driver chosen than the one
+yet) it is tried every second for a minute, the status bar saying so; the user's own Start or Stop ends those tries.
+A settings file that cannot be read at the start is tried for about 2 s; then the program runs on its defaults and
+saves nothing until it is started again (a message says so) - its first save would have written the defaults over
+the user's driver and devices. Start with another driver chosen than the one
 that is open closes the open one first (it played on the old driver while the new name was saved). Once the driver is open the window shows the rate the interface runs at: Start
 switches the rate only when another one is chosen. Compact (client, 2026-10-25: "less vertical white space"):
 rows 6 px apart, each text block as high as its lines (driver info 2, state 3 with one channel or 5 with two decks,
@@ -615,7 +621,10 @@ retried every 5 s for 2 minutes). Not during a simulation.
 The setup asset `DJAP-Setup-<version>.exe` is downloaded into `%TEMP%\DJAP-update` and checked against the SHA-256
 GitHub publishes for it (the asset's `digest`, else a `<setup>.sha256` asset); without a checksum, or when it does
 not match, nothing is installed; a `.sha256` file counts only when it is clear which hash is the setup's (the line
-naming it, or its only hash), and a download not as long as GitHub says is refused. Right before starting it, the
+naming it - the name compared whole, after a "*" and a folder - or its only hash), and a download not as long as GitHub says is refused. Where WinHTTP's redirects
+ended is checked against the same hosts (GitHub's asset storage). `[Updates] Url` (a local test server) counts only
+in a test run (`--ini` / `--simulate`): in the user's own settings it would let anything that can edit the file point
+the updater elsewhere. Right before starting it, the
 program checks the file once more through a handle that lets nobody change or replace it until the setup runs (the
 download folder is the user's %TEMP%). The setup is not signed (no code-signing certificate). Then the program starts the setup with `/SILENT /SUPPRESSMSGBOXES /NORESTART
 /UPDATE=1 /DIR=<its folder> /LOG=%TEMP%\DJAP-update\setup.log` (`/CURRENTUSER` when not under Program Files; Windows
@@ -681,7 +690,8 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   values can be added or reordered without breaking a host's project. Four more: the preset list and the colour list
   (the presets and colours of `%APPDATA%\DJAP\DJAP.ini`, or the shipped ones; a last entry "(other values)"; they
   grow and shrink with the preset window, announced with `restartComponent(kParamTitlesChanged)`), Bypass (the
-  host's bypass flag: the input delayed by the look-ahead) and the look-ahead (0..5 ms in steps of 0.1). All can be
+  host's bypass flag: the input delayed by the look-ahead) and the look-ahead (0..5 ms in steps of 0.1; it runs as the
+nearest of the window's choices 0, 1.5, 2, 3, 5 - above 0 at least 1.5 - and the latency reported follows). All can be
   automated.
 - **Choosing a preset or colour** (window or host): the controller loads that preset's values, tells the host to
   read them again (`restartComponent(kParamValuesChanged)`) and hands them to the processing as a whole (the

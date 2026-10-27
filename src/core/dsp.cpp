@@ -1,5 +1,6 @@
 #include "dsp.h"
 
+#include <algorithm>
 #include <complex>
 #include <xmmintrin.h>
 

@@ -4,6 +4,7 @@
 #include "settings.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -443,13 +444,32 @@ void unreadable(const fs::path& dir) {
     CHECK(r.load(file));
     CHECK(r.find("Mine") != nullptr && r.deck[0].preset == "Mine");
 
-    // a "file" that cannot be read (here a folder of that name): saveMerged refuses and leaves it
+    // a file that cannot be read but could be replaced (an ACL refusing "read data" to everyone): saveMerged refuses
+    // and leaves it. (A folder of that name, the first version of this test, could not fail: a rename cannot
+    // replace a folder either - outside review.) Merged against the shipped lists alone, the file lost "Mine".
     const fs::path locked = dir / "locked.ini";
     std::error_code ec;
-    fs::create_directory(locked, ec);
-    Settings base = s;
-    CHECK(!s.saveMerged(locked, base, Settings::SaveRole::Owner));
-    CHECK(fs::is_directory(locked, ec));
+    {
+        Settings mine;
+        CHECK(mine.saveAs("Mine", defaultValues(), err));
+        CHECK(mine.save(locked));
+    }
+    const std::string path = locked.string();
+    CHECK(std::system(("icacls \"" + path + "\" /deny *S-1-1-0:(RD) >nul").c_str()) == 0);
+    Settings probe;
+    const bool unreadable = !probe.load(locked);
+    Settings other; // a writer that never saw "Mine" (its base: the shipped lists)
+    Settings base = other;
+    other.driver = "changed";
+    const bool saved = other.saveMerged(locked, base, Settings::SaveRole::Owner);
+    std::system(("icacls \"" + path + "\" /remove:d *S-1-1-0 >nul").c_str());
+    Settings after;
+    CHECK(after.load(locked));
+    std::printf("   unreadable file: load %s, saveMerged %s, \"Mine\" %s\n", unreadable ? "refused" : "WORKED",
+                saved ? "WROTE" : "refused", after.find("Mine") ? "kept" : "LOST");
+    CHECK(unreadable);
+    CHECK(!saved);
+    CHECK(after.find("Mine") != nullptr && after.driver.empty());
     fs::remove(locked, ec);
 }
 

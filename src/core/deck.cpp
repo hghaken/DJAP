@@ -528,7 +528,7 @@ bool DeckProcessor::statesFinite() const {
     if (!colour_.finite()) return false;
     if (!limiter_.finite() || !kIn_.finite() || !kPost_.finite() || !kOut_.finite()) return false;
     if (!banks_[0]->finite() || !banks_[1]->finite()) return false;
-    if (!bassLp4_.finite() || !excHp_.finite() || !excHp2_.finite() || !excOs_.finite() || !clipOs_.finite()) return false;
+    if (!bassLp4_.finite() || !bassHp_.finite() || !bassLp_.finite() || !excHp_.finite() || !excHp2_.finite() || !excOs_.finite() || !clipOs_.finite()) return false;
     if (!dessHp_.finite() || !dessShelf_.finite() || !width_[0].finite() || !width_[1].finite()) return false;
     return compHpf_.finite();
 }
@@ -934,10 +934,15 @@ void DeckProcessor::process(float* left, float* right, int frames) {
                 return makePair(ceil * softClip(leftOf(p) * inv), ceil * softClip(rightOf(p) * inv));
             };
             // a flattened peak, its overtones above the audio band removed, rises a little over the ceiling again
-            // (0.36 dB on a 3 kHz tone 6 dB in): the limiter after it holds the ceiling. Holding it here instead
-            // brought the fold-back of the highs back (-24 dBc on 13 kHz).
+            // (0.36 dB on a 3 kHz tone 6 dB in): the limiter after it holds the ceiling. Holding it here as well
+            // brought the fold-back of the highs back (-24 dBc on 13 kHz), so only a loudness preset with the
+            // limiter off gets that hold (outside review: the clipper's ceiling must stand on its own then)
             const Pair y = clipOs_.down(curve(a), curve(b));
-            const double yl = leftOf(y), yr = rightOf(y);
+            double yl = leftOf(y), yr = rightOf(y);
+            if (!running_[sLimiter]) {
+                yl = std::max(-ceil, std::min(ceil, yl));
+                yr = std::max(-ceil, std::min(ceil, yr));
+            }
             const double m = mix_[sClipper];
             const double au = std::max(std::fabs(ul), std::fabs(ur));
             if (au > 0.5) {

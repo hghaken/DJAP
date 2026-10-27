@@ -73,7 +73,7 @@ so they share the same latency (they are mixed after DJAP, and a difference woul
 - **Two rates.** The audio runs per sample; detectors that do not need sample rate (leveller, density, de-esser,
   auto tone) update every 16 samples (the *control block*, 0.33 ms at 48 kHz), and the gains they produce are ramped
   linearly across the next block.
-- **One look-ahead.** Only the limiter looks ahead (default 1.5 ms, 0..5 ms). No other stage buffers, so the
+- **One look-ahead.** Only the limiter looks ahead (default 1.5 ms; 0, 1.5, 2, 3 or 5 ms). No other stage buffers, so the
   latency the processing reports - and the delay of a click or a drum hit's attack - is exactly the look-ahead. The
   filters do shift low frequencies a little later than that (their phase; 1.5).
 - **Nothing clicks.** Every change while playing is ramped or crossfaded (1.4).
@@ -530,7 +530,12 @@ above the audio band removed, rises over it again: 0.36 dB for a 3 kHz tone driv
 band-limited square wave overshoots). The limiter after the clipper holds the ceiling, as it does in every loudness
 preset; holding it in the clipper instead (a hard clamp) brought the fold-back back (-24 dBc on 13 kHz). Through
 clipper and limiter, a 13 kHz tone driven 6 dB in at 48 kHz: its fold-back at 9 kHz 94.6 dB under the tone, the peak
-at -1.2 dBFS (`dynamics_test`).
+at -1.2 dBFS (`dynamics_test`). The hardest case, tones of 12-16 kHz driven 9 dB in at -6 dBFS, keeps a rest
+of 2x oversampling - their 5th and 7th overtones fold back inside the doubled band: 39.8 dB under the tone at 15 kHz
+(at the base rate: about 16 dB under; an outside review's 192 kHz reference: about 80 dB). With the limiter switched
+off in a loudness preset, the clipper holds the ceiling itself (a hard hold after the down filter): the ceiling then
+stands on its own, at the price of that fold-back for the highs. The exciter's saturation: a 10 kHz tone at -6 dBFS,
+100 %, its fold-back at 18 kHz 90.2 dB under the tone (20.6 dB at the base rate).
 - The meter shows how far the clipper took the deepest peak down.
 
 ## 13. Look-ahead true-peak limiter
@@ -553,8 +558,9 @@ wanted gain. With a sample-peak detector this gives `W = look + 1`; with a true-
 here) the wanted gain of a sample is known D frames after it arrives (from the reports of the intervals on both sides
 of it), so `W = look - D + 1`, and the true peak is used only when `look >= D`. A shorter look-ahead fell back to the
 sample peak without a word - true peaks up to 3 dB over the ceiling (outside review, 2026-10-26) - so a look-ahead
-above 0 is now never shorter than D + 15 = 63 frames (`lookFrames`, a window of at least 16 frames: 1.43 ms at 44.1
-kHz, 1.31 ms at 48 kHz); the choices are 0 (sample peak, no delay), 1.5, 2, 3 and 5 ms, and an old 0.5 or 1.0 ms
+above 0 is now never shorter than D + 18 = 66 frames (`lookFrames`, a window of at least 19 frames - the window of
+the default at 44.1 kHz: 1.50 ms at 44.1 kHz, 1.38 ms at 48 kHz; a window of 16 let full-band noise bursts 0.10-0.11
+dB over the ceiling, past the margin, a window of 1 0.18 dB); the choices are 0 (sample peak, no delay), 1.5, 2, 3 and 5 ms, and an old 0.5 or 1.0 ms
 becomes 1.5. The plug-in reports the same frames to its host. The default 1.5 ms is 66 frames at 44.1 kHz and 72
 at 48 kHz. A first version was one or two samples off: a single peak went up to
 0.4 dB over the ceiling.
@@ -586,7 +592,9 @@ rounding: plain rounding leaves distortion that follows the music at low levels 
 steady faint noise instead (about -98 dBFS at 16 bits) [26]. A value already on a step gets none, so digital silence
 stays silent and a bypassed 16-bit input leaves bit-exact. 24 bits and more are only rounded: that rounding lies
 under any converter's own noise. Measured (`engine_test`): a tone of 0.4 steps, lost to rounding, comes out at 0.399
-steps, without an offset.
+steps, without an offset; the error variance is 1/4 step^2 for any value (TPDF; rectangular dither would give
+1/6). A block of the device period that stays under one step everywhere gets no dither: the faint remains of a
+filter or a release after the music round to digital silence instead of a lasting +-1 step of noise.
 
 ### 14.2 Bypass
 
@@ -714,7 +722,10 @@ into a virtual cable. The two devices run on their own crystals, so their sample
   for 10 ms capture blocks and 256-frame periods at 48 kHz. Each underrun adds 2 ms of margin (up to 20 ms), and
   every minute without one takes 0.5 ms back down to the 3 ms, so one stall does not keep the delay up (the read
   speed glides to the smaller fill: no gap; simulated, a 200 ms capture stall was back at the original 18.69 ms
-  within 400 s); the deck fades in over 10 ms whenever reading (re)starts.
+  within 400 s). An underrun right after such a step down sets a floor at the margin that held: with lasting jitter
+  larger than the base margin a plain decay walked back into the failing margin every ~4 minutes (an outside review
+  measured 15 underruns an hour); simulated with 8 ms of capture jitter: 4 underruns while the margin finds its
+  level, then none in 40 minutes. The deck fades in over 10 ms whenever reading (re)starts.
 
 This is the only place where DJAP adds buffering beyond the look-ahead, and only when the user chooses such an input.
 The Setup window shows the added latency and the measured drift.

@@ -990,7 +990,9 @@ void EditWindow::slider(HWND bar, int code) {
         return;
     }
     // the slider stays where it was put unless a rule moved the value (splits keep their order, ranges)
-    const double stored = settings_.find(current_, kind_)->values[static_cast<size_t>(i)];
+    const Preset* now = settings_.find(current_, kind_);
+    if (!now) return; // gone meanwhile (a save merged another writer's deletion)
+    const double stored = now->values[static_cast<size_t>(i)];
     if (i >= pDensSplit1 && i <= pDensSplit6) { // a split may push its neighbours
         for (size_t k = 0; k < rows_.size(); ++k) updateRow(k, static_cast<int>(k) != r || stored != v);
     } else {

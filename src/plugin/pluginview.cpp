@@ -67,6 +67,15 @@ PluginView::~PluginView() {
     if (plugin_) plugin_->viewClosed(this);
 }
 
+void PluginView::detach() {
+    if (hwnd_) {
+        KillTimer(hwnd_, 1);
+        DestroyWindow(hwnd_);
+        hwnd_ = nullptr;
+    }
+    plugin_ = nullptr;
+}
+
 void PluginView::registerClasses(HINSTANCE instance) {
     theme::init();
     WNDCLASSW wc{};
@@ -93,7 +102,7 @@ tresult PLUGIN_API PluginView::isPlatformTypeSupported(FIDString type) {
 }
 
 tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
-    if (isPlatformTypeSupported(type) != kResultTrue || !parent) return kResultFalse;
+    if (isPlatformTypeSupported(type) != kResultTrue || !parent || !plugin_) return kResultFalse;
     if (g_views++ == 0) registerClasses(ghInst);
     Tooltips::setEnabled(plugin_->tooltips()); // the program's Setup switch
     const tresult r = CPluginView::attached(parent, type);
@@ -115,7 +124,7 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
 }
 
 tresult PLUGIN_API PluginView::removed() {
-    plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
+    if (plugin_) plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
     if (hwnd_) {
         KillTimer(hwnd_, 1);
         DestroyWindow(hwnd_);

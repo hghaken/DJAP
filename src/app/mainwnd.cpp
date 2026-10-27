@@ -686,7 +686,9 @@ void MainWindow::fromTray() {
 
 void MainWindow::checkForUpdate() {
     nextCheck_ = GetTickCount64() + 24ull * 3600 * 1000; // once a day
-    updater_.check(hwnd_, settings_.updateUrl, AP_VERSION_STRING);
+    // [Updates] Url (a local test server) counts only in a test run (--ini / --simulate): in the user's own settings it
+    // would let anything that can edit the file point the updater at a server of its own (outside review)
+    updater_.check(hwnd_, testRun_ ? settings_.updateUrl : std::string(), AP_VERSION_STRING);
     audioWindow_.refresh();
 }
 
@@ -789,7 +791,17 @@ void MainWindow::setMessage(const std::string& text) {
     updateStatus();
 }
 
+void MainWindow::holdSaves(const std::string& why) {
+    holdSaves_ = why;
+    save(); // shows it
+}
+
 void MainWindow::save() {
+    if (!holdSaves_.empty()) {
+        saveError_ = holdSaves_;
+        updateStatus();
+        return;
+    }
     // merged with what a plug-in saved in the same file meanwhile (its own presets and colours)
     auto names = [this] {
         std::vector<std::string> n;

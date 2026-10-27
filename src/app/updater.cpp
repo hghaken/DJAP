@@ -83,9 +83,10 @@ std::string netError(DWORD e) {
 
 enum class Got { Ok, NotFound, Failed };
 
-// GET `url`: the body into `body` (at most 4 MB), or into `out` with a SHA-256 and the progress in `percent`.
-Got get(const std::string& url, const wchar_t* accept, std::string* body, std::ofstream* out, Sha256* sha,
-        std::atomic<int>* percent, uint64_t expected, const std::atomic<bool>& quit, std::string& error) {
+// GET `url`: the body into `body` (at most 4 MB), or into `out` with a SHA-256 and the progress in `percent`. Where
+// the redirects (which WinHTTP follows) ended must be allowed too (`api`: see allowed()).
+Got get(const std::string& url, const std::string& api, const wchar_t* accept, std::string* body, std::ofstream* out,
+        Sha256* sha, std::atomic<int>* percent, uint64_t expected, const std::atomic<bool>& quit, std::string& error) {
     Url u;
     if (!crack(url, u)) {
         error = "not a web address: " + url;
@@ -107,6 +108,21 @@ Got get(const std::string& url, const wchar_t* accept, std::string* body, std::o
         !WinHttpReceiveResponse(r.h, nullptr)) {
         error = netError(GetLastError());
         return Got::Failed;
+    }
+    {
+        // the address the answer came from, after the redirects: GitHub's asset storage, not just anywhere
+        DWORD bytes = 0;
+        WinHttpQueryOption(r.h, WINHTTP_OPTION_URL, nullptr, &bytes);
+        std::wstring finalUrl(bytes / sizeof(wchar_t) + 1, L'\0');
+        if (bytes == 0 || !WinHttpQueryOption(r.h, WINHTTP_OPTION_URL, finalUrl.data(), &bytes)) {
+            error = "the download's address cannot be read";
+            return Got::Failed;
+        }
+        finalUrl.resize(wcsnlen(finalUrl.c_str(), finalUrl.size()));
+        if (!allowed(toUtf8(finalUrl), api)) {
+            error = "the download was redirected away from GitHub: " + toUtf8(finalUrl);
+            return Got::Failed;
+        }
     }
     DWORD code = 0, size = sizeof code;
     WinHttpQueryHeaders(r.h, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &code,
@@ -228,7 +244,7 @@ void Updater::check(HWND notify, const std::string& url, const std::string& curr
             return;
         }
         std::string body, err;
-        const Got got = get(api, L"application/vnd.github+json", &body, nullptr, nullptr, nullptr, 0, quit_, err);
+        const Got got = get(api, api, L"application/vnd.github+json", &body, nullptr, nullptr, nullptr, 0, quit_, err);
         if (got == Got::Failed) {
             finish(notify, 0, State::Failed, err);
             return;
@@ -275,7 +291,7 @@ void Updater::download(HWND notify) {
         std::string sha = r.sha256;
         if (sha.empty() && !r.sha256Url.empty() && allowed(r.sha256Url, api)) {
             std::string text;
-            if (get(r.sha256Url, L"application/octet-stream", &text, nullptr, nullptr, nullptr, 0, quit_, err) == Got::Ok)
+            if (get(r.sha256Url, api, L"application/octet-stream", &text, nullptr, nullptr, nullptr, 0, quit_, err) == Got::Ok)
                 sha = checksumFor(text, r.setupName);
         }
         if (sha.empty()) {
@@ -303,7 +319,7 @@ void Updater::download(HWND notify) {
                 finish(notify, 1, State::Failed, "the download folder is not writable");
                 return;
             }
-            got = get(r.setupUrl, L"application/octet-stream", nullptr, &out, &h, &percent_, r.setupSize, quit_, err);
+            got = get(r.setupUrl, api, L"application/octet-stream", nullptr, &out, &h, &percent_, r.setupSize, quit_, err);
         }
         if (got != Got::Ok) {
             fs::remove(part, ec);

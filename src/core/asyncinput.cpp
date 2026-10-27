@@ -78,6 +78,8 @@ void AsyncInput::reset(double fs) {
     ratio_ = 1.0;
     avgFill_ = integ_ = 0.0;
     marginMs_ = kMarginMs;
+    marginFloorMs_ = 0.0;
+    decayed_ = false;
     calmS_ = 0.0;
     period_ = 0;
     fade_ = 1.0;
@@ -160,6 +162,10 @@ void AsyncInput::beginPeriod(int frames, double now) {
         const double need = frac_ + frames * ratio_ + kHalfTaps + 1;
         if (written - static_cast<double>(pos_) < need) {
             active_ = false; // silence, fill up again with a larger margin
+            // an underrun after a step down: that step was one too many - the margin never goes under the level
+            // that held again (lasting jitter: a plain decay walked back into the failing margin every ~4 minutes)
+            if (decayed_) marginFloorMs_ = std::max(marginFloorMs_, marginMs_ + kMarginDecayMs);
+            decayed_ = false;
             marginMs_ = std::min(kMarginMaxMs, marginMs_ + kMarginStepMs);
             calmS_ = 0.0;
             bump(underruns_);
@@ -168,7 +174,9 @@ void AsyncInput::beginPeriod(int frames, double now) {
             calmS_ += frames / fs_;
             if (calmS_ >= kMarginCalmS) {
                 calmS_ = 0.0;
-                marginMs_ = std::max(kMarginMs, marginMs_ - kMarginDecayMs);
+                const double down = std::max(std::max(kMarginMs, marginFloorMs_), marginMs_ - kMarginDecayMs);
+                if (down < marginMs_) decayed_ = true;
+                marginMs_ = down;
             }
         }
     }

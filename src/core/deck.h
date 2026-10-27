@@ -35,11 +35,23 @@ constexpr double kTpBetaLimiter = 5.0;
 // The shortest look-ahead above 0: the detector's delay (taps / 2 frames) plus a limiter window of kMinTpWindow frames.
 // A shorter one let the limiter fall back to the sample peak without a word - true peaks up to 3 dB over the ceiling
 // (outside review, 2026-10-26; client: "do it") - and a window of one frame lost the smoothing (+0.18 dB on noise).
-// 16 frames: 1.43 ms at 44.1 kHz, 1.31 ms at 48 kHz; the default 1.5 ms is above it at every rate.
-constexpr int kMinTpWindow = 16;
+// 19 frames - the window of the default 1.5 ms at 44.1 kHz: 66 frames, 1.50 ms at 44.1 kHz, 1.38 ms at 48 kHz. A
+// window of 16 let full-band noise bursts 0.10-0.11 dB over the ceiling, past the 0.1 dB margin (limiter_test).
+constexpr int kMinTpWindow = 19;
 constexpr int kMinLookFrames = kTpTapsLimiter / 2 + kMinTpWindow - 1;
 // The look-ahead in frames for `lookMs` at `fs`: 0 stays 0 (sample-peak limiting, no delay - the user's choice);
 // anything else is at least kMinLookFrames. One rule for the deck, the latency a plug-in reports and the status bar.
+// The look-ahead choices of the Setup window and the plug-in's window, ms: 0 (sample peak, no delay), 1.5, 2, 3, 5.
+// `snapLook` takes any value to one of them - a value above 0 under 1.5 to 1.5 (the old 0.5 / 1.0, a host's
+// automation of the plug-in's 0..5 ms parameter), else the nearest - so what a window shows is what runs.
+inline double snapLook(double ms) {
+    if (!(ms > 0.0)) return 0.0;
+    const double choices[] = {1.5, 2.0, 3.0, 5.0};
+    double best = choices[0];
+    for (double c : choices)
+        if (std::fabs(c - ms) < std::fabs(best - ms)) best = c;
+    return best;
+}
 inline int lookFrames(double lookMs, double fs) {
     const double ms = lookMs >= 0.0 ? (lookMs <= kMaxLookMs ? lookMs : kMaxLookMs) : 0.0; // NaN: 0
     if (ms <= 0.0) return 0;

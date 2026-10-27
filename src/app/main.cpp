@@ -131,7 +131,18 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 
     Settings settings;
     std::error_code ec;
-    if (std::filesystem::exists(ini, ec)) settings.load(ini);
+    // a settings file that is there but cannot be read (a virus scanner, a sync tool holding it): tried for about 2 s;
+    // then the program runs on the defaults and saves nothing - its first save would have written the defaults over
+    // the user's driver, devices and StartAudio (outside review)
+    bool unreadable = false;
+    if (std::filesystem::exists(ini, ec)) {
+        bool loaded = settings.load(ini);
+        for (int i = 0; i < 10 && !loaded; ++i) {
+            Sleep(200);
+            loaded = settings.load(ini);
+        }
+        unreadable = !loaded;
+    }
 
     int result = 0;
     {
@@ -143,6 +154,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             MessageBoxW(nullptr, L"The main window could not be created.", L"DJAP", MB_OK | MB_ICONERROR);
             result = 1;
         } else {
+            if (unreadable) {
+                window.holdSaves("settings file not readable - nothing is saved until DJAP starts again: " +
+                                 toUtf8(ini.wstring()));
+                const std::wstring msg = L"The settings file could not be read:\n" + ini.wstring() +
+                                         L"\n\nDJAP runs with its default settings and saves nothing, so the file "
+                                         L"stays as it is. Close the program that holds it, then start DJAP again.";
+                placement::messageBox(window.hwnd(), msg.c_str(), L"DJAP", MB_OK | MB_ICONWARNING);
+            }
             if (simulate.empty()) window.startSavedAudio(); // the audio of the last session (StartAudio)
             if (simulate.empty() && !settings.audioConfigured()) window.openAudioWindow(); // first start: a device
             if (!simulate.empty()) {

@@ -1,5 +1,6 @@
 // Look-ahead true-peak limiter on hostile signals (handbook 10.10, fault 11 and fault 25).
 #include "check.h"
+#include "deck.h"
 #include "limiter.h"
 #include "signals.h"
 
@@ -97,6 +98,13 @@ void hostile(double fs) {
             if ((i / static_cast<size_t>(0.2 * fs)) % 2) nl[i] = nr[i] = 0.0f;
         check("full-band noise bursts +9.5 dBFS", fs, lookMs, nl, nr, tp);
     }
+    // the shortest look-ahead the deck uses above 0 (kMinLookFrames, deck.h): its window of 16 frames still holds the
+    // true peak within the 0.1 dB margin on full-band noise (a window of 1 frame let it 0.18 dB over - outside review)
+    const double minMs = kMinLookFrames * 1000.0 / fs;
+    Buffer nl = sig::whiteNoise(fs, 4.0, dbToLin(9.5), 11), nr = sig::whiteNoise(fs, 4.0, dbToLin(9.5), 23);
+    for (size_t i = 0; i < nl.size(); ++i)
+        if ((i / static_cast<size_t>(0.2 * fs)) % 2) nl[i] = nr[i] = 0.0f;
+    check("noise bursts, shortest look-ahead", fs, minMs, nl, nr, true);
 }
 
 void delayAndTransparency(double fs) {

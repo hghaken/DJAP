@@ -12,6 +12,8 @@
 
 #include <windows.h>
 
+#include <atomic>
+
 namespace ap::plugin {
 
 class Plugin;
@@ -25,8 +27,10 @@ public:
     Steinberg::tresult PLUGIN_API attached(void* parent, Steinberg::FIDString type) override;
     Steinberg::tresult PLUGIN_API removed() override;
 
-    // A parameter changed (the host, a preset): the controls follow at the next timer tick.
-    void refresh() { dirty_ = true; }
+    // A parameter changed (the host, a preset): the controls follow at the next timer tick (any thread).
+    void refresh() { dirty_.store(true, std::memory_order_relaxed); }
+    // The plug-in ends before this window: the window goes now and the plug-in is never called again.
+    void detach();
     // Presets were added, renamed or deleted: the lists are filled again.
     void listsChanged();
 
@@ -54,7 +58,7 @@ private:
     HWND sliderLabel_[4] = {}, slider_[4] = {}, sliderValue_[4] = {};
     HFONT font_ = nullptr, bold_ = nullptr;
     UINT dpi_ = 96;
-    bool dirty_ = true;
+    std::atomic<bool> dirty_{true};
     theme::Metal metal_;
     Tooltips tips_;
     DeckMonitor monitor_;

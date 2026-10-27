@@ -342,6 +342,21 @@ void faults() {
         CHECK_NEAR(st.targetMs, base, 0.3);
         CHECK(gaps == 0 && st.resyncs == 0);
     }
+    {
+        // lasting jitter larger than the base margin: the decay must not walk back into the margin that failed
+        // (an outside review measured an underrun every ~4 minutes for ever with a plain decay)
+        AsyncInput ai;
+        ai.reset(48000);
+        Sim s;
+        s.driftPpm = 50.0;
+        s.capJitter = 0.008;
+        s.signal = sine(440.0, 0.5, 48000);
+        s.run(ai, 2400.0);
+        const AsyncInputState st = ai.state();
+        std::printf("   lasting 8 ms capture jitter, 40 minutes: underruns %lld, buffer %.2f ms\n", st.underruns,
+                    st.targetMs);
+        CHECK(st.underruns <= 5); // the climb to a margin that holds, one step down that failed - then none
+    }
 }
 
 void throughEngine() {

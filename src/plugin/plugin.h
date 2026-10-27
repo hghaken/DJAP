@@ -125,6 +125,7 @@ private:
     // window moving a parameter to another step replaces the value with that step's
     PresetValues exact_{};
     PluginView* view_ = nullptr;
+    std::atomic<bool> restart_{false}; // setProcessing(true): the deck fades in at the next process()
 };
 
 } // namespace ap::plugin

@@ -508,10 +508,10 @@ void colour() {
     const double fa = 44100.0;
     Buffer c3 = sig::sine(fa, 3000, -1, 1.0);
     o = run(fa, v, c3, c3);
-    // at twice the rate the curve never passes the ceiling; back at the base rate a flattened peak rises a little over
-    // it again (its overtones above the audio band removed) - the limiter after the clipper holds the ceiling
-    std::printf("   soft clipper: peak %.4f dBFS (ceiling -1)\n", linToDb(sig::peak(o.l)));
-    CHECK(sig::peak(o.l) <= dbToLin(-1.0 + 0.5));
+    // with the limiter off the clipper holds the ceiling itself (back at the base rate a flattened peak would rise a
+    // little over it - with the limiter on, the limiter holds it)
+    std::printf("   soft clipper, limiter off: peak %.4f dBFS (ceiling -1)\n", linToDb(sig::peak(o.l)));
+    CHECK(sig::peak(o.l) <= dbToLin(-1.0) + 1e-6);
     double alias = -300;
     const double fund = sig::amplitudeAt(o.l, fa, 3000, from);
     for (double f = 100; f < 22000; f += 100) {
@@ -531,6 +531,40 @@ void colour() {
                 -a9, linToDb(sig::peak(o.l)));
     CHECK(a9 < -60.0);
     CHECK(sig::peak(o.l) <= dbToLin(-1.0) + 1e-6);
+
+    // the worst case: hard-driven high tones (drive 9 dB, -6 dBFS in), every component that is not the tone (their
+    // overtones are all above the Nyquist frequency, so whatever else is there is fold-back). 2x leaves a rest here
+    // (the 5th and 7th overtones fold inside the doubled band): about -36 dBc at 15 kHz, from -16 at the base rate.
+    v[pClipDrive] = 9;
+    double worst = -300, worstF = 0;
+    for (double f : {12000.0, 13000.0, 14000.0, 15000.0, 16000.0}) {
+        Buffer t = sig::sine(fs, f, -6, 1.0);
+        o = run(fs, v, t, t);
+        const double tone = sig::amplitudeAt(o.l, fs, f, from);
+        for (double g = 100; g < 24000; g += 100) {
+            if (g == f) continue;
+            const double a = linToDb(sig::amplitudeAt(o.l, fs, g, from) / tone);
+            if (a > worst) {
+                worst = a;
+                worstF = f;
+            }
+        }
+    }
+    std::printf("   soft clipper, 12-16 kHz driven 9 dB in: strongest fold-back %.1f dB under the tone (at %.0f Hz)\n",
+                -worst, worstF);
+    CHECK(worst < -30.0);
+
+    // the exciter's saturation runs at twice the rate too: a 10 kHz tone's 3rd overtone (30 kHz) folded back to
+    // 18 kHz at the base rate (-20.6 dBc in the outside review)
+    v = allOff();
+    v[pExcOn] = 1;
+    v[pExcAmount] = 100;
+    v[pExcFreq] = 3500;
+    Buffer e10 = sig::sine(fs, 10000, -6, 1.0);
+    o = run(fs, v, e10, e10);
+    const double a18 = linToDb(sig::amplitudeAt(o.l, fs, 18000, from) / sig::amplitudeAt(o.l, fs, 10000, from));
+    std::printf("   exciter 100 %%, 10 kHz at -6 dBFS: the fold-back at 18 kHz %.1f dB under the tone\n", -a18);
+    CHECK(a18 < -50.0);
 }
 
 } // namespace

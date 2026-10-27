@@ -58,7 +58,7 @@ What each step does and how much is set by the deck's **loudness preset** (the l
 
 Things to know up front:
 
-- **Low latency.** The only latency DJAP adds is the limiter's look-ahead: 1.5 ms by default (0 to 5 ms), the same for
+- **Low latency.** The only latency DJAP adds is the limiter's look-ahead: 1.5 ms by default (0, 1.5, 2, 3 or 5 ms), the same for
   both decks so they stay in time with each other when mixed.
 - **Bypass is exact.** With a deck on Bypass its input goes out unchanged, bit for bit, delayed by the same
   look-ahead - so switching between processed and unprocessed never shifts the sound in time.
@@ -653,7 +653,9 @@ The program and the plug-in can be installed and used together or apart.
 
 The window is one deck strip of the program:
 
-- **Look-ahead** - the limiter's look-ahead, 0 to 5 ms (see 5.1); the DJ software is told the new delay.
+- **Look-ahead** - the limiter's look-ahead, 0, 1.5, 2, 3 or 5 ms (see 5.1); the DJ software is told the new delay. A
+  value the DJ software sets in between (an automation, an old project's 0.5 ms) runs as the nearest of these - above
+  0 at least 1.5 ms - and the window shows what runs.
 - **Bypass** - lit: the input goes out unchanged, delayed by the same look-ahead.
 - **Loudness** and **Colour** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
   and colour windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
@@ -691,7 +693,7 @@ Windows starts.
 
 - the device's input buffer and output buffer (set by the buffer size; ASIO reports them exactly),
 - the processing: only the limiter look-ahead (1.5 ms by default; 66 samples at 44.1 kHz) - the attack of every hit
-  comes out after exactly that. The filters that split the spectrum let the lowest frequencies follow a few
+  comes out after that, plus a fraction of a millisecond. The filters that split the spectrum let the lowest frequencies follow a few
   milliseconds later (Medium: about 6 ms at 100 Hz, 11 ms at 50 Hz; the technical manual, 1.5, lists each loudness
   preset), as in any multiband processor; both decks on the same loudness preset stay aligned.
 - with an input on another clock (an ASIO output fed from a WASAPI / DirectSound / MME input): that input's period
@@ -806,6 +808,7 @@ old file stays.
 | **No sound** | Is the audio started (status bar)? Are the right input and output pairs or devices chosen? Is a deck on *(none)*? Do the In bars move? If In moves and Out does not, check the output route and the amplifier. |
 | **"Open driver" fails** | Another program (DJ software) may hold the ASIO driver. Close it or use another interface. Check that the interface is connected and its driver installed. |
 | **A device shows "(not found)"** | The saved device is not connected, or it was chosen under another API (each API names devices differently). Choose it again. |
+| **"The settings file could not be read"** at the start | Another program held `DJAP.ini` (a virus scanner, a sync tool) for more than two seconds. DJAP runs with its default settings and saves nothing, so your file stays as it is; close that program and start DJAP again. |
 | **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer density bands. With an input on another clock, underruns in the status bar mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
 | **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window. |
 | **The sound pumps or breathes** | Lower the density amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |

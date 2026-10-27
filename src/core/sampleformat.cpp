@@ -50,6 +50,15 @@ inline double ditherUnit() {
     gDither = s;
     return static_cast<double>(s) * (1.0 / 4294967296.0) - 0.5; // [-0.5, 0.5)
 }
+// A block that stays under one step everywhere gets no dither: the faint remains of a filter or a release after the
+// music (1e-7 and less) round to digital silence instead of a lasting +-1 step of noise (outside review). A quiet
+// passage above one step keeps its dither.
+inline bool underOneStep(const float* in, int frames, double scale) {
+    const double limit = 1.0 / scale;
+    for (int i = 0; i < frames; ++i)
+        if (!(std::fabs(in[i]) < limit)) return false;
+    return true;
+}
 inline int32_t quantiseDithered(float x, double scale) {
     double v = std::isfinite(x) ? static_cast<double>(x) * scale : 0.0;
     if (v != std::floor(v)) v += ditherUnit() + ditherUnit();
@@ -153,12 +162,14 @@ void toFloat(const void* buffer, SampleFormat f, std::size_t offset, float* out,
 void fromFloat(const float* in, SampleFormat f, void* buffer, std::size_t offset, int frames) {
     unsigned char* p = static_cast<unsigned char*>(buffer) + offset * static_cast<std::size_t>(bytesPerSample(f));
     switch (f) {
-    case SampleFormat::Int16:
+    case SampleFormat::Int16: {
+        const bool dither = !underOneStep(in, frames, 32768.0);
         for (int i = 0; i < frames; ++i) {
-            const int16_t v = static_cast<int16_t>(quantiseDithered(in[i], 32768.0));
+            const int16_t v = static_cast<int16_t>(dither ? quantiseDithered(in[i], 32768.0) : quantise(in[i], 32768.0));
             std::memcpy(p + 2 * i, &v, 2);
         }
         return;
+    }
     case SampleFormat::Int24:
         for (int i = 0; i < frames; ++i) {
             const int32_t v = quantise(in[i], 8388608.0);
@@ -173,7 +184,7 @@ void fromFloat(const float* in, SampleFormat f, void* buffer, std::size_t offset
     case SampleFormat::Int32In20:
     case SampleFormat::Int32In24: {
         const double scale = std::ldexp(1.0, valueBits(f) - 1);
-        const bool dither = valueBits(f) <= 20;
+        const bool dither = valueBits(f) <= 20 && !underOneStep(in, frames, scale);
         for (int i = 0; i < frames; ++i) {
             const int32_t v = dither ? quantiseDithered(in[i], scale) : quantise(in[i], scale);
             std::memcpy(p + 4 * i, &v, 4);

@@ -116,6 +116,11 @@ void checksumFile() {
     CHECK(checksumFor(b + "  other.exe\n" + a + "  more.exe\n", "DJAP-Setup-0.1.96.exe").empty()); // which one?
     CHECK(checksumFor("no hash here", "DJAP-Setup-0.1.96.exe").empty());
     CHECK(checksumFor(a + "a  DJAP-Setup-0.1.96.exe", "DJAP-Setup-0.1.96.exe").empty()); // 65 characters
+    // the name compared whole: a longer name that contains it does not count (two hashes: not clear)
+    CHECK(checksumFor(b + "  old-DJAP-Setup-0.1.96.exe.sig\n" + a + "  other.exe\n", "DJAP-Setup-0.1.96.exe").empty());
+    CHECK(checksumFor(b + "  old-DJAP-Setup-0.1.96.exe.sig\n" + a + "  DJAP-Setup-0.1.96.exe\n", "DJAP-Setup-0.1.96.exe") == a);
+    CHECK(checksumFor(a + "  dist/DJAP-Setup-0.1.96.exe\n", "DJAP-Setup-0.1.96.exe") == a); // with a folder
+    CHECK(checksumFor(a + "  DJAP-Setup-0.1.96.exe\n" + b + "  DJAP-Setup-0.1.96.exe\n", "DJAP-Setup-0.1.96.exe").empty());
 }
 
 } // namespace

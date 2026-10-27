@@ -88,6 +88,8 @@ void AudioIO::closeDriver() {
 bool AudioIO::startDevice(double sampleRate, long bufferSize, const AsioChannels& channels, const SysInputs& inputs,
                           std::string& error) {
 #if AP_HAVE_ASIO
+    // a start of the user's own ends an automatic reopening: else its next try closed the stream just started
+    if (!retrying_) resetPending_ = false;
     fadeOutDecks(); // a running stream (a restart with new choices) stops first
     stopSimulation(); // one source at a time; the engine is prepared again for the device's rate
     sys_.stop();
@@ -213,8 +215,11 @@ void AudioIO::poll() {
     if (resetPending_ && now >= resetDue_) {
         std::string err;
         if (host_.isOpen()) host_.close(); // the last try opened it but could not start it
-        if (host_.open(driver_, window_, err) &&
-            (!resetWasRunning_ || startDevice(rate_, buffer_, channels_, SysInputs(inputs_), err))) {
+        retrying_ = true;
+        const bool ok = host_.open(driver_, window_, err) &&
+                        (!resetWasRunning_ || startDevice(rate_, buffer_, channels_, SysInputs(inputs_), err));
+        retrying_ = false;
+        if (ok) {
             resetPending_ = false;
             deviceError_.clear();
         } else if (++resetTries_ >= kResetTries) {
