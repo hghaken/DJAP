@@ -45,6 +45,10 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
       colourEditor_(settings, [this](bool listChanged, bool save) { presetsChanged(listChanged, save); },
                     PresetKind::Colour),
       audioWindow_(settings, audio, [this] {
+          // the user changed the audio (a device, Start, Stop): the message of the start at program start no longer
+          // holds - it stayed on after the device had been chosen again (client, 2026-10-27); a retry still under way
+          // sets it again if it fails again
+          if (!message_.empty()) setMessage("");
           save();
           applyAll(); // routes, and deck B's preset when the presets were just linked
           editor_.refresh();
@@ -624,6 +628,8 @@ void MainWindow::measureCpu() {
 // Setup window. A message that needs attention (an error, a start that is retried, a new version) comes after them.
 void MainWindow::updateStatus() {
     if (!status_) return;
+    // the audio runs (however it was started): a message that it did not start is past
+    if (!message_.empty() && (audio_.deviceRunning() || audio_.systemRunning())) message_.clear();
     std::wstring notes; // also shown in the Setup window
     if (!message_.empty()) notes += fromUtf8(message_);
     if (!saveError_.empty()) notes += (notes.empty() ? L"" : L"\n") + fromUtf8(saveError_);

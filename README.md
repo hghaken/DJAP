@@ -125,8 +125,10 @@ the settings in `%APPDATA%\DJAP` unless you choose to delete them. The setup is 
 before the first run.
 
 Updates: once a day DJAP asks GitHub whether a newer release of this repository exists and tells you (a message at
-the notification-area icon, and in Setup -> Updates; switch it off there). Nothing is downloaded until you click
-Install update (while the audio runs it asks first). The setup is then downloaded, checked against the SHA-256 checksum GitHub publishes for it,
+the notification-area icon, in the status bar and in the About window - right-click: About DJAP...; switch it off
+in Setup -> Updates). Nothing is downloaded until you click Install update in the About window (while the audio runs
+it asks first). When GitHub's API refuses (its limit of 60 requests an hour per network), the check reads the release
+page instead. The setup is then downloaded, checked against the SHA-256 checksum GitHub publishes for it,
 installed silently into the same folder, and DJAP starts again with your settings; audio that ran before the update
 starts again by itself.
 
