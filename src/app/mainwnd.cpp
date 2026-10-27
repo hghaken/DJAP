@@ -528,6 +528,7 @@ void MainWindow::applyAll() {
 void MainWindow::applyDeck(int d) {
     DeckControl c;
     c.lookMs = settings_.lookAheadMs;
+    c.oversampling = settings_.oversampling;
     c.processing = settings_.deck[d].processing;
     audio_.setDeck(d, settings_.deckValues(d), c); // its preset with its colour
     refreshStrip(d);
@@ -588,6 +589,9 @@ void MainWindow::updateMeters() {
         data.specIn = an.specIn.points();
         data.specOut = an.specOut.points();
         for (int k = 0; k < kMaxSplits; ++k) data.splits[k] = v[static_cast<size_t>(pDensSplit1 + k)];
+        data.colourValues = settings_.deckValues(d);
+        for (int k = 0; k < 4; ++k) data.autoDb[k] = data.m.autoToneDb[k];
+        data.fs = audio_.sampleRate() > 0 ? audio_.sampleRate() : 48000.0;
         setMeterView(strips_[d].meter, data);
     }
 }

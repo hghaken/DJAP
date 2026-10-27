@@ -76,7 +76,7 @@ colours are managed like loudness presets.
   settings:
 
   ```
-  DJAPCmd --render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--keep-delay] [--pcm24] [--trace <file.csv>]
+  DJAPCmd --render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--oversampling <2|4|8>] [--keep-delay] [--pcm24] [--trace <file.csv>]
   DJAPCmd --presets
   DJAPCmd --measure <file.wav> [...]
   DJAPCmd --tone <file> [...]

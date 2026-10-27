@@ -1,4 +1,4 @@
-﻿#include "mediafile.h"
+#include "mediafile.h"
 
 #include <windows.h>
 #include <mfapi.h>
@@ -6,6 +6,7 @@
 #include <mfreadwrite.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <vector>
 #include <cwctype>
@@ -63,6 +64,18 @@ bool decode(const std::filesystem::path& file, WavData& out, std::string& error)
                     release(sample);
                     break;
                 }
+                // the decoder's own error, or a stream that changes its format half-way: stop with a message instead
+                // of returning less of the file than it holds (outside review)
+                if (flags & MF_SOURCE_READERF_ERROR) {
+                    error = "the decoder reported an error part-way through the file";
+                    release(sample);
+                    break;
+                }
+                if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) {
+                    error = "the file changes its audio format part-way through";
+                    release(sample);
+                    break;
+                }
                 if (sample) {
                     IMFMediaBuffer* buf = nullptr;
                     if (SUCCEEDED(sample->ConvertToContiguousBuffer(&buf))) {
@@ -70,7 +83,8 @@ bool decode(const std::filesystem::path& file, WavData& out, std::string& error)
                         DWORD len = 0;
                         if (SUCCEEDED(buf->Lock(&p, nullptr, &len))) {
                             const float* f = reinterpret_cast<const float*>(p);
-                            data.insert(data.end(), f, f + len / sizeof(float));
+                            for (DWORD i = 0; i < len / sizeof(float); ++i)
+                                data.push_back(std::isfinite(f[i]) ? f[i] : 0.0f); // as readWav: no NaN into the filters
                             buf->Unlock();
                         }
                         release(buf);

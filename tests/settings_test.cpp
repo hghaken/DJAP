@@ -45,6 +45,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK(a.sampleRate == b.sampleRate);
     CHECK(a.inputA == b.inputA && a.inputB == b.inputB && a.outputA == b.outputA && a.outputB == b.outputB);
     CHECK_NEAR(a.lookAheadMs, b.lookAheadMs, 1e-12);
+    CHECK(a.oversampling == b.oversampling);
     CHECK(a.bufferSize == b.bufferSize && a.startAudio == b.startAudio);
     CHECK(a.api == b.api && a.exclusive == b.exclusive);
     for (int d = 0; d < 2; ++d) CHECK(a.inDevice[d] == b.inDevice[d] && a.outDevice[d] == b.outDevice[d]);
@@ -160,6 +161,7 @@ Settings busy() {
     s.outputA = 3;
     s.outputB = 1;
     s.lookAheadMs = 2.25;
+    s.oversampling = 8;
     s.bufferSize = 192;
     s.startAudio = true;
     s.followVolume[0] = false; // both the other way round than the defaults
@@ -419,6 +421,14 @@ void handEdited() {
     CHECK_NEAR(n.lookAheadMs, 2.5, 1e-12);
     n.fromText("[Audio]\r\nLookAheadMs=nan\r\n");
     CHECK_NEAR(n.lookAheadMs, 1.5, 1e-12);
+    // oversampling: 2, 4 or 8 (default 4); anything else the nearest of them
+    CHECK(n.oversampling == 4);
+    n.fromText("[Audio]\r\nOversampling=8\r\n");
+    CHECK(n.oversampling == 8);
+    n.fromText("[Audio]\r\nOversampling=1\r\n");
+    CHECK(n.oversampling == 2);
+    n.fromText("[Audio]\r\nOversampling=16\r\n");
+    CHECK(n.oversampling == 8);
 }
 
 // A settings file an editor saved as UTF-16 is read (it read as empty and the next save dropped the own presets), and

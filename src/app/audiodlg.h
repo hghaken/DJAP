@@ -61,13 +61,14 @@ private:
     AudioIO& audio_;
     Changed onChange_;
     HWND hwnd_ = nullptr, owner_ = nullptr;
-    HWND labels_[13] = {};
+    HWND labels_[14] = {};
     HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
     HWND driver_ = nullptr, open_ = nullptr, close_ = nullptr, panel_ = nullptr, info_ = nullptr;
     HWND inA_ = nullptr, outA_ = nullptr, inB_ = nullptr, outB_ = nullptr, rate_ = nullptr, buffer_ = nullptr;
     HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, health_ = nullptr, resetHealth_ = nullptr,
          note_ = nullptr;
     HWND look_ = nullptr, startup_ = nullptr, about_ = nullptr; // look-ahead, start with Windows, About
+    HWND oversampling_ = nullptr; // the soft clipper's and the exciter's
     HWND tooltips_ = nullptr;                                    // the switch of all tooltips
     HWND checkUpdates_ = nullptr, checkNow_ = nullptr, install_ = nullptr, updateInfo_ = nullptr; // updates
     const Updater* updater_ = nullptr;

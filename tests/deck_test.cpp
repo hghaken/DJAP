@@ -126,13 +126,14 @@ void oversampler() {
     // up and down without a stage between: gain and delay
     const size_t n = 48000;
     for (double f : {100.0, 1000.0, 10000.0, 18000.0, 20000.0, 22000.0}) {
-        StereoOversampler2x os;
+        StereoOversampler os;
+        os.setFactor(2);
         std::vector<double> in(2 * n), out(2 * n);
         for (size_t i = 0; i < 2 * n; ++i) {
             in[i] = 0.5 * std::sin(2.0 * 3.14159265358979323846 * f * static_cast<double>(i) / fs);
-            Pair a, b;
-            os.up(makePair(in[i], in[i]), a, b);
-            out[i] = leftOf(os.down(a, b));
+            Pair ab[2];
+            os.up(makePair(in[i], in[i]), ab);
+            out[i] = leftOf(os.down(ab));
         }
         const double gainDb = 20.0 * std::log10(toneAt(out, n, n, f) / 0.5);
         // delay from the phase (in frames)
@@ -151,27 +152,50 @@ void oversampler() {
     }
     // a hard-driven 13 kHz tone through tanh: its 3rd overtone (39 kHz) folds back to 9 kHz at 48 kHz without
     // oversampling; with it, it is removed
-    auto aliasDb = [&](bool over) {
-        StereoOversampler2x os;
+    auto aliasDb = [&](int factor, double f, double alias) {
+        StereoOversampler os;
+        os.setFactor(factor);
         std::vector<double> out(2 * n);
         for (size_t i = 0; i < 2 * n; ++i) {
-            const double x = 0.9 * std::sin(2.0 * 3.14159265358979323846 * 13000.0 * static_cast<double>(i) / fs);
-            if (!over) {
+            const double x = 0.9 * std::sin(2.0 * 3.14159265358979323846 * f * static_cast<double>(i) / fs);
+            if (factor == 1) {
                 out[i] = std::tanh(3.0 * x) / 3.0;
             } else {
-                Pair a, b;
-                os.up(makePair(x, x), a, b);
-                const Pair ya = makePair(std::tanh(3.0 * leftOf(a)) / 3.0, std::tanh(3.0 * rightOf(a)) / 3.0);
-                const Pair yb = makePair(std::tanh(3.0 * leftOf(b)) / 3.0, std::tanh(3.0 * rightOf(b)) / 3.0);
-                out[i] = leftOf(os.down(ya, yb));
+                Pair p[StereoOversampler::kMaxFactor];
+                os.up(makePair(x, x), p);
+                for (int k = 0; k < os.factor(); ++k)
+                    p[k] = makePair(std::tanh(3.0 * leftOf(p[k])) / 3.0, std::tanh(3.0 * rightOf(p[k])) / 3.0);
+                out[i] = leftOf(os.down(p));
             }
         }
-        return 20.0 * std::log10(toneAt(out, n, n, 9000.0) / toneAt(out, n, n, 13000.0));
+        return 20.0 * std::log10(toneAt(out, n, n, alias) / toneAt(out, n, n, f));
     };
-    const double plain = aliasDb(false), over = aliasDb(true);
+    const double plain = aliasDb(1, 13000.0, 9000.0), over = aliasDb(2, 13000.0, 9000.0);
     std::printf("   tanh, 13 kHz tone: alias at 9 kHz %.1f dBc without, %.1f dBc with 2x oversampling\n", plain, over);
     CHECK(plain > -40.0); // the fold-back the review found
     CHECK(over < plain - 40.0);
+    // 15 kHz: its 5th overtone (75 kHz) folds back inside the doubled band at 2x (to 21 kHz), its 7th (105 kHz) to
+    // 9 kHz; 4x and 8x take them away
+    for (int factor : {2, 4, 8}) {
+        const double a21 = aliasDb(factor, 15000.0, 21000.0), a9 = aliasDb(factor, 15000.0, 9000.0);
+        std::printf("   tanh, 15 kHz tone, %dx: fold-back at 21 kHz %.1f dBc, at 9 kHz %.1f dBc\n", factor, a21, a9);
+        if (factor >= 4) CHECK(std::max(a21, a9) < -70.0);
+    }
+    // 4x and 8x are as flat and add little delay
+    for (int factor : {4, 8}) {
+        StereoOversampler os;
+        os.setFactor(factor);
+        std::vector<double> in(2 * n), out(2 * n);
+        for (size_t i = 0; i < 2 * n; ++i) {
+            in[i] = 0.5 * std::sin(2.0 * 3.14159265358979323846 * 1000.0 * static_cast<double>(i) / fs);
+            Pair p[StereoOversampler::kMaxFactor];
+            os.up(makePair(in[i], in[i]), p);
+            out[i] = leftOf(os.down(p));
+        }
+        const double g1 = 20.0 * std::log10(toneAt(out, n, n, 1000.0) / 0.5);
+        std::printf("   %dx: 1 kHz %+.5f dB\n", factor, g1);
+        CHECK(std::fabs(g1) < 0.001);
+    }
 }
 
 // The delay the chain adds beyond the look-ahead, per frequency (informational; the docs quote it): the IIR filters
@@ -661,6 +685,14 @@ void clicks() {
     std::printf("   look-ahead 1.5 -> 0 -> 5 ms: %.2f\n", ratio);
     CHECK(ratio < 1.5);
 
+    // oversampling 4x -> 8x -> 2x: the clipper and the exciter fade out, take the new factor, fade back in
+    DeckControl o8 = ctl, o2 = ctl;
+    o8.oversampling = 8;
+    o2.oversampling = 2;
+    ratio = clickRatio(base, ctl, {{frames(3.0), base, o8}, {frames(3.3), base, o2}}, 3.0, 4.0, l, r);
+    std::printf("   oversampling 4x -> 8x -> 2x: %.2f\n", ratio);
+    CHECK(ratio < 1.5);
+
     // bypass on and off, freeze on and off
     DeckControl by = ctl, fr = ctl;
     by.processing = false;
@@ -782,10 +814,11 @@ void cpu() {
         CHECK(render(in, decks, true, out, res));
         best = std::min(best, res.processSeconds / res.audioSeconds * 100.0);
     }
-    // budget set by the client 2026-10-24 (docs/design.md section 10): goal < 3 %, fail > 5 % of one core
-    std::printf("   %.2f %% of one core for both decks (goal < 3 %%, fail > 5 %%)%s\n", best,
+    // budget set by the client 2026-10-24 (docs/design.md section 10): goal < 3 %; fail > 7 % of one core (client,
+    // 2026-10-27: "CPU is not a problem" - 5 % failed on a busier machine with the oversampled clipper and exciter)
+    std::printf("   %.2f %% of one core for both decks (goal < 3 %%, fail > 7 %%)%s\n", best,
                 best < 3.0 ? "" : "  - over the goal");
-    CHECK(best < 5.0);
+    CHECK(best < 7.0);
     // the same with every colour section working: tone, auto tone, sub bass, loudness (the most a colour costs)
     for (RenderDeck& d : decks) {
         d.values[pToneBass] = 3;
@@ -802,7 +835,7 @@ void cpu() {
         colour = std::min(colour, res.processSeconds / res.audioSeconds * 100.0);
     }
     std::printf("   with every colour stage on: %.2f %% (+%.2f)\n", colour, colour - best);
-    CHECK(colour < 5.0);
+    CHECK(colour < 7.0);
 }
 
 // --cpu: cost of each stage (Very Loud with one stage off), informational

@@ -53,7 +53,7 @@ private:
 
     Plugin* plugin_;
     HWND hwnd_ = nullptr, title_ = nullptr, version_ = nullptr, presetLabel_ = nullptr, preset_ = nullptr,
-         colourLabel_ = nullptr, colour_ = nullptr, lookLabel_ = nullptr, look_ = nullptr, bypass_ = nullptr,
+         colourLabel_ = nullptr, colour_ = nullptr, lookLabel_ = nullptr, look_ = nullptr, bypass_ = nullptr, oversampling_ = nullptr,
          meter_ = nullptr, edit_ = nullptr, editColour_ = nullptr;
     HWND sliderLabel_[4] = {}, slider_[4] = {}, sliderValue_[4] = {};
     HFONT font_ = nullptr, bold_ = nullptr;

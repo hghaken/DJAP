@@ -19,7 +19,7 @@ namespace {
 
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
-          idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idAbout,
+          idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idAbout, idOversampling,
           idCheckUpdates, idCheckNow, idInstall, idTooltips };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
@@ -158,10 +158,10 @@ void AudioWindow::createControls() {
         return CreateWindowExW(0, cls, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 10, 10, hwnd_,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
     };
-    const wchar_t* labels[13] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
+    const wchar_t* labels[14] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
                                  L"Sample rate", L"Buffer size",  L"Health",        L"Audio API",    L"Deck inputs",
-                                 L"Processing",  L"Look-ahead",   L"Updates"};
-    for (int i = 0; i < 13; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
+                                 L"Processing",  L"Look-ahead",   L"Updates",       L"Oversampling"};
+    for (int i = 0; i < 14; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
     const DWORD combo = CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP;
     decks_ = make(WC_COMBOBOXW, L"", combo, idDecks);
     api_ = make(WC_COMBOBOXW, L"", combo, idApi);
@@ -189,6 +189,7 @@ void AudioWindow::createControls() {
     health_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY, 0);
     resetHealth_ = make(L"BUTTON", L"Reset counters", BS_OWNERDRAW | WS_TABSTOP, idResetHealth);
     look_ = make(WC_COMBOBOXW, L"", combo, idLook);
+    oversampling_ = make(WC_COMBOBOXW, L"", combo, idOversampling);
     startup_ = make(L"BUTTON", L"Start DJAP when Windows starts (in the notification area, with the audio of the last "
                                L"session)",
                     BS_AUTOCHECKBOX | WS_TABSTOP, idStartup);
@@ -208,7 +209,7 @@ void AudioWindow::createControls() {
                  SS_LEFT, 0);
 
     for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_, about_, checkNow_, install_}) theme::makeButton(b);
-    for (HWND c : {decks_, api_, inputs_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_}) theme::makeCombo(c);
+    for (HWND c : {decks_, api_, inputs_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
                       L"players or a mixer's channels).\nOne channel: one stereo processor, for example for everything "
@@ -269,8 +270,13 @@ void AudioWindow::createControls() {
                        L"overloads: reported by the ASIO driver.");
     tips_.add(resetHealth_, L"Sets the health counters back to zero.");
     tips_.add(look_, L"How far the limiter looks ahead, for both decks: the only delay the processing adds. "
-                     L"Longer catches peaks more gently (true peak needs at least 1.0 ms); 0 ms = no delay, the "
-                     L"limiter then works on the sample peak. Changed at once with a short fade.");
+                     L"Longer catches peaks more gently; every choice above 0 limits the true peak. 0 ms = no delay, "
+                     L"the limiter then works on the sample peak only. Changed at once with a short fade.");
+    tips_.add(oversampling_, L"How many times the sample rate the soft clipper and the exciter work at, for both decks. "
+                             L"Their overtones above the audio band would fold back as harsh tones that do not belong to "
+                             L"the music: 2x leaves a rest on hard-driven high tones (about 40 dB under a 15 kHz tone), "
+                             L"4x and 8x take it away (more than 100 dB under) at a little more CPU. Adds no latency. "
+                             L"Changed with a short fade of those two stages.");
     tips_.add(startup_, L"On: DJAP starts when you log on to Windows, hidden in the notification area, and starts "
                         L"the audio of the last session (it retries for 2 minutes while the devices come up). "
                         L"Saved in Windows' list of startup programs, not in the settings file.");
@@ -297,7 +303,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, state_, health_, resetHealth_, note_, look_, startup_, about_, checkUpdates_, tooltips_,
+                   start_, stop_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, about_, checkUpdates_, tooltips_,
                    checkNow_, install_, updateInfo_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
@@ -356,6 +362,8 @@ void AudioWindow::layout() {
     y += row * (h + g);
     MoveWindow(labels_[11], m, y, labelW, h, TRUE);
     MoveWindow(look_, m + labelW + g, y, cw, px(300), TRUE);
+    MoveWindow(labels_[13], m + colW + g, y, labelW, h, TRUE);
+    MoveWindow(oversampling_, m + colW + g + labelW + g, y, cw, px(300), TRUE);
     y += h + g;
     ShowWindow(link_, two ? SW_SHOW : SW_HIDE);
     if (two) {
@@ -413,6 +421,12 @@ void AudioWindow::fillAll() {
         swprintf(t, 48, l == 0.0 ? L"0 ms (sample peak, no delay)" : l == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", l);
         addItem(look_, t, i);
         if (std::fabs(kLooks[i] - settings_.lookAheadMs) < 1e-9) SendMessageW(look_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
+    }
+    SendMessageW(oversampling_, CB_RESETCONTENT, 0, 0);
+    for (int f : {2, 4, 8}) {
+        addItem(oversampling_, f == 4 ? L"4x (default)" : f == 2 ? L"2x" : L"8x", f);
+        if (f == settings_.oversampling)
+            SendMessageW(oversampling_, CB_SETCURSEL, static_cast<WPARAM>(SendMessageW(oversampling_, CB_GETCOUNT, 0, 0) - 1), 0);
     }
     SendMessageW(startup_, BM_SETCHECK, !testRun_ && startsWithWindows() ? BST_CHECKED : BST_UNCHECKED, 0);
     EnableWindow(startup_, !testRun_);
@@ -686,6 +700,12 @@ void AudioWindow::command(int id, int code) {
         if (i >= 0 && i < static_cast<LPARAM>(std::size(kLooks))) settings_.lookAheadMs = kLooks[i];
         onChange_();
         refresh();
+        return;
+    }
+    if (id == idOversampling && code == CBN_SELCHANGE && !filling_) {
+        const LPARAM f = selectedData(oversampling_, settings_.oversampling);
+        if (f == 2 || f == 4 || f == 8) settings_.oversampling = static_cast<int>(f);
+        onChange_(); // the decks take it with a short fade of the clipper and the exciter
         return;
     }
     if (id == idStartup && code == BN_CLICKED) {

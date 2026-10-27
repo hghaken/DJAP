@@ -27,7 +27,7 @@ namespace {
 
 const wchar_t* const kClass = L"DJAPPluginView";
 const double kLooks[] = {0.0, 1.5, 2.0, 3.0, 5.0}; // the Setup window's choices (ms; see audiodlg.cpp)
-enum Id { idPreset = 1, idColour, idLook, idBypass, idEdit, idEditColour, idSlider0 = 10, idMeter = 20 };
+enum Id { idPreset = 1, idColour, idLook, idBypass, idEdit, idEditColour, idOversampling, idSlider0 = 10, idMeter = 20 };
 enum Slider { slLevel, slEnhancer, slWidth, slFreq, kSliders };
 const wchar_t* const kSliderName[kSliders] = {L"Bass level", L"Bass enhancer", L"Bass width", L"Bass frequency"};
 const int kSliderMin[kSliders] = {-24, 0, 0, 8}, kSliderMax[kSliders] = {24, 20, 20, 50}; // 0.5 dB / 5 % / 5 Hz
@@ -184,6 +184,7 @@ void PluginView::create() {
                     SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0);
     lookLabel_ = make(L"STATIC", L"Look-ahead", SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0);
     look_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idLook);
+    oversampling_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOversampling);
     bypass_ = make(L"BUTTON", L"Bypass", BS_OWNERDRAW | WS_TABSTOP, idBypass);
     presetLabel_ = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
     preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
@@ -203,7 +204,7 @@ void PluginView::create() {
     }
     meter_ = createMeterView(hwnd_, idMeter);
     for (HWND b : {bypass_, edit_, editColour_}) theme::makeButton(b);
-    for (HWND c : {preset_, colour_, look_}) theme::makeCombo(c);
+    for (HWND c : {preset_, colour_, look_, oversampling_}) theme::makeCombo(c);
 
     fillLists();
     for (double l : kLooks) {
@@ -211,6 +212,8 @@ void PluginView::create() {
         swprintf(t, 48, l == 0.0 ? L"0 ms (sample peak, no delay)" : l == 1.5 ? L"%.1f ms (default)" : L"%.1f ms", l);
         SendMessageW(look_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(t));
     }
+    for (const wchar_t* t : {L"Oversampling 2x", L"Oversampling 4x", L"Oversampling 8x"})
+        SendMessageW(oversampling_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(t));
 
     tips_.create(hwnd_);
     tips_.add(version_, L"DJAP processes this channel like one deck of the program, with the same presets and "
@@ -229,6 +232,10 @@ void PluginView::create() {
                      L"keep this channel in time with the others). Longer handles peaks more gently; true-peak "
                      L"limiting needs at least 1.0 ms; 0 ms = no delay, sample peaks only.");
     tips_.add(lookLabel_, L"The limiter's look-ahead: the only delay the processing adds.");
+    tips_.add(oversampling_, L"How many times the sample rate the soft clipper and the exciter work at (4x by default). "
+                             L"Their overtones above the audio band would fold back as harsh tones that do not belong "
+                             L"to the music: 2x leaves a rest on hard-driven high tones, 4x and 8x take it away at a "
+                             L"little more CPU. Adds no latency.");
     tips_.add(bypass_, L"Bypass (lit): the input goes out unchanged, delayed by the same look-ahead, so switching "
                        L"never shifts the sound in time.");
     for (int k = 0; k < kSliders; ++k)
@@ -256,9 +263,10 @@ void PluginView::layout() {
     const int m = px(12), gap = px(6), rowH = px(28), W = rc.right - 2 * m;
     int y = m;
     // DJAP  DJ Audio Processor 0.1.x ........ Look-ahead [....] [Bypass]
-    const int bypassW = px(90), lookW = px(150), lookLabelW = px(78);
+    const int bypassW = px(90), lookW = px(150), lookLabelW = px(78), osW = px(126);
     MoveWindow(title_, m, y, px(70), rowH, TRUE);
-    MoveWindow(version_, m + px(74), y + px(2), W - px(74) - bypassW - lookW - lookLabelW - 3 * gap, rowH, TRUE);
+    MoveWindow(version_, m + px(74), y + px(2), W - px(74) - bypassW - lookW - lookLabelW - osW - 4 * gap, rowH, TRUE);
+    MoveWindow(oversampling_, m + W - bypassW - lookW - lookLabelW - osW - 3 * gap, y, osW, px(300), TRUE);
     MoveWindow(lookLabel_, m + W - bypassW - lookW - lookLabelW - 2 * gap, y, lookLabelW, rowH, TRUE);
     MoveWindow(look_, m + W - bypassW - lookW - gap, y, lookW, px(300), TRUE);
     MoveWindow(bypass_, m + W - bypassW, y, bypassW, rowH, TRUE);
@@ -321,6 +329,9 @@ void PluginView::fill() {
     for (int i = 0; i < static_cast<int>(std::size(kLooks)); ++i)
         if (std::fabs(kLooks[i] - look) < std::fabs(kLooks[li] - look)) li = i;
     if (SendMessageW(look_, CB_GETCURSEL, 0, 0) != li) SendMessageW(look_, CB_SETCURSEL, static_cast<WPARAM>(li), 0);
+    const int os = static_cast<int>(plugin_->plainOf(kOversamplingId)), oi = os == 8 ? 2 : os == 4 ? 1 : 0;
+    if (SendMessageW(oversampling_, CB_GETCURSEL, 0, 0) != oi)
+        SendMessageW(oversampling_, CB_SETCURSEL, static_cast<WPARAM>(oi), 0);
     theme::setChecked(bypass_, plugin_->plainOf(kBypassId) >= 0.5);
 
     const PresetValues v = plugin_->currentValues();
@@ -362,6 +373,9 @@ void PluginView::meters() {
     data.specIn = an.specIn.points();
     data.specOut = an.specOut.points();
     for (int k = 0; k < kMaxSplits; ++k) data.splits[k] = v[static_cast<size_t>(pDensSplit1 + k)];
+    data.colourValues = v;
+    for (int k = 0; k < 4; ++k) data.autoDb[k] = data.m.autoToneDb[k];
+    data.fs = plugin_->active() && plugin_->sampleRate() > 0 ? plugin_->sampleRate() : 48000.0;
     setMeterView(meter_, data);
 }
 
@@ -404,6 +418,9 @@ void PluginView::command(int id, int code) {
     } else if (id == idLook && code == CBN_SELCHANGE) {
         const int sel = static_cast<int>(SendMessageW(look_, CB_GETCURSEL, 0, 0));
         if (sel >= 0 && sel < static_cast<int>(std::size(kLooks))) plugin_->edit(kLookId, kLooks[sel] / 5.0);
+    } else if (id == idOversampling && code == CBN_SELCHANGE) {
+        const int sel = static_cast<int>(SendMessageW(oversampling_, CB_GETCURSEL, 0, 0));
+        if (sel >= 0 && sel <= 2) plugin_->edit(kOversamplingId, sel / 2.0);
     } else if (id == idBypass && code == BN_CLICKED) {
         plugin_->edit(kBypassId, plugin_->plainOf(kBypassId) >= 0.5 ? 0.0 : 1.0);
         fill();

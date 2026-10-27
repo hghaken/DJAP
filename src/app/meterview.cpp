@@ -346,6 +346,10 @@ void paint(HWND hwnd, HDC target, View& v) {
             sd.bands = m.bands > 0 ? m.bands : 1;
             for (int k = 0; k < kMaxSplits; ++k) sd.splits[k] = d.splits[k];
             for (int k = 0; k < kMaxBands; ++k) sd.densityDb[k] = live ? m.densityDb[k] : 0.0;
+            sd.colour = d.processing; // bypassed: no colour is applied
+            sd.values = d.colourValues;
+            for (int k = 0; k < 4; ++k) sd.autoDb[k] = live ? d.autoDb[k] : 0.0;
+            sd.fs = d.fs;
             spectrum::paint(dc, RECT{sx0, sy0, sx1, sy1}, sd, v.small, GetDpiForWindow(hwnd), false);
         }
     }

@@ -385,6 +385,24 @@ int main(int argc, char** argv) {
         a.close();
     }
 
+    // 4b. the oversampling (2x, 4x, 8x; 4x by default) is a parameter and goes with the project
+    {
+        Instance a, b;
+        CHECK(a.open(module, &host));
+        CHECK(a.controller->getParamNormalized(ap::plugin::kOversamplingId) == 0.5); // 4x
+        a.controller->setParamNormalized(ap::plugin::kOversamplingId, 1.0);       // 8x
+        MemoryStream m;
+        CHECK(a.component->getState(&m) == kResultOk);
+        m.seek(0, IBStream::kIBSeekSet, nullptr);
+        CHECK(b.open(module, &host));
+        CHECK(b.component->setState(&m) == kResultOk);
+        const double loaded = b.controller->getParamNormalized(ap::plugin::kOversamplingId);
+        std::printf("-- oversampling 8x stored and loaded: %s\n", loaded == 1.0 ? "8x" : "NOT 8x");
+        CHECK(loaded == 1.0);
+        a.close();
+        b.close();
+    }
+
     // 5. an input the host marks silent may hold anything: it is processed as silence
     {
         Instance a;

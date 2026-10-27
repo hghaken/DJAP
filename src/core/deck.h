@@ -62,8 +62,13 @@ constexpr int kTpFactorMeter = 4;      // output meter (EBU Tech 3341 tolerance)
 constexpr int kTpTapsMeter = 32;
 
 // Settings that are not part of a preset.
+// The oversampling choices of the clipper and the exciter (client, 2026-10-27: the user's choice; dsp.h).
+constexpr int kOversamplingDefault = 4;
+inline int snapOversampling(int f) { return f >= 6 ? 8 : f >= 3 ? 4 : 2; }
+
 struct DeckControl {
     double lookMs = 1.5;     // limiter look-ahead, the same for both decks
+    int oversampling = kOversamplingDefault; // 2, 4 or 8: the soft clipper and the exciter's saturation
     bool processing = true;  // false = bypass (input delayed by the look-ahead, bit-exact)
     bool freeze = false;     // leveller holds its gain
 };
@@ -73,6 +78,7 @@ struct DeckControl {
 struct DeckConfig {
     double fs = 48000.0;
     int look = 0;
+    int oversampling = kOversamplingDefault;
     bool processing = true, freeze = false;
     bool on[kStageCount] = {};
     double inputGain = 1.0, outputGain = 1.0;
@@ -290,7 +296,10 @@ private:
     bool bassRetune_ = false; // new frequency: the stage fades out, takes the new filters, fades back in
     // exciter
     StereoBiquad2 excHp_, excHp2_;
-    StereoOversampler2x excOs_, clipOs_; // the exciter's saturation and the soft clipper run at twice the rate
+    StereoOversampler excOs_, clipOs_; // the exciter's saturation and the soft clipper run at 2x, 4x or 8x the rate
+    // a new oversampling factor: the clipper and the exciter fade out, take it with clean filters, fade back in (as the
+    // bass stage does for a new frequency): the factors' filters delay the signal differently, a switch would click
+    bool osRetune_ = false;
     // de-esser
     StereoBiquad2 dessHp_;
     StereoBiquad dessShelf_;

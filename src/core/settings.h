@@ -51,6 +51,7 @@ public:
                                      // MME devices (drift-corrected, docs/design.md section 6.1)
     std::string asioInputDevice[2];  // ... each deck's device then; empty = its ASIO input pair
     double lookAheadMs = 1.5;    // limiter look-ahead, both decks
+    int oversampling = 4;        // 2, 4 or 8: the soft clipper and the exciter (deck.h, kOversamplingDefault)
     int bufferSize = 0;          // driver buffer in frames; 0 = the driver's preferred size
     bool startAudio = false;     // start the audio at program start (the last Start, not stopped since)
     // the outputs follow the volume (and mute) of Windows' default playback device - the volume keys; one choice

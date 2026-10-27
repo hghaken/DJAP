@@ -534,7 +534,8 @@ void colour() {
 
     // the worst case: hard-driven high tones (drive 9 dB, -6 dBFS in), every component that is not the tone (their
     // overtones are all above the Nyquist frequency, so whatever else is there is fold-back). 2x leaves a rest here
-    // (the 5th and 7th overtones fold inside the doubled band): about -36 dBc at 15 kHz, from -16 at the base rate.
+    // (the 5th and 7th overtones fold inside the doubled band): about -40 dBc at 15 kHz, from -16 at the base rate; the
+    // default 4x: about -62.
     v[pClipDrive] = 9;
     double worst = -300, worstF = 0;
     for (double f : {12000.0, 13000.0, 14000.0, 15000.0, 16000.0}) {
@@ -552,7 +553,7 @@ void colour() {
     }
     std::printf("   soft clipper, 12-16 kHz driven 9 dB in: strongest fold-back %.1f dB under the tone (at %.0f Hz)\n",
                 -worst, worstF);
-    CHECK(worst < -30.0);
+    CHECK(worst < -55.0); // at the default 4x (2x: about -40, the rest the 4x and 8x choices take away)
 
     // the exciter's saturation runs at twice the rate too: a 10 kHz tone's 3rd overtone (30 kHz) folded back to
     // 18 kHz at the base rate (-20.6 dBc in the outside review)

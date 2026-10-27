@@ -1,5 +1,6 @@
 #include "wavfile.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -10,6 +11,7 @@ namespace ap {
 namespace {
 uint32_t u32(const unsigned char* p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24); }
 uint16_t u16(const unsigned char* p) { return static_cast<uint16_t>(p[0] | (p[1] << 8)); }
+uint64_t u64(const unsigned char* p) { return u32(p) | (static_cast<uint64_t>(u32(p + 4)) << 32); }
 
 void put32(std::vector<unsigned char>& b, uint32_t v) {
     for (int i = 0; i < 4; ++i) b.push_back(static_cast<unsigned char>(v >> (8 * i)));
@@ -18,29 +20,43 @@ void put16(std::vector<unsigned char>& b, uint16_t v) {
     b.push_back(static_cast<unsigned char>(v));
     b.push_back(static_cast<unsigned char>(v >> 8));
 }
+void put64(std::vector<unsigned char>& b, uint64_t v) {
+    for (int i = 0; i < 8; ++i) b.push_back(static_cast<unsigned char>(v >> (8 * i)));
+}
 } // namespace
 
 bool readWav(const std::filesystem::path& file, WavData& out, std::string& error) {
-    std::ifstream in(file, std::ios::binary);
+    std::ifstream in(file, std::ios::binary | std::ios::ate);
     if (!in) {
         error = "cannot open the file";
         return false;
     }
-    std::vector<unsigned char> buf((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    if (buf.size() < 12 || std::memcmp(buf.data(), "RIFF", 4) != 0 || std::memcmp(buf.data() + 8, "WAVE", 4) != 0) {
+    const std::streamoff length = in.tellg();
+    in.seekg(0);
+    std::vector<unsigned char> buf(length > 0 ? static_cast<size_t>(length) : 0);
+    if (!buf.empty() && !in.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(buf.size()))) {
+        error = "cannot read the file";
+        return false;
+    }
+    const bool rf64 = buf.size() >= 12 && std::memcmp(buf.data(), "RF64", 4) == 0;
+    if (buf.size() < 12 || (!rf64 && std::memcmp(buf.data(), "RIFF", 4) != 0) || std::memcmp(buf.data() + 8, "WAVE", 4) != 0) {
         error = "not a RIFF / WAVE file";
         return false;
     }
     int format = 0, channels = 0, rate = 0, bits = 0;
     const unsigned char* data = nullptr;
     size_t dataSize = 0;
+    uint64_t ds64Data = 0; // RF64: the data chunk's size from the ds64 chunk
     size_t pos = 12;
     while (pos + 8 <= buf.size()) {
         const unsigned char* ck = buf.data() + pos;
-        size_t size = u32(ck + 4);
+        uint64_t size = u32(ck + 4);
+        if (rf64 && std::memcmp(ck, "data", 4) == 0 && size == 0xFFFFFFFFu) size = ds64Data;
         const size_t body = pos + 8;
         if (body + size > buf.size()) size = buf.size() - body; // tolerate a truncated last chunk
-        if (std::memcmp(ck, "fmt ", 4) == 0 && size >= 16) {
+        if (std::memcmp(ck, "ds64", 4) == 0 && size >= 16) {
+            ds64Data = u64(ck + 16);
+        } else if (std::memcmp(ck, "fmt ", 4) == 0 && size >= 16) {
             format = u16(ck + 8);
             channels = u16(ck + 10);
             rate = static_cast<int>(u32(ck + 12));
@@ -48,9 +64,9 @@ bool readWav(const std::filesystem::path& file, WavData& out, std::string& error
             if (format == 0xFFFE && size >= 40) format = u16(ck + 8 + 24); // extensible: sub-format
         } else if (std::memcmp(ck, "data", 4) == 0) {
             data = buf.data() + body;
-            dataSize = size;
+            dataSize = static_cast<size_t>(size);
         }
-        pos = body + size + (size & 1);
+        pos = body + static_cast<size_t>(size) + static_cast<size_t>(size & 1);
     }
     if (!data || channels <= 0 || rate <= 0) {
         error = "no fmt or data chunk";
@@ -84,19 +100,32 @@ bool readWav(const std::filesystem::path& file, WavData& out, std::string& error
             std::memcpy(&d, p, 8);
             v = static_cast<float>(d);
         }
-        out.samples[i] = v;
+        out.samples[i] = std::isfinite(v) ? v : 0.0f; // a NaN in a file would poison every filter after it
     }
     return true;
 }
 
-bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, std::string& error) {
+bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, std::string& error, bool rf64) {
     const int bytes = pcm24 ? 3 : 4;
-    const uint32_t dataSize = static_cast<uint32_t>(d.samples.size() * static_cast<size_t>(bytes));
+    const uint64_t dataSize = static_cast<uint64_t>(d.samples.size()) * static_cast<uint64_t>(bytes);
+    // a WAV's sizes are 32 bits; the RIFF size counts the header after it too (36 bytes, plus a pad byte)
+    if (dataSize + 37 > 0xFFFFFFFFull) rf64 = true;
     std::vector<unsigned char> b;
-    b.reserve(44 + dataSize);
-    b.insert(b.end(), {'R', 'I', 'F', 'F'});
-    put32(b, 36 + dataSize);
-    b.insert(b.end(), {'W', 'A', 'V', 'E', 'f', 'm', 't', ' '});
+    const char* tag = rf64 ? "RF64" : "RIFF";
+    b.insert(b.end(), tag, tag + 4);
+    const uint64_t pad = dataSize & 1;
+    const uint64_t riffSize = (rf64 ? 4 + 36 + 24 + 8 : 4 + 24 + 8) + dataSize + pad; // WAVE, (ds64), fmt, data
+    put32(b, rf64 ? 0xFFFFFFFFu : static_cast<uint32_t>(riffSize));
+    b.insert(b.end(), {'W', 'A', 'V', 'E'});
+    if (rf64) { // ds64: the true sizes (EBU Tech 3306)
+        b.insert(b.end(), {'d', 's', '6', '4'});
+        put32(b, 28);
+        put64(b, riffSize);
+        put64(b, dataSize);
+        put64(b, d.channels ? static_cast<uint64_t>(d.samples.size()) / static_cast<uint64_t>(d.channels) : 0);
+        put32(b, 0); // no table
+    }
+    b.insert(b.end(), {'f', 'm', 't', ' '});
     put32(b, 16);
     put16(b, pcm24 ? 1 : 3);
     put16(b, static_cast<uint16_t>(d.channels));
@@ -105,31 +134,54 @@ bool writeWav(const std::filesystem::path& file, const WavData& d, bool pcm24, s
     put16(b, static_cast<uint16_t>(d.channels * bytes));
     put16(b, static_cast<uint16_t>(bytes * 8));
     b.insert(b.end(), {'d', 'a', 't', 'a'});
-    put32(b, dataSize);
-    for (float v : d.samples) {
-        if (pcm24) {
-            double x = std::isfinite(v) ? v : 0.0;
-            x = x > 1.0 ? 1.0 : (x < -1.0 ? -1.0 : x);
-            long q = std::lround(x * 8388608.0);
-            if (q > 8388607) q = 8388607;
-            const uint32_t u = static_cast<uint32_t>(q);
-            b.push_back(static_cast<unsigned char>(u));
-            b.push_back(static_cast<unsigned char>(u >> 8));
-            b.push_back(static_cast<unsigned char>(u >> 16));
-        } else {
-            uint32_t u;
-            std::memcpy(&u, &v, 4);
-            put32(b, u);
+    put32(b, rf64 ? 0xFFFFFFFFu : static_cast<uint32_t>(dataSize));
+
+    // the samples in pieces (no second copy of a long file in memory), into "<file>.part"; renamed when complete
+    std::filesystem::path part = file;
+    part += ".part";
+    std::error_code ec;
+    {
+        std::ofstream out(part, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            error = "cannot create the file";
+            return false;
+        }
+        out.write(reinterpret_cast<const char*>(b.data()), static_cast<std::streamsize>(b.size()));
+        const size_t piece = 1 << 16;
+        for (size_t start = 0; out && start < d.samples.size(); start += piece) {
+            b.clear();
+            const size_t end = std::min(d.samples.size(), start + piece);
+            for (size_t i = start; i < end; ++i) {
+                const float v = std::isfinite(d.samples[i]) ? d.samples[i] : 0.0f;
+                if (pcm24) {
+                    double x = v;
+                    x = x > 1.0 ? 1.0 : (x < -1.0 ? -1.0 : x);
+                    long q = std::lround(x * 8388608.0);
+                    if (q > 8388607) q = 8388607;
+                    const uint32_t u = static_cast<uint32_t>(q);
+                    b.push_back(static_cast<unsigned char>(u));
+                    b.push_back(static_cast<unsigned char>(u >> 8));
+                    b.push_back(static_cast<unsigned char>(u >> 16));
+                } else {
+                    uint32_t u;
+                    std::memcpy(&u, &v, 4);
+                    put32(b, u);
+                }
+            }
+            out.write(reinterpret_cast<const char*>(b.data()), static_cast<std::streamsize>(b.size()));
+        }
+        if (pad) out.put('\0');
+        out.close();
+        if (!out) {
+            std::filesystem::remove(part, ec);
+            error = "write failed (disk full?)";
+            return false;
         }
     }
-    std::ofstream out(file, std::ios::binary | std::ios::trunc);
-    if (!out) {
-        error = "cannot create the file";
-        return false;
-    }
-    out.write(reinterpret_cast<const char*>(b.data()), static_cast<std::streamsize>(b.size()));
-    if (!out) {
-        error = "write failed";
+    std::filesystem::rename(part, file, ec);
+    if (ec) {
+        std::filesystem::remove(part, ec);
+        error = "cannot replace the file (open in another program?)";
         return false;
     }
     return true;

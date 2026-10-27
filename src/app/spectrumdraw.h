@@ -1,8 +1,8 @@
 // The spectrum graph, drawn the same way in the meter panel and in the spectrum window (client, 2026-10-26: "all
 // together in a separate, big spectrum graph"): the deck's input (orange) and output (turquoise) spectrum, the density
 // stage's bands with their gains now - a line per band (client, 2026-10-26: of strip, shade and lines only the lines
-// stayed) - and, in the spectrum window,
-// the colour's EQ curve with a point per tone section and a handle per density band (its fixed gain, the preset's
+// stayed) -, the colour's EQ curve (in the meter panel the total curve only; client, 2026-10-27) and, in the spectrum
+// window, a point per tone section and a handle per density band (its fixed gain, the preset's
 // "Band N gain"; client, 2026-10-26: "make the tone bands equal to the density bands" - the density bands' own EQ made
 // draggable, the colour's points may snap to the band splits) to drag. Custom-drawn with GDI on the dark meter
 // palette.
@@ -24,7 +24,7 @@ struct Data {
     int bands = 1;
     double splits[kMaxSplits] = {};
     double densityDb[kMaxBands] = {};
-    // the spectrum window: the colour's EQ curve (the deck's values; the auto tone's corrections now)
+    // the colour's EQ curve (the deck's values; the auto tone's corrections now)
     bool colour = false;
     PresetValues values{};
     double autoDb[4] = {};

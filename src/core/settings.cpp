@@ -287,6 +287,8 @@ std::string Settings::toText() const {
     o << "AsioInputDeviceA=" << asioInputDevice[0] << "\nAsioInputDeviceB=" << asioInputDevice[1] << "\n";
     o << "; Limiter look-ahead in ms (0..5), the same for both decks; the only delay the processing adds\n";
     o << "LookAheadMs=" << compact(lookAheadMs) << "\n";
+    o << "; Oversampling of the soft clipper and the exciter (2, 4 or 8), both decks: more keeps their overtones from\n"
+         "; folding back into the audio band, at more CPU\nOversampling=" << oversampling << "\n";
     o << "; Driver buffer size in frames (0 = the driver's preferred size)\nBufferSize=" << bufferSize << "\n";
     o << "; Start the audio when the program starts (1 = it was started last and not stopped since)\nStartAudio="
       << (startAudio ? 1 : 0) << "\n";
@@ -411,6 +413,10 @@ void Settings::fromText(const std::string& text) {
         if (parseDouble(*v, d)) lookAheadMs = std::min(5.0, std::max(0.0, d));
         // the old choices 0.5 and 1.0 ms: under the true-peak minimum, they become the default (deck.h, lookFrames)
         if (lookAheadMs > 0.0 && lookAheadMs < 1.5) lookAheadMs = 1.5;
+    }
+    if (auto v = get("Audio", "Oversampling")) {
+        const int f = toInt(*v, 4);
+        oversampling = f >= 6 ? 8 : f >= 3 ? 4 : 2; // 2, 4 or 8
     }
     if (auto v = get("Audio", "BufferSize")) bufferSize = std::min(8192, std::max(0, toInt(*v, 0)));
     if (auto v = get("Audio", "StartAudio")) startAudio = toInt(*v, 0) != 0;

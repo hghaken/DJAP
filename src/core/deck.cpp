@@ -82,6 +82,7 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     DeckConfig c;
     c.fs = fs;
     c.look = lookFrames(ctl.lookMs, fs);
+    c.oversampling = snapOversampling(ctl.oversampling);
     c.processing = ctl.processing;
     c.freeze = ctl.freeze;
     auto on = [&](Param p) { return v[p] >= 0.5; };
@@ -384,6 +385,16 @@ void DeckProcessor::applyConfig(const DeckConfig& c) {
     }
     excHp_.set(c.excHp);
     excHp2_.set(c.excHp);
+    // a new oversampling factor: at once when the stages rest (resetStage takes it when they start), else they fade
+    // out and back in with it
+    if (first) {
+        excOs_.setFactor(c.oversampling);
+        clipOs_.setFactor(c.oversampling);
+        osRetune_ = false;
+    } else if ((running_[sExciter] && excOs_.factor() != c.oversampling) ||
+               (running_[sClipper] && clipOs_.factor() != c.oversampling)) {
+        osRetune_ = true;
+    }
     dessHp_.set(c.dessHp);
     if (first || !running_[sWidth]) {
         width_[widthActive_].set(c);
@@ -466,10 +477,10 @@ void DeckProcessor::resetStage(int s) {
     case sExciter:
         excHp_.reset();
         excHp2_.reset();
-        excOs_.reset();
+        excOs_.setFactor(cfg_.oversampling); // clean filters, the configuration's factor
         break;
     case sClipper:
-        clipOs_.reset();
+        clipOs_.setFactor(cfg_.oversampling);
         break;
     case sDeEsser:
         dessHp_.reset();
@@ -753,9 +764,10 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         // switches (20 ms ramps); a stage that starts from rest starts with a clean state. Skipped once everything
         // has arrived (settled_), until the next configuration.
         if (!settled_) {
-            bool done = !bassRetune_;
+            bool done = !bassRetune_ && !osRetune_;
             for (int s = 0; s < kStageCount; ++s) {
-                const bool want = c.on[s] && !(s == sBass && bassRetune_);
+                const bool want = c.on[s] && !(s == sBass && bassRetune_) &&
+                                  !((s == sExciter || s == sClipper) && osRetune_);
                 if (want && !running_[s]) {
                     resetStage(s);
                     running_[s] = true;
@@ -765,6 +777,7 @@ void DeckProcessor::process(float* left, float* right, int frames) {
                     running_[s] = false;
                     if (s == sBass) bassRetune_ = false; // back in with the new filters
                 }
+                if (osRetune_ && !running_[sExciter] && !running_[sClipper]) osRetune_ = false; // back in: new factor
                 done = done && mix_[s] == (want ? 1.0 : 0.0) && (running_[s] == want || s == sLeveller);
             }
             if (!c.on[sLeveller] && mix_[sLeveller] <= 0.0 && running_[sLeveller]) {
@@ -849,17 +862,17 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         }
         tap(ctBass, l, r);
 
-        // exciter: only what the saturation adds, high-passed again; the saturation at twice the rate, so its
-        // overtones above the Nyquist frequency do not fold back (dsp.h, StereoOversampler2x)
+        // exciter: only what the saturation adds, high-passed again; the saturation at 2x, 4x or 8x the rate, so its
+        // overtones above the Nyquist frequency do not fold back (dsp.h, StereoOversampler)
         if (running_[sExciter]) {
             const Pair h = excHp_.process(makePair(l, r));
-            Pair a, b;
-            excOs_.up(h, a, b);
-            auto sat = [](Pair p) {
-                const double x = leftOf(p), y = rightOf(p);
-                return makePair(x - fastTanh(4.0 * x) / 4.0, y - fastTanh(4.0 * y) / 4.0);
-            };
-            const Pair e = excHp2_.process(excOs_.down(sat(a), sat(b)));
+            Pair os[StereoOversampler::kMaxFactor];
+            excOs_.up(h, os);
+            for (int k = 0; k < excOs_.factor(); ++k) {
+                const double x = leftOf(os[k]), y = rightOf(os[k]);
+                os[k] = makePair(x - fastTanh(4.0 * x) / 4.0, y - fastTanh(4.0 * y) / 4.0);
+            }
+            const Pair e = excHp2_.process(excOs_.down(os));
             const double el = leftOf(e), er = rightOf(e);
             const double m = mix_[sExciter] * c.excGain;
             l += m * el;
@@ -928,16 +941,15 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             const double ul = l * d, ur = r * d;
             // the filters see the driven signal only; the ceiling enters per sample in the curve itself, so a new
             // ceiling does not meet samples of the old scale in the filters' memory (a click)
-            Pair a, b;
-            clipOs_.up(makePair(l * clipDriveS_, r * clipDriveS_), a, b);
-            auto curve = [&](Pair p) {
-                return makePair(ceil * softClip(leftOf(p) * inv), ceil * softClip(rightOf(p) * inv));
-            };
+            Pair os[StereoOversampler::kMaxFactor];
+            clipOs_.up(makePair(l * clipDriveS_, r * clipDriveS_), os);
+            for (int k = 0; k < clipOs_.factor(); ++k)
+                os[k] = makePair(ceil * softClip(leftOf(os[k]) * inv), ceil * softClip(rightOf(os[k]) * inv));
             // a flattened peak, its overtones above the audio band removed, rises a little over the ceiling again
             // (0.36 dB on a 3 kHz tone 6 dB in): the limiter after it holds the ceiling. Holding it here as well
             // brought the fold-back of the highs back (-24 dBc on 13 kHz), so only a loudness preset with the
             // limiter off gets that hold (outside review: the clipper's ceiling must stand on its own then)
-            const Pair y = clipOs_.down(curve(a), curve(b));
+            const Pair y = clipOs_.down(os);
             double yl = leftOf(y), yr = rightOf(y);
             if (!running_[sLimiter]) {
                 yl = std::max(-ceil, std::min(ceil, yl));

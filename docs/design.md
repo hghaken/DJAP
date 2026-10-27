@@ -49,7 +49,7 @@ deck input (stereo, pre-fader preferred - see 7)
                                     the leveller's own gain is divided out per control block, so the 3 s average
                                     does not lag its own moves (closed through it, the 20 dB/s catch-up overshot to
                                     the +9 dB range end)
- -> soft clipper                     zero latency, no oversampling
+ -> soft clipper                     zero latency; 2x / 4x / 8x oversampling with IIR halfbands (user's choice)
  -> look-ahead true-peak limiter     the only delay (default 1.5 ms)
  -> output gain (only down)
  -> clip guard                       non-finite -> 0, clamp [-1, 1]
@@ -100,6 +100,7 @@ analysis.
 | Exciter | frequency / amount | Hz / % | 3500 / 15 | 1500..8000 / 0..100 | 10.7 |
 | De-esser | frequency / threshold / max | Hz / LU re T / dB | 5500 / -10 / 6 | 3000..10000 / -30..0 / 0..12 | 10.8 |
 | Stereo width | width / bass width / bass split | % / % / Hz | 100 / 100 / 150 | 0..200 / 0..100 / 40..400 | 10.5 |
+| | oversampling | x | 4 | 2, 4, 8 | the soft clipper and the exciter's saturation (client, 2026-10-27: "CPU is not a problem, make the oversampling a user's choice"); 2x left about -40 dBc on hard-driven 15 kHz tones, 4x / 8x over 100 dB down; Setup and the plug-in, `[Audio] Oversampling`, `DeckControl::oversampling`; a change fades the two stages out and in |
 | Soft clipper | drive | dB | 2 | 0..9 | 10.9; runs at 2x the rate (polyphase IIR halfbands, about 2.6 frames of phase delay, no latency) - its aliases were -16..-44 dBc on 10-15 kHz tones (outside review, client 2026-10-26); the exciter's saturation too |
 | Limiter | ceiling | dBTP | -1.0 | -6..0 | R 128 / AES |
 | | release | ms | 80 | 10..500 | 10.10 |
@@ -350,7 +351,7 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
 | `third_party/asiosdk/` | Steinberg ASIO SDK (GPL-3.0 option), not committed, fetched / copied by a script |
 
 CLI: a separate console program `DJAPCmd.exe` (the GUI program is a Windows-subsystem exe):
-`--render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--look <ms>] [--keep-delay] [--pcm24] [--trace <csv>]` (4-channel
+`--render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--look <ms>] [--oversampling <2|4|8>] [--keep-delay] [--pcm24] [--trace <csv>]` (4-channel
 WAV = A + B, 2-channel = A; input also MP3 / M4A / WMA / FLAC decoded by Windows Media Foundation, mono on both
 channels; default per deck: its preset and processing switch in the settings; output 32-bit float
 with the look-ahead delay removed unless `--keep-delay`; `--trace`: deck A every 100 ms from the deck's own meter
@@ -663,7 +664,7 @@ preset (`[Preset X]`) and per colour (`[Colour X]`), readable and editable by ha
 | Real time | global `operator new` counter during processing, parameter changes, switches, profile changes | 0 allocations |
 | Clicks | every parameter change on a sine | no step larger than the signal's own |
 | Decks | A processing does not change B; equal latency | bit-exact B; same delay |
-| CPU | both decks full chain, 48 kHz | goal < 3 %, fail > 5 % of one core (client, 2026-10-24; was < 1 % / > 2 %, measured 2.8-3.0 %: the deck is latency-bound) |
+| CPU | both decks full chain, 48 kHz | goal < 3 %, fail > 7 % of one core (client, 2026-10-24; was < 1 % / > 2 %, measured 2.8-3.0 %: the deck is latency-bound; fail 5 -> 7 % on 2026-10-27, client: "CPU is not a problem" - 4.3 % with 4x oversampling) |
 | Offline | render synthetic + copied music, check with `audiotool.py measure / compare` | I within 1 LU of T, TP <= ceiling, bypass bit-exact |
 | Input on another clock | simulated clocks -500..+500 ppm, late callbacks, capture pause, output pause; read speed 1; fractional speed 1.0001 with tones; engine with one deck from an async input | no xruns in normal running, drift within 3 ppm, fill within 0.5 ms; recovers; bit-exact; +-0.1 dB to 16 kHz, residual < -85 dB to 10 kHz; 0 allocations |
 

@@ -508,31 +508,38 @@ and then bends with tanh towards the ceiling - never past it, and without a corn
 
 - The drive makes the music louder and denser by up to its amount; quiet music only gets the gain. It is not
   compensated (like an input gain).
-- **2x oversampling** (since 2026-10-26; before, it ran at the base rate). An outside review measured the aliases of
+- **2x, 4x or 8x oversampling** (since 2026-10-26; before, it ran at the base rate; the factor is the user's choice
+  since 2026-10-27, 4x by default - client: "CPU is not a problem"). An outside review measured the aliases of
   10-15 kHz tones at -16..-44 dBc at 48 kHz: a curve without a corner keeps them low for midrange tones (a 3 kHz tone
   driven 6 dB in: 42 dB under it) but not for the highs - hi-hats and cymbals in hard-driven material. First-order
   antiderivative anti-aliasing was rejected (it acts as a two-sample average: up to 4 dB less at 15 kHz).
 
 ### 12.1 The oversampler
 
-`StereoOversampler2x` (`src/core/dsp.h`): up to twice the rate, the curve on both samples, back down. The two
-halfband filters are polyphase IIR filters - two chains of first-order allpasses in z^2 [25] - with 8 coefficients
+`StereoOversampler` (`src/core/dsp.h`): up to 2, 4 or 8 times the rate, the curve on every sample, back down - a
+cascade of 2x stages. The first stage's halfband filters are polyphase IIR filters - two chains of first-order allpasses in z^2 [25] - with 8 coefficients
 from the closed-form elliptic design (transition band 0.02 of the doubled rate): images and aliases 82 dB down,
 flat within 0.00001 dB to 0.46 x the sample rate (20.3 kHz at 44.1 kHz). Up and down together delay low
 frequencies by about 2.6 samples (0.05 ms at 48 kHz) and add no latency - a linear-phase FIR halfband of the same
 quality would add tens of samples. The ceiling enters the curve per doubled sample (`ceiling x curve(u / ceiling)`)
 and the filters see only the driven signal, so a change of the ceiling meets no samples of the old scale in their
-memory (a click). Measured (`deck_test`): a 13 kHz tone through tanh(3x) at 48 kHz - the alias at 9 kHz from -13.2
-dBc at the base rate to -97.4 dBc. Cost: 0.19 % of a core per deck for the clipper, 0.39 % for the exciter.
+memory (a click). The later stages (2x <-> 4x, 4x <-> 8x) see a signal that is band-limited already: 6 coefficients
+with a transition of 0.11, 108 dB down, about 0.85 base samples of delay each. Measured (`deck_test`, tanh(3x) at
+48 kHz): a 13 kHz tone's alias at 9 kHz from -13.2 dBc at the base rate to -97.4 dBc at 2x; a 15 kHz tone's
+fold-back at 21 / 9 kHz -23.3 / -33.0 dBc at 2x (its 5th and 7th overtones fold inside the doubled band), -113.5 /
+-110.2 dBc at 4x, -120.3 / -118.1 dBc at 8x; 1 kHz passes 4x and 8x unchanged (0.00000 dB). A new factor while
+playing: the clipper and the exciter fade out over 20 ms, take it with clean filters and fade back in (the factors
+delay the signal differently: a switch would click; `deck_test`: click ratio 1.02 for 4x -> 8x -> 2x). Cost per
+deck at 4x: 0.31 % of a core for the clipper, 0.57 % for the exciter.
 
 At twice the rate the curve never passes the ceiling, but back at the base rate a flattened peak, its overtones
 above the audio band removed, rises over it again: 0.36 dB for a 3 kHz tone driven 6 dB in, more for the highs (a
 band-limited square wave overshoots). The limiter after the clipper holds the ceiling, as it does in every loudness
 preset; holding it in the clipper instead (a hard clamp) brought the fold-back back (-24 dBc on 13 kHz). Through
 clipper and limiter, a 13 kHz tone driven 6 dB in at 48 kHz: its fold-back at 9 kHz 94.6 dB under the tone, the peak
-at -1.2 dBFS (`dynamics_test`). The hardest case, tones of 12-16 kHz driven 9 dB in at -6 dBFS, keeps a rest
-of 2x oversampling - their 5th and 7th overtones fold back inside the doubled band: 39.8 dB under the tone at 15 kHz
-(at the base rate: about 16 dB under; an outside review's 192 kHz reference: about 80 dB). With the limiter switched
+at -1.2 dBFS (`dynamics_test`). The hardest case, tones of 12-16 kHz driven 9 dB in at -6 dBFS: at 2x a rest of
+39.8 dB under the tone at 15 kHz (at the base rate: about 16 dB under), at the default 4x 62 dB under in the whole
+chain. With the limiter switched
 off in a loudness preset, the clipper holds the ceiling itself (a hard hold after the down filter): the ceiling then
 stands on its own, at the price of that fold-back for the highs. The exciter's saturation: a 10 kHz tone at -6 dBFS,
 100 %, its fold-back at 18 kHz 90.2 dB under the tone (20.6 dB at the base rate).
@@ -686,7 +693,9 @@ control panel) it is tried again every second for a minute; the status bar says 
 
 The other APIs (WASAPI, DirectSound, MME) run through miniaudio [22]: each deck is one duplex stream from its input
 device to its output device on its own thread, registered with Windows' multimedia scheduler (MMCSS) as
-"Pro Audio" for WASAPI. DJAP also asks Windows not to throttle it for power (EcoQoS): it usually sits hidden in the
+"Pro Audio" for WASAPI. In shared mode, when the rate asked for is the device's own, miniaudio uses Windows'
+low-latency audio engine (IAudioClient3) by itself; in exclusive mode the stream has 2 periods instead of 3, one
+period less latency. DJAP also asks Windows not to throttle it for power (EcoQoS): it usually sits hidden in the
 notification area, where Windows 11 may otherwise slow a program down and coalesce its timers.
 
 ### 16.4 Health
@@ -696,7 +705,8 @@ period in %, the periods over half their time, the late periods (dropouts) and t
 
 ### 16.5 Cost
 
-Both decks with the full chain at 48 kHz use about 3 % of one CPU core (target under 3 %, fail above 5 %). The deck
+Both decks with the full chain at 48 kHz use about 4.3 % of one CPU core at the default 4x oversampling (target under
+3 %; the test fails above 7 % - client, 2026-10-27: "CPU is not a problem"). The deck
 is bound by latency, not by arithmetic: each sample runs one long chain of dependent operations through all stages
 (a biquad's feedback is about 12 CPU cycles), so faster maths did not help; processing both channels in one SSE2
 register and using fewer serial filters did.
@@ -828,7 +838,7 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Robustness | NaN / Inf input; FTZ restored | recovers within a block; processor mode unchanged |
 | Real time | allocation counter during processing and changes | 0 allocations |
 | Decks | deck A's processing does not change deck B; equal latency | bit-exact; the same delay |
-| CPU | both decks, full chain, 48 kHz | < 3 % of one core (fail > 5 %) |
+| CPU | both decks, full chain, 48 kHz | < 3 % of one core is the goal (fail > 7 %); measured 4.3 % at 4x oversampling |
 | Inputs on another clock | simulated clocks -500..+500 ppm, late callbacks, pauses | no xruns, drift within 3 ppm, fill within 0.5 ms |
 | Graphs | FFT against a DFT; sines 50 Hz - 18 kHz; correlation and width of known signals | 1e-12; within a bin; +-0.05 / 1 % |
 | Offline | synthetic songs through every loudness preset, checked with an independent meter | integrated loudness within 1 LU of the target, true peak <= ceiling |

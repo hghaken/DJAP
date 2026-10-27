@@ -16,6 +16,8 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <exception>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -41,6 +43,7 @@ const char* const kUsage =
     "        --cb <colour>      the same for deck B\n"
     "        --look <ms>        limiter look-ahead 0..5 ms (above 0 at least 66 samples, the true-peak\n"
     "                           minimum); default: the settings (1.5 ms)\n"
+    "        --oversampling <n> the soft clipper's and the exciter's: 2, 4 or 8; default: the settings (4)\n"
     "        --keep-delay       keep the look-ahead delay in the output, like a live device (default: removed)\n"
     "        --pcm24            write 24-bit PCM (default: 32-bit float, lossless)\n"
     "        --trace <file.csv> deck A every 100 ms: loudness in / out (momentary, short-term), the leveller's gain\n"
@@ -113,6 +116,14 @@ Measurement measureChannels(const WavData& w, int first, int count) {
     return {m.integrated(), m.loudnessRange(), m.maxMomentary(), m.maxShortTerm(), linToDb(sp), linToDb(peak)};
 }
 
+// The filters are designed for the file's own rate: 8 to 384 kHz (else a message, not nonsense numbers).
+bool usableRate(const fs::path& f, const WavData& w) {
+    if (w.sampleRate >= 8000 && w.sampleRate <= 384000) return true;
+    std::fprintf(stderr, "%s: a sample rate of %d Hz cannot be measured (8000 .. 384000 Hz)\n", pathText(f).c_str(),
+                 w.sampleRate);
+    return false;
+}
+
 int measure(const std::vector<fs::path>& files) {
     int result = 0;
     for (const fs::path& f : files) {
@@ -120,6 +131,10 @@ int measure(const std::vector<fs::path>& files) {
         std::string err;
         if (!readAudioFile(f, w, err)) {
             std::fprintf(stderr, "%s: %s\n", pathText(f).c_str(), err.c_str());
+            result = 2;
+            continue;
+        }
+        if (!usableRate(f, w)) {
             result = 2;
             continue;
         }
@@ -158,6 +173,10 @@ int tone(const std::vector<fs::path>& files) {
         std::string err;
         if (!readAudioFile(f, w, err)) {
             std::fprintf(stderr, "%s: %s\n", pathText(f).c_str(), err.c_str());
+            result = 2;
+            continue;
+        }
+        if (!usableRate(f, w)) {
             result = 2;
             continue;
         }
@@ -270,6 +289,7 @@ bool chooseDeck(const Settings& s, int d, const std::string& choice, const std::
                 RenderDeck& out, std::string& label, std::string& err) {
     out = RenderDeck();
     out.control.lookMs = lookMs;
+    out.control.oversampling = s.oversampling;
     std::string name = choice;
     if (name.empty()) {
         if (!s.deck[d].processing) {
@@ -366,6 +386,18 @@ int render(const Settings& s, const fs::path& in, const fs::path& out, const std
            const fs::path& trace) {
     std::error_code ec;
     if (fs::exists(out, ec) && fs::equivalent(in, out, ec)) return usageError("the output file is the input file");
+    if (!trace.empty()) { // checked before the render (it once was after it, and could overwrite the input or output)
+        const auto same = [&](const fs::path& x) {
+            return fs::absolute(trace, ec).lexically_normal() == fs::absolute(x, ec).lexically_normal() ||
+                   (fs::exists(trace, ec) && fs::exists(x, ec) && fs::equivalent(trace, x, ec));
+        };
+        if (same(in) || same(out)) return usageError("--trace must name a file of its own, not the input or the output");
+        const fs::path traceDir = trace.has_parent_path() ? trace.parent_path() : fs::path(L".");
+        if (!fs::is_directory(traceDir, ec)) {
+            std::fprintf(stderr, "%s: the folder does not exist\n", pathText(traceDir).c_str());
+            return 2;
+        }
+    }
     WavData w;
     std::string err;
     if (!readAudioFile(in, w, err)) {
@@ -417,10 +449,26 @@ int render(const Settings& s, const fs::path& in, const fs::path& out, const std
     return 0;
 }
 
+int run(int argc, wchar_t** argv); // below
+
 } // namespace
 
 int wmain(int argc, wchar_t** argv) {
     SetConsoleOutputCP(CP_UTF8);
+    // a file too long for the memory, or anything else unexpected: a message and exit code 2, never a crash
+    try {
+        return run(argc, argv);
+    } catch (const std::bad_alloc&) {
+        std::fputs("not enough memory (the file is too long to process at once)\n", stderr);
+    } catch (const std::exception& e) {
+        std::fprintf(stderr, "error: %s\n", e.what());
+    }
+    return 2;
+}
+
+namespace {
+
+int run(int argc, wchar_t** argv) {
     std::vector<std::wstring> args(argv + 1, argv + argc);
     if (args.empty()) {
         std::fputs(kUsage, stdout);
@@ -433,6 +481,7 @@ int wmain(int argc, wchar_t** argv) {
     std::string deckA, deckB, colourA, colourB;
     fs::path ini, trace;
     double lookMs = -1.0;
+    int oversampling = 0; // 0: the settings
     bool keepDelay = false, pcm24 = false;
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string a = toUtf8(args[i]);
@@ -467,6 +516,10 @@ int wmain(int argc, wchar_t** argv) {
             }
             if (used == 0 || used != v.size()) return usageError("--look needs a number of ms, not \"" + v + "\"");
             if (!(lookMs >= 0.0 && lookMs <= kMaxLookMs)) return usageError("--look must lie in 0..5 ms");
+        } else if (a == "--oversampling") {
+            std::string v;
+            if (!value(v) || (v != "2" && v != "4" && v != "8")) return usageError("--oversampling needs 2, 4 or 8");
+            oversampling = v[0] - '0';
         } else if (a == "--ini") {
             std::string v;
             if (!value(v)) return usageError("--ini needs a file");
@@ -500,14 +553,16 @@ int wmain(int argc, wchar_t** argv) {
     if (ownIni && !iniFound) return usageError("settings file " + pathText(ini) + " not found");
     const bool lookGiven = lookMs >= 0.0;
     if (!lookGiven) lookMs = s.lookAheadMs;
+    if (oversampling) s.oversampling = oversampling; // this run only: the command line never writes the settings
 
     if (command == "--render") {
         if (files.size() != 2) return usageError("--render needs an input and an output file");
         return render(s, files[0], files[1], deckA, deckB, colourA, colourB, lookMs, keepDelay, pcm24, trace);
     }
     if (!deckA.empty() || !deckB.empty() || !colourA.empty() || !colourB.empty() || lookGiven || keepDelay || pcm24 ||
-        !trace.empty())
-        return usageError("--a, --b, --ca, --cb, --look, --keep-delay, --pcm24 and --trace belong to --render");
+        !trace.empty() || oversampling)
+        return usageError("--a, --b, --ca, --cb, --look, --oversampling, --keep-delay, --pcm24 and --trace belong to "
+                          "--render");
     if (command == "--measure") {
         if (files.empty()) return usageError("--measure needs at least one file");
         return measure(files);
@@ -520,3 +575,5 @@ int wmain(int argc, wchar_t** argv) {
     if (command == "--presets") return presets(s, ini, iniFound);
     return devices();
 }
+
+} // namespace

@@ -150,30 +150,37 @@ struct StereoBiquad2 {
     bool finite() const { return a.finite() && b.finite(); }
 };
 
-// 2x oversampling around a nonlinear stage (the soft clipper, the exciter) with polyphase IIR halfbands: two chains of
+// Oversampling around a nonlinear stage (the soft clipper, the exciter) with polyphase IIR halfbands: two chains of
 // first-order allpasses in z^2 (Valenzuela and Constantinides; the design as in the public hiir library). Nearly no
-// delay - about 3 frames at low frequencies for up and down together, a minimum-phase-like response - against tens of
-// frames for a linear-phase FIR halfband (DJAP adds no latency but the look-ahead). kHalfbandCoefs = 8 with a transition
-// of 0.02: the images and aliases are 82 dB down, flat (+-0.00001 dB) to 0.46 x the base rate (20.3 kHz at 44.1 kHz).
-// Without it the clipper's and the exciter's overtones above the Nyquist frequency folded back as audible
-// inharmonic tones (an outside review measured -16..-44 dBc on 10-15 kHz tones at 48 kHz; client, 2026-10-26).
+// delay - about 3 frames at low frequencies for 2x, up and down together, a minimum-phase-like response - against tens
+// of frames for a linear-phase FIR halfband (DJAP adds no latency but the look-ahead). Without it the clipper's and the
+// exciter's overtones above the Nyquist frequency folded back as audible inharmonic tones (an outside review measured
+// -16..-44 dBc on 10-15 kHz tones at 48 kHz; client, 2026-10-26).
+// The first stage (base rate <-> 2x): kHalfbandCoefs = 8 with a transition of 0.02 - images and aliases 82 dB down,
+// flat (+-0.00001 dB) to 0.46 x the base rate (20.3 kHz at 44.1 kHz). Later stages (2x <-> 4x, 4x <-> 8x) see a signal
+// that is band-limited already: kHalfband2Coefs = 6 with a transition of 0.11, 108 dB down, about 0.85 base frames of
+// delay each. 4x and 8x (client, 2026-10-27: "CPU is not a problem, make the oversampling a user's choice") take the
+// 2x rest away: hard-driven 15 kHz tones still folded back about 40 dB under the tone at 2x.
 constexpr int kHalfbandCoefs = 8;
-const double* halfbandCoefs(); // kHalfbandCoefs coefficients, computed once (design::halfband)
+constexpr int kHalfband2Coefs = 6;
+const double* halfbandCoefs();  // the first stage's coefficients, computed once (design::halfband)
+const double* halfband2Coefs(); // the later stages'
 
-struct StereoOversampler2x {
-    Pair c[kHalfbandCoefs];
-    Pair ux[kHalfbandCoefs], uy[kHalfbandCoefs]; // upsampler: each allpass's last input and output
-    Pair dx[kHalfbandCoefs], dy[kHalfbandCoefs]; // downsampler
+// One halfband stage, both channels: up = one sample in, two out; down = two in, one out.
+template <int N>
+struct StereoHalfband {
+    Pair c[N];
+    Pair ux[N], uy[N]; // upsampler: each allpass's last input and output
+    Pair dx[N], dy[N]; // downsampler
 
-    StereoOversampler2x() {
-        const double* k = halfbandCoefs();
-        for (int i = 0; i < kHalfbandCoefs; ++i) c[i] = _mm_set1_pd(k[i]);
+    void init(const double* k) {
+        for (int i = 0; i < N; ++i) c[i] = _mm_set1_pd(k[i]);
         reset();
     }
-    // one base-rate sample in, the two high-rate samples out (in time order)
+    // one sample in, the two high-rate samples out (in time order)
     inline void up(Pair x, Pair& first, Pair& second) {
         Pair a = x, b = x; // path 0: the even coefficients, path 1: the odd ones
-        for (int i = 0; i < kHalfbandCoefs; i += 2) {
+        for (int i = 0; i < N; i += 2) {
             const Pair ta = _mm_add_pd(_mm_mul_pd(_mm_sub_pd(a, uy[i]), c[i]), ux[i]);
             ux[i] = a;
             uy[i] = ta;
@@ -186,10 +193,10 @@ struct StereoOversampler2x {
         first = a;
         second = b;
     }
-    // the two high-rate samples in (in time order), one base-rate sample out
+    // the two high-rate samples in (in time order), one sample out
     inline Pair down(Pair first, Pair second) {
         Pair a = second, b = first;
-        for (int i = 0; i < kHalfbandCoefs; i += 2) {
+        for (int i = 0; i < N; i += 2) {
             const Pair ta = _mm_add_pd(_mm_mul_pd(_mm_sub_pd(a, dy[i]), c[i]), dx[i]);
             dx[i] = a;
             dy[i] = ta;
@@ -202,15 +209,69 @@ struct StereoOversampler2x {
         return _mm_mul_pd(_mm_add_pd(a, b), _mm_set1_pd(0.5));
     }
     void reset() {
-        for (int i = 0; i < kHalfbandCoefs; ++i) ux[i] = uy[i] = dx[i] = dy[i] = _mm_setzero_pd();
+        for (int i = 0; i < N; ++i) ux[i] = uy[i] = dx[i] = dy[i] = _mm_setzero_pd();
     }
     bool finite() const {
-        for (int i = 0; i < kHalfbandCoefs; ++i)
+        for (int i = 0; i < N; ++i)
             if (!std::isfinite(leftOf(uy[i])) || !std::isfinite(rightOf(uy[i])) || !std::isfinite(leftOf(dy[i])) ||
                 !std::isfinite(rightOf(dy[i])))
                 return false;
         return true;
     }
+};
+
+// 2x, 4x or 8x: a cascade of halfband stages. up() gives factor() samples per base-rate sample, down() takes them back.
+struct StereoOversampler {
+    static constexpr int kMaxFactor = 8;
+    StereoHalfband<kHalfbandCoefs> s1;
+    StereoHalfband<kHalfband2Coefs> s2, s3;
+    int f = 2;
+
+    StereoOversampler() {
+        s1.init(halfbandCoefs());
+        s2.init(halfband2Coefs());
+        s3.init(halfband2Coefs());
+    }
+    int factor() const { return f; }
+    // 2, 4 or 8 (anything else: the nearest of them); the filters start clean
+    void setFactor(int factor) {
+        f = factor >= 6 ? 8 : factor >= 3 ? 4 : 2;
+        reset();
+    }
+    // one base-rate sample in, factor() samples out (in time order)
+    inline void up(Pair x, Pair* out) {
+        s1.up(x, out[0], out[1]);
+        if (f == 2) return;
+        Pair t[4];
+        s2.up(out[0], t[0], t[1]);
+        s2.up(out[1], t[2], t[3]);
+        if (f == 4) {
+            for (int i = 0; i < 4; ++i) out[i] = t[i];
+            return;
+        }
+        for (int i = 0; i < 4; ++i) s3.up(t[i], out[2 * i], out[2 * i + 1]);
+    }
+    // factor() samples in (in time order), one base-rate sample out
+    inline Pair down(const Pair* in) {
+        if (f == 2) return s1.down(in[0], in[1]);
+        Pair t[4];
+        if (f == 8) {
+            for (int i = 0; i < 4; ++i) t[i] = s3.down(in[2 * i], in[2 * i + 1]);
+        } else {
+            for (int i = 0; i < 4; ++i) t[i] = in[i];
+        }
+        // one after the other: the filter's state must see them in time order (in one argument list the compiler may
+        // call them in any order - MSVC called the second first)
+        const Pair first = s2.down(t[0], t[1]);
+        const Pair second = s2.down(t[2], t[3]);
+        return s1.down(first, second);
+    }
+    void reset() {
+        s1.reset();
+        s2.reset();
+        s3.reset();
+    }
+    bool finite() const { return s1.finite() && s2.finite() && s3.finite(); }
 };
 
 // State-variable filter, linear trapezoidal integration (A. Simper): its coefficients may change every sample - a

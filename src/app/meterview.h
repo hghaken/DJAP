@@ -26,6 +26,11 @@ struct MeterViewData {
     std::array<float, SpectrumAnalyzer::kPoints> specIn{}, specOut{};
     bool spectrum = false; // a spectrum to show
     double splits[kMaxSplits] = {};
+    // the colour's EQ curve in the spectrum (client, 2026-10-27: "show the yellow colour line in the main window
+    // too"): the deck's values (preset merged with its colour), the auto tone now, the rate in use
+    PresetValues colourValues{};
+    double autoDb[4] = {};
+    double fs = 48000.0;
 };
 
 // A click on a stage row or a LED bar (client, 2026-10-25: "open its settings") tells the parent with WM_COMMAND:

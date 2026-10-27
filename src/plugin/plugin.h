@@ -84,6 +84,7 @@ private:
         PresetValues values;
         double lookMs;
         bool bypass;
+        int oversampling;
     };
 
     void addParameters();
@@ -114,6 +115,7 @@ private:
     std::atomic<bool> active_{false};
     PresetValues values_{};
     double lookMs_ = 1.5;
+    int oversampling_ = kOversamplingDefault;
     bool bypass_ = false, dirty_ = true;
     SeqLockSlot<Snapshot> incoming_;
     std::atomic<Steinberg::uint32> latency_{0};

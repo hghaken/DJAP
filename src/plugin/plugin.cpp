@@ -26,7 +26,8 @@ namespace ap::plugin {
 
 namespace {
 
-constexpr int32 kStateVersion = 1;
+// 2 (0.1.145): the oversampling after the values; a version 1 state (without it) loads with the default
+constexpr int32 kStateVersion = 2;
 constexpr double kMaxLook = 5.0; // ms, the look-ahead parameter's range (Setup window: 0 .. 5 ms)
 
 // The stages as the host's groups (units), in chain order; the extra parameters stay in the root.
@@ -137,6 +138,34 @@ public:
     }
 };
 
+// The oversampling of the soft clipper and the exciter: a list of 2x, 4x, 8x.
+class OversamplingParameter : public Parameter {
+public:
+    OversamplingParameter() {
+        ascii(info.title, "Oversampling");
+        ascii(info.shortTitle, "Oversampling");
+        info.id = kOversamplingId;
+        info.unitId = kRootUnitId;
+        info.stepCount = 2;
+        info.flags = ParameterInfo::kCanAutomate | ParameterInfo::kIsList;
+        info.defaultNormalizedValue = 0.5; // 4x
+        setNormalized(0.5);
+    }
+    ParamValue toPlain(ParamValue v) const override { return static_cast<double>(2 << std::lround(v * 2.0)); }
+    ParamValue toNormalized(ParamValue f) const override { return f >= 6 ? 1.0 : f >= 3 ? 0.5 : 0.0; }
+    void toString(ParamValue v, String128 out) const override {
+        char text[8];
+        std::snprintf(text, sizeof text, "%dx", static_cast<int>(toPlain(v)));
+        ascii(out, text);
+    }
+    bool fromString(const TChar* string, ParamValue& v) const override {
+        const int f = std::atoi(StringConvert::convert(string).c_str());
+        if (f != 2 && f != 4 && f != 8) return false;
+        v = toNormalized(f);
+        return true;
+    }
+};
+
 // The preset (or colour) list: the names of the plug-in's lists - which change when the preset window saves,
 // renames or deletes one - and "(other values)" after them.
 class NameListParameter : public Parameter {
@@ -213,6 +242,7 @@ void Plugin::addParameters() {
     parameters.addParameter(STR16("Bypass"), nullptr, 1, 0.0, ParameterInfo::kCanAutomate | ParameterInfo::kIsBypass,
                             kBypassId);
     parameters.addParameter(new LookParameter(lookMs_));
+    parameters.addParameter(new OversamplingParameter());
     for (int p = 0; p < kParamCount; ++p) {
         auto* param = new ChainParameter(p, unitOf(p));
         param->setNormalized(normalizedOf(p, values_[static_cast<size_t>(p)]));
@@ -274,7 +304,7 @@ void Plugin::setLatencyFrom(double lookMs) {
 tresult PLUGIN_API Plugin::setActive(TBool state) {
     if (state) {
         Snapshot s;
-        if (incoming_.take(s)) values_ = s.values, lookMs_ = s.lookMs, bypass_ = s.bypass;
+        if (incoming_.take(s)) values_ = s.values, lookMs_ = s.lookMs, bypass_ = s.bypass, oversampling_ = s.oversampling;
         deck_.prepare(fs_); // allocates: never while processing (the host stops it first)
         publishConfig();
         deck_.startFadeIn(); // a stream may start in the middle of the music
@@ -288,6 +318,7 @@ tresult PLUGIN_API Plugin::setActive(TBool state) {
 void Plugin::publishConfig() {
     DeckControl ctl;
     ctl.lookMs = lookMs_;
+    ctl.oversampling = oversampling_;
     ctl.processing = !bypass_;
     // the coefficients are designed here, on the audio thread, when the host changed a value: no allocation, a few
     // microseconds (the program designs them on its GUI thread)
@@ -301,6 +332,7 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
         values_ = s.values;
         lookMs_ = s.lookMs;
         bypass_ = s.bypass;
+        oversampling_ = s.oversampling;
         dirty_ = true;
     }
     if (IParameterChanges* changes = data.inputParameterChanges) {
@@ -319,6 +351,8 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
                 bypass_ = v >= 0.5;
             } else if (id == kLookId) {
                 lookMs_ = snapLook(v * kMaxLook); // the window's choices (deck.h)
+            } else if (id == kOversamplingId) {
+                oversampling_ = 2 << std::lround(std::min(1.0, std::max(0.0, v)) * 2.0);
             } else {
                 const int p = paramIndex(id);
                 if (p < 0) continue;
@@ -368,6 +402,7 @@ tresult PLUGIN_API Plugin::getState(IBStream* state) {
         s.writeStr8(paramInfo(p).key);
         s.writeDouble(v[static_cast<size_t>(p)]);
     }
+    s.writeInt32(static_cast<int32>(plainOf(kOversamplingId))); // version 2
     return kResultOk;
 }
 
@@ -400,6 +435,9 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
             if (key == paramInfo(p).key) v[static_cast<size_t>(p)] = x; // unknown keys (a newer version): skipped
     }
     normaliseValues(v);
+    int32 oversampling = kOversamplingDefault;
+    if (version >= 2 && s.readInt32(oversampling)) oversampling = snapOversampling(oversampling);
+    else oversampling = kOversamplingDefault;
 
     // the controller
     exact_ = v;
@@ -410,6 +448,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     SingleComponentEffect::setParamNormalized(kColourId, static_cast<double>(colourIndex()) / settings_.colours.size());
     SingleComponentEffect::setParamNormalized(kBypassId, bypass ? 1.0 : 0.0);
     SingleComponentEffect::setParamNormalized(kLookId, std::min(kMaxLook, std::max(0.0, look)) / kMaxLook);
+    SingleComponentEffect::setParamNormalized(kOversamplingId, oversampling == 8 ? 1.0 : oversampling == 4 ? 0.5 : 0.0);
     for (int p = 0; p < kParamCount; ++p)
         SingleComponentEffect::setParamNormalized(paramId(p), normalizedOf(p, v[static_cast<size_t>(p)]));
     loading_ = false;
@@ -417,7 +456,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     setLatencyFrom(look);
 
     // the processing (exactly the stored values, not their positions)
-    incoming_.publish(Snapshot{v, std::min(kMaxLook, std::max(0.0, look)), bypass != 0});
+    incoming_.publish(Snapshot{v, std::min(kMaxLook, std::max(0.0, look)), bypass != 0, oversampling});
     if (view_) view_->refresh();
     return kResultOk;
 }
@@ -440,6 +479,7 @@ double Plugin::plainOf(ParamID id) const {
     const ParamValue v = const_cast<Plugin*>(this)->getParamNormalized(id);
     if (id == kLookId) return snapLook(v * kMaxLook); // what runs (deck.h)
     if (id == kBypassId) return v >= 0.5 ? 1.0 : 0.0;
+    if (id == kOversamplingId) return static_cast<double>(2 << std::lround(v * 2.0));
     const int p = paramIndex(id);
     return p >= 0 ? exact_[static_cast<size_t>(p)] : v;
 }
@@ -562,7 +602,8 @@ tresult PLUGIN_API Plugin::setParamNormalized(ParamID id, ParamValue value) {
 }
 
 void Plugin::publishToProcessor() {
-    incoming_.publish(Snapshot{exact_, plainOf(kLookId), plainOf(kBypassId) >= 0.5});
+    incoming_.publish(Snapshot{exact_, plainOf(kLookId), plainOf(kBypassId) >= 0.5,
+                               static_cast<int>(plainOf(kOversamplingId))});
 }
 
 void Plugin::edit(ParamID id, ParamValue normalized) {

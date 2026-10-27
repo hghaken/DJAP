@@ -125,6 +125,14 @@ const double* halfbandCoefs() {
     return coefs.c;
 }
 
+const double* halfband2Coefs() {
+    static const struct Coefs {
+        double c[kHalfband2Coefs];
+        Coefs() { design::halfband(kHalfband2Coefs, 0.11, c); }
+    } coefs;
+    return coefs.c;
+}
+
 SvfCoeffs SvfCoeffs::design(Mode mode, double fs, double hz, double gainDb, double q) {
     SvfCoeffs c;
     const double A = std::pow(10.0, gainDb / 40.0);

@@ -254,8 +254,13 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
             c.playback.pDeviceID = outId;
             c.playback.format = ma_format_f32;
             c.playback.channels = 2;
-            if (exclusive && api == AudioApi::Wasapi)
+            // shared mode: when the rate asked for is the device's own, miniaudio takes Windows' low-latency engine
+            // (IAudioClient3) by itself - it leaves out the conversion flags that would block it (miniaudio.h, "Low
+            // latency shared mode"). Exclusive: 2 periods instead of 3, one period less latency (outside review)
+            if (exclusive && api == AudioApi::Wasapi) {
                 c.capture.shareMode = c.playback.shareMode = ma_share_mode_exclusive;
+                c.periods = 2;
+            }
             c.dataCallback = dataCallback;
             c.notificationCallback = notificationCallback;
             c.pUserData = s.get();
@@ -335,7 +340,10 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
             c.capture.pDeviceID = inId;
             c.capture.format = ma_format_f32;
             c.capture.channels = 2;
-            if (exclusive && api == AudioApi::Wasapi) c.capture.shareMode = ma_share_mode_exclusive;
+            if (exclusive && api == AudioApi::Wasapi) {
+                c.capture.shareMode = ma_share_mode_exclusive;
+                c.periods = 2;
+            }
             c.dataCallback = captureCallback;
             c.notificationCallback = notificationCallback;
             c.pUserData = s.get();

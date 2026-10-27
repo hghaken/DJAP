@@ -225,11 +225,12 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
         g.handles = bands;
     }
 
-    // ---- the colour: the sub bass's range, the curve (total and per section), the points ----
+    // ---- the colour: the sub bass's range, the curve (total and per section), the points; the meter panel shows
+    // the total curve only (client, 2026-10-27: "show the yellow colour line in the main window too") ----
     if (d.colour) {
-        line(dc, p.left, g.yOfEq(0), p.right, g.yOfEq(0), RGB(110, 100, 60));
+        if (big) line(dc, p.left, g.yOfEq(0), p.right, g.yOfEq(0), RGB(110, 100, 60));
         const double subPct = d.values[pSubAmount];
-        if (subPct > 0.0) { // an octave under the bass: shaded from half the sub frequency to it
+        if (big && subPct > 0.0) { // an octave under the bass: shaded from half the sub frequency to it
             const int xa = g.xOf(std::max(lo, d.values[pSubFreq] / 2.0)), xb = g.xOf(d.values[pSubFreq]);
             fill(dc, xa, g.yOfEq(0) - px(6), xb, g.yOfEq(0), over(kNodeColour[0], 0.25 + 0.5 * subPct / 100.0));
             text(dc, (xa + xb) / 2, g.yOfEq(0) - px(6) - th, L"sub", kNodeColour[0], TA_CENTER);
@@ -249,16 +250,16 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
             total.push_back({x, g.yOfEq(sum)});
             fixed.push_back({x, g.yOfEq(sumFixed)});
         }
-        for (int sct = 0; sct < ColourConfig::kSections; ++sct) {
+        for (int sct = 0; sct < ColourConfig::kSections && big; ++sct) {
             const double gain = sct < 4 ? d.values[kNodeGain[sct]] : d.values[pLoudness];
             if (gain != 0.0) polyline(dc, section[sct], sct < 4 ? over(kNodeColour[sct], 0.7) : kLoudColour, 1);
         }
         bool autoMoves = false;
         for (double a : d.autoDb) autoMoves = autoMoves || a != 0.0;
-        if (autoMoves) polyline(dc, fixed, over(kCurve, 0.6), 1, PS_DASH); // without the auto tone
-        polyline(dc, total, kCurve, std::max(2, px(2.5)));
-        g.nodes = true;
-        for (int nd = 0; nd < kNodes; ++nd) {
+        if (autoMoves && big) polyline(dc, fixed, over(kCurve, 0.6), 1, PS_DASH); // without the auto tone
+        polyline(dc, total, kCurve, std::max(2, px(big ? 2.5 : 2.0)));
+        g.nodes = big;
+        for (int nd = 0; nd < kNodes && big; ++nd) {
             const int x = g.xOf(d.values[kNodeFreq[nd]]), y = g.yOfEq(d.values[kNodeGain[nd]]);
             g.node[nd] = {x, y};
             const int r = nd == d.hotNode ? px(8) : px(6);
@@ -287,7 +288,8 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
         SelectClipRgn(dc, nullptr);
         DeleteObject(clip);
     } else {
-        text(dc, (p.left + p.right) / 2, (p.top + p.bottom) / 2 - th / 2, L"no audio", kDim, TA_CENTER);
+        // above the colour's 0 dB line, which runs through the middle
+        text(dc, (p.left + p.right) / 2, (p.top + p.bottom) / 2 - th / 2 - (d.colour ? th : 0), L"no audio", kDim, TA_CENTER);
     }
 
     // ---- title row ----

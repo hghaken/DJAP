@@ -268,7 +268,9 @@ A stage that is switched off in the loudness preset is shown greyed out.
 
 **Spectrum.** The frequency content of the input (**original**, orange) and the output (**processed**, turquoise),
 20 Hz to 20 kHz. The density stage is drawn in it: its bands (dotted lines at the splits, band numbers at the top)
-and each band's gain now as a line over the band's range, up (blue) or down (red) by up to 12 dB.
+and each band's gain now as a line over the band's range, up (blue) or down (red) by up to 12 dB. The **colour**
+(yellow) is the deck's colour as one EQ curve on the same scale, the auto tone's corrections of the moment included
+(its points and per-section curves are in the spectrum window, 8.2); in Bypass it is not drawn.
 
 **Clicking in the panel** opens the setting behind it: a stage row opens the loudness window on that stage's tab, the
 In bars open the General tab (input gain, target), the Out bars the Limiter tab (ceiling), the spectrum the spectrum
@@ -308,6 +310,7 @@ the audio again (a short fade-out and fade-in).
 | **Sample rate** | 44.1, 48, 88.2 or 96 kHz. ASIO uses this rate if the driver accepts it, else the interface's own rate. Other APIs convert when a device runs at another rate. |
 | **Buffer size** | ASIO: the driver's preferred size, or a size it allows. Other APIs: the period asked of Windows. Smaller = less latency, more risk of dropouts (watch Health). |
 | **Look-ahead** | The limiter's look-ahead: 0, 1.5 (default), 2, 3 or 5 ms, the same for both decks. Longer handles peaks more gently. Every choice above 0 limits the true peak; at 0 ms the limiter holds only the sample peak (true peaks can pass the ceiling) and adds no delay. Changed at once with a short fade. (The former 0.5 and 1.0 ms were too short for the true-peak detector and are now 1.5 ms.) |
+| **Oversampling** | 2x, 4x (default) or 8x, both decks: how many times the sample rate the soft clipper and the exciter work at. Their overtones above the audio band would fold back as harsh tones that do not belong to the music; 2x leaves a rest on hard-driven high tones (about 40 dB under a 15 kHz tone), 4x and 8x take it away (60 to more than 100 dB under) at a little more CPU. Adds no latency. Changed with a short fade of those two stages. |
 
 ### 5.2 Options
 
@@ -653,6 +656,7 @@ The program and the plug-in can be installed and used together or apart.
 
 The window is one deck strip of the program:
 
+- **Oversampling** - 2x, 4x (default) or 8x, as in the Setup window (5.1); stored with the DJ software's project.
 - **Look-ahead** - the limiter's look-ahead, 0, 1.5, 2, 3 or 5 ms (see 5.1); the DJ software is told the new delay. A
   value the DJ software sets in between (an automation, an old project's 0.5 ms) runs as the nearest of these - above
   0 at least 1.5 ms - and the window shows what runs.
@@ -660,7 +664,7 @@ The window is one deck strip of the program:
 - **Loudness** and **Colour** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
   and colour windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
 - **The four bass sliders** (4.2).
-- **The meter panel** - LED bars, the gain of each stage and the spectrum with the density bands, as in the main
+- **The meter panel** - LED bars, the gain of each stage and the spectrum with the density bands and the colour curve, as in the main
   window (4.3). Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
   program; clicking the spectrum opens its Density tab.
 
@@ -744,7 +748,7 @@ never plays audio and never changes the settings. Open a command prompt in the i
 path.
 
 ```
-DJAPCmd --render <in> <out.wav> [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--keep-delay] [--pcm24] [--trace <file.csv>]
+DJAPCmd --render <in> <out.wav> [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--oversampling <2|4|8>] [--keep-delay] [--pcm24] [--trace <file.csv>]
 DJAPCmd --presets
 DJAPCmd --measure <file.wav> [more files]
 DJAPCmd --tone <file> [more files]
@@ -757,10 +761,13 @@ DJAPCmd --version | --help
   on both channels). A 2-channel file is deck A; a 4-channel file is deck A (channels 1-2) and deck B (3-4). Each deck
   uses its loudness preset and colour from the settings unless `--a` / `--b` (loudness preset, or `off` for unprocessed) and `--ca` /
   `--cb` (colour) say otherwise. The output is 32-bit float WAV (or 24-bit PCM with `--pcm24`), with the look-ahead
-  delay removed (kept with `--keep-delay`). After rendering it prints a report of input and output loudness.
+  delay removed (kept with `--keep-delay`); over 4 GB (about three hours of 4-channel 24-bit audio) it is written as
+  RF64, the 64-bit form of WAV. The file is written under a temporary name first, so a failed render leaves no half
+  file. `--oversampling` sets the clipper's and exciter's oversampling for this render (default: the settings'). After
+  rendering it prints a report of input and output loudness.
   `--trace <file.csv>` also writes deck A every 100 ms: loudness in and out (momentary and short-term), the
   leveller's gain and whether it holds, and what the compressor, density bands, de-esser, clipper and limiter do -
-  to see why a song comes out uneven.
+  to see why a song comes out uneven. The trace file must be a file of its own (not the input or the output).
 - **--presets** lists all loudness presets and colours with their main values and which deck uses them.
 - **--measure** prints the integrated loudness, loudness range, maximum momentary and short-term loudness, sample
   peak and true peak of WAV files (per deck for 4-channel files).
