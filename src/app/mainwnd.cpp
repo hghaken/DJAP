@@ -37,6 +37,23 @@ enum MenuId { mAudio = 100, mAbout, mExit, mAnalysis, mOpen, mSpectrum }; // 103
 
 std::wstring deckName(int d) { return d == 0 ? L"Deck A" : L"Deck B"; }
 
+// the size of a text in a font, in pixels (a line's height for an empty text)
+SIZE textSize(HWND h, HFONT font, const std::wstring& text) {
+    SIZE sz{0, 0};
+    HDC dc = GetDC(h);
+    HGDIOBJ old = SelectObject(dc, font);
+    if (text.empty()) {
+        TEXTMETRICW tm{};
+        GetTextMetricsW(dc, &tm);
+        sz.cy = tm.tmHeight;
+    } else {
+        GetTextExtentPoint32W(dc, text.c_str(), static_cast<int>(text.size()), &sz);
+    }
+    SelectObject(dc, old);
+    ReleaseDC(h, dc);
+    return sz;
+}
+
 } // namespace
 
 MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioIO& audio)
@@ -324,6 +341,7 @@ void MainWindow::createControls() {
         Strip& s = strips_[d];
         s.title = make(L"STATIC", deckName(d).c_str(), SS_LEFT, 0);
         s.route = make(L"STATIC", L"", SS_LEFT | SS_ENDELLIPSIS | SS_NOPREFIX | SS_NOTIFY, 0);
+        s.routeOut = make(L"STATIC", L"", SS_LEFT | SS_ENDELLIPSIS | SS_NOPREFIX | SS_NOTIFY, 0);
         // checked = bypassed
         s.processing = make(L"BUTTON", L"Bypass", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iProcessing));
         s.graphs = make(L"BUTTON", L"Graphs", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iGraphs));
@@ -344,8 +362,9 @@ void MainWindow::createControls() {
     tips_.create(hwnd_);
     for (int d = 0; d < 2; ++d) {
         Strip& s = strips_[d];
-        tips_.add(s.route, L"Where this deck's audio comes from and where it goes. Change it in Setup (right-click "
-                           L"the window). With linked presets (Setup) deck A's controls count for both decks.");
+        for (HWND h : {s.route, s.routeOut})
+            tips_.add(h, L"Where this deck's audio comes from (In) and where it goes (Out). Change it in Setup (right-click "
+                         L"the window). With linked presets (Setup) deck A's controls count for both decks.");
         tips_.add(s.preset,
                   L"The loudness preset this deck uses: the target loudness and every stage's values. Shipped: Gentle -18, "
                   L"Light -16, Medium -14, Loud -12, Very Loud -10 LUFS; FM Station -13 (dense, the sound of FM radio), DAB+ "
@@ -388,7 +407,7 @@ void MainWindow::setFonts() {
     };
     for (Strip& s : strips_) {
         set(s.title, bold_);
-        for (HWND h : {s.route, s.presetLabel, s.preset, s.colourLabel, s.colour, s.processing, s.graphs, s.edit,
+        for (HWND h : {s.route, s.routeOut, s.presetLabel, s.preset, s.colourLabel, s.colour, s.processing, s.graphs, s.edit,
                        s.editColour})
             set(h, font_);
     }
@@ -412,8 +431,17 @@ void MainWindow::layout() {
         int y = m;
         // Deck A  route .......... [Graphs] [Bypass]
         const int bypassW = px(90), graphsW = px(90);
-        MoveWindow(s.title, x0, y, px(90), rowH, TRUE);
-        MoveWindow(s.route, x0 + px(96), y + px(6), stripW - px(96) - bypassW - graphsW - 2 * gap, rowH - px(6), TRUE);
+        // the route as two lines, In and Out, right after the title (client, 2026-10-27: "in and out on 2 lines, on a
+        // small screen it does not fit - and more to the left")
+        int titleW = 0; // the widest title, so both strips' routes start at the same place
+        for (const wchar_t* t : {L"Deck A", L"Deck B", L"Channel"})
+            titleW = std::max(titleW, static_cast<int>(textSize(hwnd_, bold_, t).cx) + px(4));
+        const int routeX = x0 + titleW + px(10), lineH = textSize(hwnd_, font_, L"").cy;
+        const int routeW = std::max(0, x0 + stripW - bypassW - graphsW - 2 * gap - routeX);
+        const int routeY = y + (rowH - 2 * lineH) / 2;
+        MoveWindow(s.title, x0, y - px(5), titleW, rowH, TRUE); // a little higher (client: "Deck A and B a bit up")
+        MoveWindow(s.route, routeX, routeY, routeW, lineH, TRUE);
+        MoveWindow(s.routeOut, routeX, routeY + lineH, routeW, lineH, TRUE);
         MoveWindow(s.graphs, x0 + stripW - bypassW - gap - graphsW, y, graphsW, rowH, TRUE);
         MoveWindow(s.processing, x0 + stripW - bypassW, y, bypassW, rowH, TRUE);
         y += rowH + gap;
@@ -557,29 +585,27 @@ void MainWindow::refreshStrip(int d) {
     const bool gone = d == 1 && settings_.decks == 1, single = gone || (d == 1 && linked());
     for (HWND h : {s.presetLabel, s.preset, s.colourLabel, s.colour, s.edit, s.editColour, s.processing, s.graphs})
         ShowWindow(h, single ? SW_HIDE : SW_SHOW);
-    for (HWND h : {s.title, s.route, s.meter}) ShowWindow(h, gone ? SW_HIDE : SW_SHOW);
+    for (HWND h : {s.title, s.route, s.routeOut, s.meter}) ShowWindow(h, gone ? SW_HIDE : SW_SHOW);
     if (d == 0) SetWindowTextW(s.title, settings_.decks == 1 ? L"Channel" : L"Deck A");
+    std::wstring in, out; // each side names its API
     if (settings_.api == "ASIO") {
-        const int in = d == 0 ? settings_.inputA : settings_.inputB, out = d == 0 ? settings_.outputA : settings_.outputB;
+        const int inPair = d == 0 ? settings_.inputA : settings_.inputB;
+        const int outPair = d == 0 ? settings_.outputA : settings_.outputB;
         const SysInputs sysIn = sysInputsFrom(settings_);
-        wchar_t route[96];
-        swprintf(route, 96, L"  \x2192  ASIO: outputs %d-%d", out, out + 1); // each side names its API
         if (!sysIn.device[d].empty()) // an input device of another API (drift-corrected)
-            SetWindowTextW(s.route, (fromUtf8(std::string(apiName(sysIn.api)) + ": " + sysIn.device[d]) + route).c_str());
+            in = fromUtf8(std::string(apiName(sysIn.api)) + ": " + sysIn.device[d]);
         else
-            SetWindowTextW(s.route, (L"ASIO: inputs " + std::to_wstring(in) + L"-" + std::to_wstring(in + 1) + route).c_str());
+            in = L"ASIO: inputs " + std::to_wstring(inPair) + L"-" + std::to_wstring(inPair + 1);
+        out = L"ASIO: outputs " + std::to_wstring(outPair) + L"-" + std::to_wstring(outPair + 1);
     } else if (settings_.inDevice[d].empty() || settings_.outDevice[d].empty()) {
-        SetWindowTextW(s.route, (fromUtf8(settings_.api) + L": no devices (not used)").c_str());
+        in = fromUtf8(settings_.api) + L": no devices (not used)";
     } else {
-        const std::wstring route = fromUtf8(settings_.api + ": " + settings_.inDevice[d]) + L"  \x2192  " +
-                                   fromUtf8(settings_.api + ": " + settings_.outDevice[d]);
-        SetWindowTextW(s.route, route.c_str());
+        in = fromUtf8(settings_.api + ": " + settings_.inDevice[d]);
+        out = fromUtf8(settings_.api + ": " + settings_.outDevice[d]);
     }
-    if (d == 1 && linked()) { // deck B has no controls of its own: say why
-        wchar_t route[512];
-        GetWindowTextW(s.route, route, 512);
-        SetWindowTextW(s.route, (std::wstring(route) + L"   (linked to deck A)").c_str());
-    }
+    if (d == 1 && linked()) (out.empty() ? in : out) += L"   (linked to deck A)"; // deck B has no controls: say why
+    SetWindowTextW(s.route, out.empty() ? in.c_str() : (L"In:  " + in).c_str());
+    SetWindowTextW(s.routeOut, out.empty() ? L"" : (L"Out: " + out).c_str());
 }
 
 void MainWindow::updateMeters() {

@@ -52,6 +52,7 @@ private:
         HWND title = nullptr, route = nullptr, presetLabel = nullptr, preset = nullptr, processing = nullptr, // bypass
              edit = nullptr, meter = nullptr, graphs = nullptr; // graphs: opens the analysis window
         HWND colourLabel = nullptr, colour = nullptr, editColour = nullptr;          // the deck's colour preset
+        HWND routeOut = nullptr; // route = where the audio comes from, routeOut = where it goes (two lines)
     };
 
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);

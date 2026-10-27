@@ -234,8 +234,9 @@ that still shows every meter row and a readable spectrum.
 
 ### 4.1 The deck strip
 
-- **Title row.** The deck's name and its route, for example `ASIO: inputs 1-2 -> ASIO: outputs 1-2`, or with
-  other APIs the device names. With linked presets deck B shows "linked to deck A".
+- **Title row.** The deck's name and its route on two lines, for example `In: ASIO: inputs 1-2` above `Out: ASIO:
+  outputs 1-2`, or with other APIs the device names (a name too long for the window ends in "..."; the Setup window
+  shows it whole). With linked presets deck B shows "linked to deck A".
 - **Graphs** opens the analysis window (8.1).
 - **Bypass.** Lit (green): the deck's input goes out unchanged, delayed by the look-ahead. Not lit: the deck is
   processed. Saved per deck.
