@@ -97,6 +97,34 @@ void failures(const SysRoute& good) {
         }
 }
 
+// Drift correction "auto" leaves an input and output of one device one duplex stream; "always" corrects them too
+// (sixth outside review: which way the choice went was untested - the null devices never count as one device).
+void oneDevice(const SysRoute& route) {
+    std::printf("-- one device: auto -> one duplex stream, always -> drift-corrected\n");
+    SysAudio::assumeOneDevice(true);
+    for (const bool autoMode : {true, false}) {
+        AudioEngine engine;
+        AsyncInput async;
+        async.reset(48000.0);
+        AsyncInput* targets[2] = {&async, nullptr};
+        const SysRoute routes[2] = {route, SysRoute()};
+        SysAudio sys;
+        std::string err;
+        CHECK(sys.start(AudioApi::Wasapi, routes, 48000.0, 480, false, targets, autoMode, engine, nullptr, err));
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+        const SysStreamInfo info = sys.info(0);
+        const long long writes = async.state().writes;
+        std::printf("   %s: %s, AsyncInput blocks %lld\n", autoMode ? "auto" : "always",
+                    info.driftCorrected ? "drift-corrected" : (info.sameDevice ? "one duplex stream (one device)" : "duplex"),
+                    writes);
+        CHECK(info.running);
+        CHECK(info.driftCorrected == !autoMode && info.sameDevice == autoMode);
+        CHECK(autoMode ? writes == 0 : writes > 0);
+        sys.stop();
+    }
+    SysAudio::assumeOneDevice(false);
+}
+
 // The settings lock: a second taker waits until the first lets go (the program and a plug-in saving at once).
 void settingsLock() {
     std::printf("-- the settings lock: one writer at a time\n");
@@ -141,6 +169,7 @@ int main() {
     run(false, route);
     run(true, route);
     failures(route);
+    oneDevice(route);
     settingsLock();
     return test::finish("sysaudio_test");
 }

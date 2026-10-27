@@ -408,7 +408,10 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Audio", "InputDeviceB")) inDevice[1] = *v;
     if (auto v = get("Audio", "OutputDeviceB")) outDevice[1] = *v;
     if (auto v = get("Audio", "Exclusive")) exclusive = toInt(*v, 0) != 0;
-    if (auto v = get("Audio", "DriftCorrection")) driftCorrection = std::clamp(toInt(*v, kDriftAuto), kDriftOff, kDriftAlways);
+    if (auto v = get("Audio", "DriftCorrection")) { // 0 / 1 / 2; anything else is the default (sixth outside review:
+        const int m = toInt(*v, kDriftAuto);         // a clamp made 7 "always" and -3 "off")
+        driftCorrection = m >= kDriftOff && m <= kDriftAlways ? m : kDriftAuto;
+    }
     if (auto v = get("Audio", "AsioInputs"))
         if (*v == "ASIO" || *v == "WASAPI" || *v == "DirectSound" || *v == "MME") asioInputs = *v;
     if (auto v = get("Audio", "AsioInputDeviceA")) asioInputDevice[0] = *v;

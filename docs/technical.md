@@ -709,7 +709,8 @@ the driver. Only the channels in use get buffers. Driver reset requests and buff
 fades out first, and when the driver is not ready yet (a USB interface that enumerates again, a new rate set in its
 control panel) it is tried again every second for a minute; the status bar says so meanwhile.
 
-The other APIs (WASAPI, DirectSound, MME) run through miniaudio [22]. With Drift correction (the default) each deck
+The other APIs (WASAPI, DirectSound, MME) run through miniaudio [22]. With Drift correction (Auto, the default; for
+WASAPI not for an input and output of one device - Always: also those) each deck
 is a capture stream from its input device into its drift buffer (`AsyncInput`, chapter 17, as for an ASIO output) and a
 playback stream that reads it, processes and plays; without it, one duplex stream from its input device to its
 output device - no buffer, but two devices on different clocks drift apart and give a glitch now and then. Each
@@ -736,7 +737,7 @@ register and using fewer serial filters did.
 ## 17. Inputs on another clock
 
 With ASIO output, a deck's input may come from a WASAPI, DirectSound or MME device - for example a player sending
-into a virtual cable; with those APIs as output too, Drift correction (on by default) puts the same buffer between a
+into a virtual cable; with those APIs as output too, Drift correction (Auto by default) puts the same buffer between a
 deck's input and output device (16.3). The two devices run on their own crystals, so their sample rates differ by tens of ppm
 (typically up to +-100 ppm); a buffer read at the nominal rate would run dry or overflow within minutes.
 `AsyncInput` (`src/core/asyncinput.*`) solves this:
@@ -753,10 +754,16 @@ deck's input and output device (16.3). The two devices run on their own crystals
   callbacks: drift found within 2 ppm, fill within 0.5 ms of its target, read-speed wobble about 15 ppm, no xruns.
 - **Target fill** = the largest capture block + the output period + half the interpolator + a 3 ms margin: about
   19 ms for 10 ms capture blocks and 256-frame periods at 48 kHz. "Block" and "period" are bursts: callbacks that come
-  within a quarter of the last one's length after it count as one (a device period cut into short callbacks arrives
-  at once; counting only the callback gave underruns after each start). The largest burst of the last 20-40 s counts,
-  at most 50 ms: the catch-up after a stall is a burst too, and it must not raise the buffer for good (a fifth outside
-  review measured 125 ms after a 100 ms stall; now it is back at the base within 40 s). The drift estimate learns only
+  within half the last one's length after it count as one (a device period cut into short callbacks arrives at once;
+  counting only the callback gave underruns after each start). Output callbacks before any input came are not merged
+  (a stream fills its buffer at the start that way). The largest burst of the last 20-40 s counts, at most 50 ms or
+  1.5 device periods, whichever is more: the catch-up after a stall is a burst too, and it must not raise the buffer
+  for good (a fifth outside review measured 125 ms after a 100 ms stall). The target goes up at once but down by at
+  most 0.3 ms per second - a read speed of 300 ppm (0.5 cent): a forgotten burst dropped it 40 ms at once and the
+  read speed jumped to +2000 ppm, a pitch step (sixth review). So the burst's part is gone 40 s after a stall and
+  the buffer is back at its base after about 4 minutes, when the 2 ms of margin the stall's underrun added have
+  decayed. The price of that: a stall of 70-80 ms or more that comes back every minute or so gives a dropout each
+  time, where a buffer that only grew would have swallowed the later ones. The drift estimate learns only
   while the read speed is inside its limits (anti-windup): a fill far over the target ran it into the limit, and it
   then overshot into an underrun. Each underrun adds 2 ms of margin (up to 20 ms), and
   every minute without one takes 0.5 ms back down to the 3 ms, so one stall does not keep the delay up (the read
@@ -764,8 +771,10 @@ deck's input and output device (16.3). The two devices run on their own crystals
   within 400 s). An underrun right after such a step down sets a floor at the margin that held: with lasting jitter
   larger than the base margin a plain decay walked back into the failing margin every ~4 minutes (an outside review
   measured 15 underruns an hour); simulated with 8 ms of capture jitter: 4 underruns while the margin finds its
-  level, then none in 40 minutes. The deck fades in over 10 ms whenever reading (re)starts, and at an underrun
-  what is still in the buffer plays out with a fade of up to 3 ms (before, the music stopped with a step - a click).
+  level, then none in 40 minutes. The deck fades in over 10 ms whenever reading (re)starts, and at an underrun it
+  fades out over 3 ms: what is still in the buffer, then its last frame held (before, the music stopped with a step -
+  a click; with nearly nothing left the step came back - sixth review). Measured at 30 moments each at output periods
+  of 64, 128 and 480 frames: the largest step from one frame to the next is the sine's own.
 - **Same path for WASAPI / DirectSound / MME decks** with Drift correction: a capture stream writes, a playback
   stream reads. On *Auto* (the default) WASAPI leaves an input and output of one device (the same container id, not
   the computer's own) one duplex stream: one clock, nothing to correct - saving the buffer minus the period that

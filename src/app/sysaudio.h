@@ -84,6 +84,8 @@ public:
     bool failed() const;
     // Test aid (sysaudio_test): every API is miniaudio's null backend - devices that make no sound, on a timer.
     static void useNullBackend(bool on);
+    // Test aid: every input and output counts as one device (one clock) - the null backend cannot say so itself.
+    static void assumeOneDevice(bool on);
 
 private:
     struct Impl;

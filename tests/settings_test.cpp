@@ -400,6 +400,17 @@ void handEdited() {
     Settings e;
     e.fromText("");
     checkSame(Settings(), e);
+    CHECK(e.driftCorrection == Settings::kDriftAuto); // the default
+
+    // [Audio] DriftCorrection: 0 / 1 of the versions before three modes keep their meaning, 2 = always, anything else
+    // (a hand edit) the default
+    for (const auto& [value, mode] : std::vector<std::pair<std::string, int>>{
+             {"0", Settings::kDriftOff}, {"1", Settings::kDriftAuto}, {"2", Settings::kDriftAlways},
+             {"7", Settings::kDriftAuto}, {"-3", Settings::kDriftAuto}, {"x", Settings::kDriftAuto}}) {
+        Settings dc;
+        dc.fromText("[Audio]\r\nDriftCorrection=" + value + "\r\n");
+        CHECK(dc.driftCorrection == mode);
+    }
 
     // linked presets: deck B follows deck A, also when a hand edit set them apart; survives a round trip
     Settings l;

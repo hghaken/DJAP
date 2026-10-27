@@ -19,8 +19,6 @@ const COLORREF kPlot = RGB(22, 24, 27), kGrid = RGB(70, 74, 80), kDim = RGB(120,
 // the tone sections' own colours (points and their thin curves); the loudness contour grey
 const COLORREF kNodeColour[kNodes] = {RGB(120, 175, 255), RGB(205, 150, 255), RGB(255, 190, 110), RGB(130, 230, 160)};
 const COLORREF kLoudColour = RGB(150, 155, 162);
-// the density bands' gains: their own colours, apart from the spectra's orange and turquoise (client, 2026-10-26)
-const COLORREF kUp = RGB(90, 140, 255), kDown = RGB(240, 70, 110);
 constexpr double kSpecTop = 0.0, kSpecBottom = -96.0; // spectrum scale (dB): 8 grid lines of 12 dB
 constexpr double kDensityRange = 12.0;                 // the density bands' gains: +-12 dB
 
@@ -158,7 +156,6 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
     // the bands: [edge b, edge b + 1] on the frequency axis
     const int bands = d.densityOn ? std::max(1, std::min(kMaxBands, d.bands)) : 0;
     auto edge = [&](int b) { return b <= 0 ? p.left : b >= bands ? p.right : g.xOf(d.splits[b - 1]); };
-    auto bandColour = [](double db) { return std::fabs(db) < 0.05 ? kDim : db > 0.0 ? kUp : kDown; };
 
     // ---- grid: spectrum dB (right; in the window also left), frequencies, the EQ scale's 0 dB ----
     for (int db = -12; db >= -84; db -= 12) {
@@ -202,7 +199,9 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
             const double gain = std::max(-kDensityRange, std::min(kDensityRange, d.densityDb[b]));
             // on the EQ scale (the window) or the density scale over the whole height (the meter panel)
             const int y = g.yOfEq(gain);
-            line(dc, x0, y, x1, y, bandColour(gain), PS_SOLID, std::max(2, px(2.5)));
+            // in the density colour, as its label, splits and band numbers (client, 2026-10-27; it was blue up,
+            // red down, grey at 0) - up or down shows on the scale, and in the window as the dB value
+            line(dc, x0, y, x1, y, kPurple, PS_SOLID, std::max(2, px(2.5)));
             if (big && x1 - x0 > px(36)) text(dc, (x0 + x1) / 2, y + (gain >= 0 ? px(3) : -th - px(3)), dbText(gain), kText, TA_CENTER);
             text(dc, (edge(b) + edge(b + 1)) / 2, p.top, std::to_wstring(b + 1), kPurple, TA_CENTER);
         }

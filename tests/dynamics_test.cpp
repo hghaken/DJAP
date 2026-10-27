@@ -571,6 +571,15 @@ void colour() {
                 "peak %.3f dBFS (ceiling -1)\n", -worstOff, linToDb(peakOff));
     CHECK(worstOff < -45.0);
     CHECK(peakOff <= dbToLin(-1.0) + 1e-6);
+    // the bend itself: a low tone clipped with the limiter off stays clear of the ceiling (the curve 1.5 dB under it,
+    // the band-limited square wave's overshoot about 1 dB back up), not held at it (sixth outside review: taking the
+    // 1.5 dB away was not caught - the fold-back above stays low on 10-15 kHz either way); without the bend: -1.00
+    Buffer low = sig::sine(fs, 100, -1, 1.0);
+    o = run(fs, v, low, low);
+    const double lowPeak = linToDb(sig::peak(o.l));
+    std::printf("   soft clipper, limiter off, 100 Hz driven 9 dB in: peak %.2f dBFS (ceiling -1, the curve 1.5 dB under it)\n",
+                lowPeak);
+    CHECK_RANGE(lowPeak, -2.8, -1.3);
 
     // the exciter's saturation runs at twice the rate too: a 10 kHz tone's 3rd overtone (30 kHz) folded back to
     // 18 kHz at the base rate (-20.6 dBc in the outside review)

@@ -19,6 +19,7 @@ namespace ap {
 namespace {
 
 std::atomic<bool> g_nullBackend{false};
+std::atomic<bool> g_oneDevice{false}; // SysAudio::assumeOneDevice
 
 ma_backend backendOf(AudioApi api) {
     if (g_nullBackend.load()) return ma_backend_null;
@@ -210,6 +211,7 @@ GUID containerOf(IMMDeviceEnumerator* e, const wchar_t* id) {
 // A deck's input and output on one physical device (WASAPI: the same container, not the computer's own): one clock, so
 // nothing drifts - drift correction would only add its buffer (fourth outside review). DirectSound and MME do not say.
 bool oneClock(AudioApi api, const ma_device_id& in, const ma_device_id& out) {
+    if (g_oneDevice.load()) return true;
     if (api != AudioApi::Wasapi || g_nullBackend.load()) return false;
     const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED); // the helper thread (miniaudio joined it already)
     bool same = false;
@@ -235,6 +237,8 @@ const ma_device_id* findDevice(AudioApi api, const ma_device_info* list, ma_uint
 SysAudio::SysAudio() : impl_(new Impl()) {}
 
 void SysAudio::useNullBackend(bool on) { g_nullBackend.store(on); }
+
+void SysAudio::assumeOneDevice(bool on) { g_oneDevice.store(on); }
 
 SysAudio::~SysAudio() { stop(); }
 
@@ -364,6 +368,9 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
                     return;
                 }
                 s->playInited = true;
+                // the devices' own periods: a burst may be 1.5 of them (asyncinput.h; neither stream runs yet)
+                drift[d]->setDevicePeriod(static_cast<int>(std::max(s->dev.capture.internalPeriodSizeInFrames,
+                                                                    s->play.playback.internalPeriodSizeInFrames)));
                 SysStreamInfo& in = s->info;
                 in.input = routes[d].input;
                 in.output = routes[d].output;
@@ -495,6 +502,7 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
                 return;
             }
             s->inited = true;
+            targets[d]->setDevicePeriod(static_cast<int>(s->dev.capture.internalPeriodSizeInFrames)); // as above
             SysStreamInfo& in = s->info;
             in.input = devices[d];
             in.deviceRate = s->dev.capture.internalSampleRate;

@@ -232,7 +232,7 @@ void AudioWindow::createControls() {
                        L"deck an input device of WASAPI, DirectSound or MME (for example a player sending into a "
                        L"virtual cable). The outputs stay ASIO.\nSuch an input runs on its own clock: the program "
                        L"reads it a little faster or slower (at most 0.2 %, inaudible) so the two never drift apart, "
-                       L"at the cost of a buffer of about 10-15 ms with a 10 ms input (shown while running).");
+                       L"at the cost of a buffer of about 15-20 ms with a 10 ms input (shown while running).");
     tips_.add(driver_, L"The ASIO driver of the interface, from the list Windows keeps. Nothing is opened until "
                        L"Open driver or Start audio.");
     tips_.add(open_, L"Loads and opens the driver (asks first). This takes the interface: other programs on the same "
@@ -967,11 +967,14 @@ void AudioWindow::refresh() {
                 }
                 state += line;
                 // shared WASAPI takes a short period only in Windows' low-latency mode (a multiple of the device's
-                // own step, at its own rate); else Windows runs longer ones - say so (fifth outside review)
+                // own step, at its own rate); else Windows runs longer ones - say so (fifth outside review). Other
+                // APIs and exclusive mode round to the device's own sizes: said without the reason (sixth review)
                 const double asked = s.deviceRate > 0 ? s.askedFrames * s.deviceRate / audio_.sampleRate() : s.askedFrames;
                 if (s.askedFrames && std::fabs(s.periodFrames - asked) > 1.0) {
-                    swprintf(line, 480, L"; Windows runs %u-frame periods, not the %u asked for (its low-latency mode "
-                                        L"does not take this size or rate)",
+                    const bool shared = audio_.sys().api() == AudioApi::Wasapi && !settings_.exclusive;
+                    swprintf(line, 480, shared ? L"; Windows runs %u-frame periods, not the %u asked for (its "
+                                                 L"low-latency mode does not take this size or rate)"
+                                               : L"; the device runs %u-frame periods, not the %u asked for",
                              s.periodFrames, s.askedFrames);
                     state += line;
                 }

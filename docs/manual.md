@@ -278,7 +278,7 @@ A stage that is switched off in the loudness preset is shown greyed out.
 
 **Spectrum.** The frequency content of the input (**original**, orange) and the output (**processed**, turquoise),
 20 Hz to 20 kHz. The density stage is drawn in it: its bands (dotted lines at the splits, band numbers at the top)
-and each band's gain now as a line over the band's range, up (blue) or down (red) by up to 12 dB. The **colour**
+and each band's gain now as a line over the band's range (purple, like the bands), up or down by up to 12 dB. The **colour**
 (yellow) is the deck's colour as one EQ curve on the same scale, the auto tone's corrections of the moment included
 (its points and per-section curves are in the spectrum window, 8.2); in Bypass it is not drawn.
 
@@ -617,8 +617,8 @@ The history is cleared at every start of the audio.
 Click the **spectrum** in a deck's meter panel. The big graph shows, for one deck:
 
 - The **spectrum** of the input (orange) and the output (turquoise), with its dB scale on the left.
-- The **density bands** and their gains now: a line per band at its gain on the right-hand scale (blue = lifted,
-  red = turned down), with the gain in dB.
+- The **density bands** and their gains now: a purple line per band at its gain on the right-hand scale (above the
+  0 dB line = lifted, under it = turned down), with the gain in dB.
 - The deck's **colour as an EQ curve** (yellow, the right-hand scale in dB): thick - what the colour does now,
   including the auto tone's correction for this song; dashed - the same without the auto tone (only while it
   corrects); thin - each tone section on its own. A shaded block marks the sub bass's range.
@@ -714,10 +714,11 @@ Windows starts.
   milliseconds later (Medium: about 6 ms at 100 Hz, 11 ms at 50 Hz; the technical manual, 1.5, lists each loudness
   preset), as in any multiband processor; both decks on the same loudness preset stay aligned.
 - with an input on another clock (an ASIO output fed from a WASAPI / DirectSound / MME input, or WASAPI /
-  DirectSound / MME with Drift correction on): the drift buffer - the input's block plus the output's period plus
+  DirectSound / MME with Drift correction): the drift buffer - the input's block plus the output's period plus
   3 ms, so about 8 ms at 128 frames and 23 ms at 10 ms periods. After a dropout of the input it grows by 2 ms (up to
   20 ms more) and shrinks again by 0.5 ms per quiet minute; the burst of sound a device sends after a hiccup can raise
-  it for up to 40 s. With WASAPI Windows may run longer periods than the buffer size asked for (its low-latency mode
+  it for up to a minute, and it comes down slowly (0.3 ms a second, a speed change too small to hear). A device that
+  hiccups again and again for 70 ms or more gives a dropout each time. With WASAPI Windows may run longer periods than the buffer size asked for (its low-latency mode
   takes only some sizes, at the device's own rate): the Setup window then says so, and the latency shown follows.
 
 The Setup window and the status bar show the total.

@@ -399,8 +399,8 @@ saved at once.
 Graphs (client, 2026-10-25). In each meter panel, under the stage rows: the spectrum of the deck's input
 (original, orange) and output (processed, turquoise), 20 Hz - 20 kHz on a log scale, 0 .. -96 dB, with the
 density splits and band numbers and each band's gain now (client, 2026-10-26: the density row went into the
-spectrum, which got its room; lifted blue, turned down red - colours of their own, apart from the spectra's orange and
-turquoise; a line per band at its gain - of the strip, shade and lines first offered, the client kept only the lines;
+spectrum, which got its room; the band lines in the density colour, like its label, splits and numbers - client,
+2026-10-27; first lifted blue, turned down red; a line per band at its gain - of the strip, shade and lines first offered, the client kept only the lines;
 the same in the spectrum window; `spectrumdraw.*` draws both).
 Spectrum window (client, 2026-10-26: "all together in a separate, big spectrum graph"; `spectrumwnd.*`, a click on
 a meter panel's spectrum, WM_COMMAND 105 in GUI tests): one deck's spectrum (left scale), the density bands, and the
@@ -580,17 +580,19 @@ on its own thread; a deck with "(none)" does not run. The decks run at the sampl
 when a device runs at another rate or channel count. These paths add the devices' buffering (input period plus
 output buffer, shown as an estimate) and, when input and output are different devices, their clocks drift apart:
 miniaudio's duplex stream of these synchronous backends has no drift correction, so a growing or emptying backlog
-ends in a glitch now and then (outside review). Hence **Drift correction** (`[Audio] DriftCorrection`, on by
-default; client, 2026-10-27: "look at this one especially"): a deck is then a capture stream into its `AsyncInput`
+ends in a glitch now and then (outside review). Hence **Drift correction** (`[Audio] DriftCorrection`: 1 = Auto, the
+default; 2 = Always; 0 = Off - client, 2026-10-27: "look at this one especially"): a deck is then a capture stream into its `AsyncInput`
 and a playback stream that reads it with the drift loop of 6.1 - the same code as the ASIO case, at the cost of its
 buffer (input block + output period + 3 ms margin: about 23 ms at 10 ms periods, about 8 ms at 128 frames; the
 input block is a burst - callbacks that come straight after each other count as one, so a 10 ms packet cut into
 128-frame callbacks or 1024 frames in two callbacks of 512 is held whole). The playback stream of this route has 2
 periods with WASAPI (it only reads the buffer), 3 with DirectSound and MME. WASAPI recognises an input and output of
 the same physical device by their container id (not the computer's own container, which every built-in and software
-device shares) and leaves them the duplex stream: one clock, nothing to correct (fourth outside review). Off: always
-the duplex stream. The processing itself still adds only the look-ahead; `sysaudio_test` runs both routes on
-miniaudio's null devices, and a start with a device that is not there.
+device shares) and, on Auto, leaves them the duplex stream: one clock, nothing to correct (fourth outside review);
+Always corrects them too, for a device that holds two clocks after all (fifth review). Off: always the duplex
+stream. Any other ini value is Auto. The processing itself still adds only the look-ahead; `sysaudio_test` runs both
+routes on miniaudio's null devices, Auto and Always for one device (`SysAudio::assumeOneDevice`), and a start with a
+device that is not there.
 
 Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), an "About DJAP..." button, and the audio API and, for WASAPI, the exclusive switch. ASIO:
 "Deck inputs" (ASIO input pairs, or WASAPI / DirectSound / MME devices, 6.1), the driver (installed drivers from the
