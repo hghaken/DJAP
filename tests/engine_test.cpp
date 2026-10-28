@@ -447,7 +447,8 @@ void periodAtRate() {
     CHECK(framesAtRate(480, 48000, 48000.0) == 480);
     CHECK(framesAtRate(960, 96000, 48000.0) == 480);  // a 96 kHz device under 48 kHz decks: half
     CHECK(framesAtRate(441, 44100, 48000.0) == 480);  // 10 ms either way
-    CHECK(framesAtRate(1024, 192000, 44100.0) == 235); // rounded
+    CHECK(framesAtRate(1024, 192000, 44100.0) == 235); // rounded (235.2)
+    CHECK(framesAtRate(100, 48000, 44100.0) == 92);    // rounded up (91.875; ninth review: no case of .5 or more)
     CHECK(framesAtRate(512, 0, 48000.0) == 512);      // rate unknown: as it is
 }
 

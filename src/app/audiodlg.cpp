@@ -228,7 +228,8 @@ void AudioWindow::createControls() {
                       L"now and then on Auto). Off: always one stream from input to output, no buffer.");
     tips_.add(inPeriod_, L"With ASIO and WASAPI inputs: how often Windows hands over the input's sound. Default: every "
                          L"10 ms - the largest part of the latency (it counts twice: the input's own and in the drift "
-                         L"buffer). 8, 6, 5 or 4 ms through Windows' low-latency mode save about 4, 8, 10 or 12 ms. It "
+                         L"buffer). 8, 6, 5 or 4 ms save about 4, 8, 10 or 12 ms - shared through Windows' low-latency "
+                         L"mode, exclusive (the check box above) as the device's own period. Shared it "
                          L"needs a device that has the mode, set in Windows' sound settings to the same sample rate as "
                          L"the ASIO interface; otherwise the input keeps 10 ms (Health then says so). A virtual cable's "
                          L"own timer must tick at least 3-4 times per period (measured: its timer at 3 ms - 8 ms or "
@@ -238,7 +239,8 @@ void AudioWindow::createControls() {
                        L"deck an input device of WASAPI, DirectSound or MME (for example a player sending into a "
                        L"virtual cable). The outputs stay ASIO.\nSuch an input runs on its own clock: the program "
                        L"reads it a little faster or slower (at most 0.2 %, inaudible) so the two never drift apart, "
-                       L"at the cost of a buffer of about 15-20 ms with a 10 ms input (shown while running).");
+                       L"at the cost of a buffer of about 15-25 ms with a 10 ms input, by the ASIO buffer size (shown "
+                       L"while running).");
     tips_.add(driver_, L"The ASIO driver of the interface, from the list Windows keeps. Nothing is opened until "
                        L"Open driver or Start audio.");
     tips_.add(open_, L"Loads and opens the driver (asks first). This takes the interface: other programs on the same "
@@ -470,7 +472,10 @@ void AudioWindow::fillAll() {
     // ASIO: one clock, its inputs of other APIs always corrected - the drift choice's place holds the input period
     SendMessageW(inPeriod_, CB_RESETCONTENT, 0, 0);
     addItem(inPeriod_, L"Input period: Windows' default (10 ms)", 0);
-    for (int ms : {8, 6, 5, 4}) addItem(inPeriod_, L"Input period: " + std::to_wstring(ms) + L" ms", ms);
+    // with a hint for a virtual cable: the timer it needs (measured; ninth outside review: only the manual said it)
+    addItem(inPeriod_, L"Input period: 8 ms (a virtual cable: its timer at 3 ms or less)", 8);
+    for (int ms : {6, 5, 4})
+        addItem(inPeriod_, L"Input period: " + std::to_wstring(ms) + L" ms (a virtual cable: its timer at 1 ms)", ms);
     selectData(inPeriod_, settings_.inputPeriodMs);
     ShowWindow(drift_, current != AudioApi::Asio ? SW_SHOW : SW_HIDE);
     ShowWindow(inPeriod_, current == AudioApi::Asio ? SW_SHOW : SW_HIDE);
@@ -913,21 +918,34 @@ void AudioWindow::refresh() {
                     const AsyncInputState a = audio_.asyncState(d);
                     const SysStreamInfo in = audio_.sys().info(d);
                     // the input's part: the blocks it really hands over, as measured (eighth outside review: without
-                    // Windows' low-latency mode the device's reported period can be shorter than its packets)
-                    const double inMs = a.blockMs > 0.0 ? a.blockMs : in.latencyMs;
+                    // Windows' low-latency mode the device's reported period can be shorter than its packets) - the
+                    // steady size, not the largest (ninth review: one stall's catch-up showed as the period)
+                    const double inMs = a.steadyMs > 0.0 ? a.steadyMs : a.blockMs > 0.0 ? a.blockMs : in.latencyMs;
                     swprintf(b, 480,
                              L"\n%s: %hs \x201C%s\x201D \x2192 ASIO. Latency \x2248 %.1f ms (input %.1f + drift buffer "
                              L"%.1f + output %.2f + processing %.2f); drift %+.1f ppm%s; underruns %lld, overruns %lld",
                              deck, apiName(audio_.sys().api()), fromUtf8(in.input).c_str(),
                              inMs + a.targetMs + s.outputLatency * ms + look, inMs, a.targetMs, s.outputLatency * ms,
                              look, a.driftPpm, a.active ? L"" : L" (filling up)", a.underruns, a.overruns);
-                    // a short input period asked for (Setup) but the input still comes in Windows' 10 ms blocks: say
-                    // what that mode needs
-                    if (settings_.inputPeriodMs > 0 && a.blockMs >= 9.0) {
+                    // the running stream (ninth review: the Setup choice was read, not what runs): a shorter period
+                    // asked for but the input still in Windows' 10 ms blocks - what that mode needs; or another
+                    // length than asked (the device's own step)
+                    const double askedMs = in.requestedFrames * 1000.0 / s.sampleRate;
+                    if (in.requestedFrames > 0 && a.steadyMs >= 9.0) {
                         state += b;
                         swprintf(b, 480, L"; the input still comes in %.0f ms blocks - Windows' short periods need a "
                                          L"device that has them, set to %s in Windows' sound settings",
-                                 a.blockMs, khz(s.sampleRate).c_str());
+                                 a.steadyMs, khz(s.sampleRate).c_str());
+                    } else if (in.requestedFrames > 0 && a.steadyMs > 0.0 && std::fabs(a.steadyMs - askedMs) > 0.3) {
+                        state += b;
+                        swprintf(b, 480, L"; input period %.2f ms (%.0f asked: the device's own step)", a.steadyMs,
+                                 askedMs);
+                    }
+                    if (a.repeats > 0) { // the same block twice: read faster than filled (ninth review)
+                        state += b;
+                        swprintf(b, 480, L"; %lld input blocks came twice - the device is read faster than it is "
+                                         L"filled: choose a longer input period, or a faster timer in a virtual cable",
+                                 a.repeats);
                     }
                 } else {
                     swprintf(b, 480, L"\n%s: ASIO \x2192 ASIO. Latency %.2f ms (input %.2f + output %.2f + processing %.2f)",

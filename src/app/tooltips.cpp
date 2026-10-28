@@ -22,6 +22,7 @@ bool Tooltips::enabled() { return g_enabled; }
 
 void Tooltips::create(HWND owner) {
     owner_ = owner;
+    added_.clear(); // a new tooltip control: no tools yet
     tip_ = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
                            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, owner, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
@@ -46,10 +47,15 @@ void Tooltips::add(HWND control, const wchar_t* text) {
     ti.hwnd = owner_;
     ti.uId = reinterpret_cast<UINT_PTR>(control);
     ti.lpszText = const_cast<wchar_t*>(text);
-    // again for the same control: replaced (eighth outside review: TTM_ADDTOOL does not refuse a second tool for the
-    // same control, so the first text stayed in front)
-    SendMessageW(tip_, TTM_DELTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
-    SendMessageW(tip_, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
+    // again for the same control: its text updated in place (eighth outside review: TTM_ADDTOOL does not refuse a
+    // second tool for the same control, so the first text stayed in front; ninth: deleting and adding it again hid
+    // a tip that was showing)
+    if (std::find(added_.begin(), added_.end(), control) != added_.end()) {
+        SendMessageW(tip_, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
+        return;
+    }
+    added_.erase(std::remove_if(added_.begin(), added_.end(), [](HWND h) { return !IsWindow(h); }), added_.end());
+    if (SendMessageW(tip_, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti))) added_.push_back(control);
 }
 
 void Tooltips::addRect(HWND window, UINT_PTR id, const wchar_t* text) {

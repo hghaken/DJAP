@@ -324,11 +324,12 @@ bool SysAudio::devices(AudioApi api, std::vector<SysDevice>& inputs, std::vector
 
 // (the mode converts no rate: the device must run at the decks' rate in Windows; live, 2026-10-28: the device's
 // shortest period of a virtual cable, 1 ms, was shorter than the cable's own 3 ms timer and the sound came out
-// distorted - hence a choice of 5 / 3 / 2 ms in Setup, not "the shortest")
+// distorted - hence a choice of 8 / 6 / 5 / 4 ms in Setup, not "the shortest"). Never longer than Windows' default
+// period (ninth outside review: a step of 256 at 44.1 kHz made 8 ms 11.6 ms).
 unsigned SysAudio::onStep(const EnginePeriods& p, unsigned frames, double rate) {
-    if (!p.known || std::fabs(p.rate - rate) > 0.5 || frames == 0) return 0;
+    if (!p.known || p.stepFrames == 0 || std::fabs(p.rate - rate) > 0.5 || frames == 0) return 0;
     const unsigned up = (std::max(frames, p.minFrames) + p.stepFrames - 1) / p.stepFrames * p.stepFrames;
-    return up <= p.maxFrames ? up : 0;
+    return up <= p.maxFrames && (p.defaultFrames == 0 || up <= p.defaultFrames) ? up : 0;
 }
 
 SysAudio::EnginePeriods SysAudio::inputPeriods(const std::string& device) {
@@ -587,6 +588,7 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
             SysStreamInfo& in = s->info;
             in.input = devices[d];
             in.askedFrames = asked;
+            in.requestedFrames = periodFrames;
             in.deviceRate = s->dev.capture.internalSampleRate;
             in.periodFrames = s->dev.capture.internalPeriodSizeInFrames;
             in.periods = s->dev.capture.internalPeriods;

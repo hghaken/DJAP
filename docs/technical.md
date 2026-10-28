@@ -759,8 +759,11 @@ With ASIO output the input's period counts twice: once as the input's own latenc
 (which holds a whole input block). Shared WASAPI hands over 10 ms by default; Setup's *Input period* (8, 6, 5 or 4 ms) asks
 Windows' low-latency shared mode (IAudioClient3) for that period, put on the device's step between its shortest and
 longest (a request off the step is rounded down under itself and falls back to 10 ms). The mode needs a device that
-has it, running at the same rate in Windows as the ASIO interface. The input latency shown is the measured block
-size, not the device's reported period. A virtual cable fills its buffer on a timer of its own: measured with a
+has it, running at the same rate in Windows as the ASIO interface. The input latency shown is the measured steady block
+size - the smallest finished burst of the last 20-40 s, which a stall's catch-up does not move (the drift buffer
+holds the largest) - not the device's reported period; never longer than Windows' default period. A block that
+repeats the one before bit for bit (16 frames or more, not silence) is counted: the device was read faster than it
+was filled, and Health says so. A virtual cable fills its buffer on a timer of its own: measured with a
 1 kHz tone through one, the period must span 3-4 of its ticks - with a 3 ms timer clean from 8 ms, with 1 ms from
 4 ms; shorter periods clicked or read the same data twice.
 

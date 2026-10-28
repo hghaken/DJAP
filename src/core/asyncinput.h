@@ -22,7 +22,10 @@ struct AsyncInputState {
     long long overruns = 0;    // input blocks dropped because the ring was full
     long long resyncs = 0;     // read position moved to the target (the fill was far too high)
     long long writes = 0;      // input blocks received
-    double blockMs = 0;        // the largest input block (burst) lately, as measured: what the input really hands over
+    double blockMs = 0;        // the largest input block (burst) lately, as measured: what the buffer must hold
+    double steadyMs = 0;       // the smallest finished input burst lately: the input's period as it really runs
+    long long repeats = 0;     // input blocks that repeated the block before bit for bit (not silence): a device read
+                               // faster than it is filled (a virtual cable's timer slower than the period chosen)
 };
 
 class AsyncInput {
@@ -89,9 +92,13 @@ private:
     // The largest burst (see kBurstWindowS) of one side: blocks closer than kBurstGap of the last one's length.
     struct Bursts {
         int burst = 0, lastFrames = 0, now = 0, before = 0;
+        int minNow = 0, minBefore = 0; // the smallest finished burst of the two windows: the steady block size
         double lastTime = -1.0, windowStart = -1.0;
         // count false: only the time and size are noted (for the gap test), the window keeps what it had
         int add(int frames, double time, double fs, int cap, bool merge = true, bool count = true);
+        // the smallest finished burst lately (0: none finished yet) - unlike the largest, a stall's catch-up does
+        // not move it (ninth outside review: Health's message went off on the largest)
+        int steady() const;
     };
     int burstCap(int frames) const;
 
@@ -101,9 +108,10 @@ private:
     // writer -> reader
     std::atomic<int64_t> written_{0};
     std::atomic<double> writeTime_{0.0};
-    std::atomic<int> maxBlock_{0};
-    std::atomic<long long> overruns_{0}, writes_{0};
+    std::atomic<int> maxBlock_{0}, steadyBlock_{0};
+    std::atomic<long long> overruns_{0}, writes_{0}, repeats_{0};
     Bursts writeBursts_; // writer only
+    int lastWriteFrames_ = 0; // writer only: the last block's length (a block repeated bit for bit)
     // reader -> writer
     std::atomic<int64_t> oldestNeeded_{0};
     // reader only

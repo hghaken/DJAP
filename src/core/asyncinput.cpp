@@ -70,8 +70,11 @@ void AsyncInput::reset(double fs) {
     written_.store(0, std::memory_order_relaxed);
     writeTime_.store(0.0, std::memory_order_relaxed);
     maxBlock_.store(0, std::memory_order_relaxed);
+    steadyBlock_.store(0, std::memory_order_relaxed);
     overruns_.store(0, std::memory_order_relaxed);
     writes_.store(0, std::memory_order_relaxed);
+    repeats_.store(0, std::memory_order_relaxed);
+    lastWriteFrames_ = 0;
     writeBursts_ = Bursts();
     playBursts_ = Bursts();
     fadeOut_ = fadeRing_ = 0;
@@ -107,17 +110,26 @@ void AsyncInput::reset(double fs) {
 // Sixth review: half, not a quarter, of the last piece's length - pieces 2.7-4 ms apart (a 10 ms packet) were not
 // merged and underran.
 int AsyncInput::Bursts::add(int frames, double time, double fs, int cap, bool merge, bool count) {
-    burst = merge && lastTime >= 0.0 && time - lastTime < kBurstGap * lastFrames / fs ? burst + frames : frames;
+    const bool merged = merge && lastTime >= 0.0 && time - lastTime < kBurstGap * lastFrames / fs;
+    const int finished = !merged && lastTime >= 0.0 ? burst : 0; // the burst this block ends
+    burst = merged ? burst + frames : frames;
     lastTime = time;
     lastFrames = frames;
     if (!count) return std::max(now, before); // seen (for the gaps), not remembered
     if (windowStart < 0.0 || time - windowStart >= kBurstWindowS) {
         before = windowStart < 0.0 ? 0 : now;
-        now = 0;
+        minBefore = windowStart < 0.0 ? 0 : minNow;
+        now = minNow = 0;
         windowStart = time;
     }
+    if (finished > 0) minNow = minNow > 0 ? std::min(minNow, finished) : finished;
     now = std::max(now, std::min(burst, cap));
     return std::max(now, before);
+}
+
+int AsyncInput::Bursts::steady() const {
+    if (minNow > 0 && minBefore > 0) return std::min(minNow, minBefore);
+    return minNow > 0 ? minNow : minBefore;
 }
 
 int AsyncInput::burstCap(int frames) const {
@@ -136,7 +148,21 @@ void AsyncInput::write(const float* in, int frames, double now) {
         return;
     }
     maxBlock_.store(writeBursts_.add(frames, now, fs_, burstCap(frames)), std::memory_order_relaxed); // (a dropped block does not count)
+    steadyBlock_.store(writeBursts_.steady(), std::memory_order_relaxed);
     float* ring = ring_.get();
+    // the same block again, bit for bit and not silent: the device was read faster than it was filled (live,
+    // 2026-10-28: a virtual cable at a 1 ms period with its own timer at 3 ms; ninth outside review: count it, so
+    // Health can say so)
+    if (frames >= 16 && frames == lastWriteFrames_ && w >= frames) {
+        bool same = true, sound = false;
+        for (int i = 0; i < frames && same; ++i) {
+            const int64_t idx = (w - frames + i) & kMask;
+            same = ring[2 * idx] == in[2 * i] && ring[2 * idx + 1] == in[2 * i + 1];
+            sound = sound || in[2 * i] != 0.0f || in[2 * i + 1] != 0.0f;
+        }
+        if (same && sound) bump(repeats_);
+    }
+    lastWriteFrames_ = frames;
     for (int i = 0; i < frames; ++i) {
         const int64_t idx = (w + i) & kMask;
         ring[2 * idx] = in[2 * i];
@@ -318,6 +344,8 @@ AsyncInputState AsyncInput::state() const {
     s.resyncs = resyncs_.load(std::memory_order_relaxed);
     s.writes = writes_.load(std::memory_order_relaxed);
     s.blockMs = maxBlock_.load(std::memory_order_relaxed) * 1000.0 / fs_;
+    s.steadyMs = steadyBlock_.load(std::memory_order_relaxed) * 1000.0 / fs_;
+    s.repeats = repeats_.load(std::memory_order_relaxed);
     return s;
 }
 

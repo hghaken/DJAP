@@ -5,6 +5,8 @@
 
 #include <windows.h>
 
+#include <vector>
+
 namespace ap {
 
 class Tooltips {
@@ -25,6 +27,7 @@ public:
 
 private:
     HWND tip_ = nullptr, owner_ = nullptr;
+    std::vector<HWND> added_; // controls with a tool: a new text for one updates it in place
 };
 
 } // namespace ap

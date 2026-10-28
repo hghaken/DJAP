@@ -655,6 +655,16 @@ void colour() {
     CHECK_NEAR(lowStart, lowSteady, 0.05);
     CHECK_NEAR(lowFirst, lowSteady, 0.05);
     CHECK_NEAR(lowLim, -1.10, 0.05); // (eighth review: "> -1.6" let a bend of 0.3-0.5 dB with the limiter on pass)
+    // the drive from the first sample on (ninth review: the first configuration's drive gliding up from 0 dB over
+    // 5 ms was invisible at a peak of -1 dBFS; at -24 dBFS the first 5 ms then stood 3 dB lower). The first 5 ms
+    // against the same 5 ms of the tone half a second later (50 periods of 100 Hz: the same phase)
+    Buffer quietLow = sig::sine(fs, 100, -24, 1.0);
+    o = run(fs, v, quietLow, quietLow);
+    const size_t five = static_cast<size_t>(fs * 0.005), half = static_cast<size_t>(fs / 2);
+    const double quietFirst = peakFrom(o.l, 0, five), quietLater = peakFrom(o.l, half, half + five);
+    std::printf("   soft clipper, 100 Hz at -24 dBFS: first 5 ms %.2f dBFS, the same 5 ms later %.2f dBFS\n", quietFirst,
+                quietLater);
+    CHECK_NEAR(quietFirst, quietLater, 0.1);
 
     // the exciter's saturation runs at twice the rate too: a 10 kHz tone's 3rd overtone (30 kHz) folded back to
     // 18 kHz at the base rate (-20.6 dBc in the outside review)

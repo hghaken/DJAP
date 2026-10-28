@@ -155,6 +155,47 @@ void captureOnly(const std::string& input) {
     }
 }
 
+// A requested input period put on the device's step (ninth outside review: untested - five mutants survived).
+void onStep() {
+    std::printf("-- a requested period on the device's step\n");
+    SysAudio::EnginePeriods vac; // a virtual cable: 1.02 .. 10 ms in steps of 1 frame
+    vac.known = true;
+    vac.rate = 44100;
+    vac.defaultFrames = 441;
+    vac.stepFrames = 1;
+    vac.minFrames = 45;
+    vac.maxFrames = 441;
+    CHECK(SysAudio::onStep(vac, 176, 44100.0) == 176); // 4 ms: as asked
+    CHECK(SysAudio::onStep(vac, 30, 44100.0) == 45);   // under the shortest: the shortest
+    CHECK(SysAudio::onStep(vac, 441, 44100.0) == 441);
+    CHECK(SysAudio::onStep(vac, 500, 44100.0) == 0);   // over the longest: Windows' default
+    CHECK(SysAudio::onStep(vac, 176, 48000.0) == 0);   // another rate in Windows: no low-latency mode
+    CHECK(SysAudio::onStep(vac, 0, 44100.0) == 0);
+    SysAudio::EnginePeriods hd = vac; // a step of 128 frames at 48 kHz, 128 .. 480
+    hd.rate = 48000;
+    hd.defaultFrames = 480;
+    hd.stepFrames = 128;
+    hd.minFrames = 128;
+    hd.maxFrames = 480;
+    CHECK(SysAudio::onStep(hd, 192, 48000.0) == 256); // 4 ms: rounded up onto the step, never under the request
+    CHECK(SysAudio::onStep(hd, 384, 48000.0) == 384); // 8 ms: on the step already
+    CHECK(SysAudio::onStep(hd, 100, 48000.0) == 128);
+    SysAudio::EnginePeriods wide = hd; // a step of 256 at 44.1 kHz, longest over the default
+    wide.rate = 44100;
+    wide.defaultFrames = 441;
+    wide.stepFrames = 256;
+    wide.minFrames = 256;
+    wide.maxFrames = 768;
+    CHECK(SysAudio::onStep(wide, 353, 44100.0) == 0); // 8 ms would be 512 = 11.6 ms: longer than the default
+    CHECK(SysAudio::onStep(wide, 176, 44100.0) == 256);
+    SysAudio::EnginePeriods none = vac;
+    none.known = false;
+    CHECK(SysAudio::onStep(none, 176, 44100.0) == 0);
+    none = vac;
+    none.stepFrames = 0;
+    CHECK(SysAudio::onStep(none, 176, 44100.0) == 0);
+}
+
 // The settings lock: a second taker waits until the first lets go (the program and a plug-in saving at once).
 void settingsLock() {
     std::printf("-- the settings lock: one writer at a time\n");
@@ -201,6 +242,7 @@ int main() {
     failures(route);
     oneDevice(route);
     captureOnly(inputs[0].name);
+    onStep();
     settingsLock();
     return test::finish("sysaudio_test");
 }

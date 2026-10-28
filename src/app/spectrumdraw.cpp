@@ -202,7 +202,8 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
             // in the density colour, as its label, splits and band numbers (client, 2026-10-27; it was blue up,
             // red down, grey at 0) - up or down shows on the scale, and in the window as the dB value
             line(dc, x0, y, x1, y, kPurple, PS_SOLID, std::max(2, px(2.5)));
-            if (big && x1 - x0 > px(36)) text(dc, (x0 + x1) / 2, y + (gain >= 0 ? px(3) : -th - px(3)), dbText(gain), kText, TA_CENTER);
+            // the value above the line when it lifts, under it when it turns down (client, 2026-10-28)
+            if (big && x1 - x0 > px(36)) text(dc, (x0 + x1) / 2, y + (gain > 0 ? -th - px(3) : px(3)), dbText(gain), kText, TA_CENTER);
             text(dc, (edge(b) + edge(b + 1)) / 2, p.top, std::to_wstring(b + 1), kPurple, TA_CENTER);
         }
     }
@@ -217,8 +218,9 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
             line(dc, x0, y, x1, y, c, PS_SOLID, std::max(2, px(hot ? 3.5 : 2.5)));
             const int gw = std::min(px(hot ? 22 : 16), std::max(px(6), (x1 - x0) / 3)), gh = px(hot ? 9 : 7);
             fill(dc, (x0 + x1) / 2 - gw / 2, y - gh / 2, (x0 + x1) / 2 + gw / 2, y + gh / 2 + 1, c); // the grip
-            if (d.bandGainDb[b] != 0.0 && x1 - x0 > px(40))
-                text(dc, x1 - px(2), y - th - px(2), dbText(d.bandGainDb[b]), c, TA_RIGHT);
+            if (d.bandGainDb[b] != 0.0 && x1 - x0 > px(40)) // above when positive, under when negative
+                text(dc, x1 - px(2), d.bandGainDb[b] > 0.0 ? y - th - px(2) : y + px(4), dbText(d.bandGainDb[b]), c,
+                     TA_RIGHT);
             g.handle[b] = RECT{x0, y - px(2), x1, y + px(2)};
         }
         g.handles = bands;

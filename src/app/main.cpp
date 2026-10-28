@@ -85,7 +85,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     power.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED | PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION;
     power.StateMask = 0; // both off
     SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &power, sizeof power);
-    INITCOMMONCONTROLSEX icc{sizeof icc, ICC_STANDARD_CLASSES | ICC_BAR_CLASSES};
+    INITCOMMONCONTROLSEX icc{sizeof icc, ICC_STANDARD_CLASSES | ICC_BAR_CLASSES | ICC_LINK_CLASS}; // (About's link)
     InitCommonControlsEx(&icc);
     theme::init();
 

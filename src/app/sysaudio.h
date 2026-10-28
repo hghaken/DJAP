@@ -42,6 +42,8 @@ struct SysStreamInfo {
     unsigned askedFrames = 0;     // the period asked for (the Setup window's buffer size; 0: the default). Shared
                                   // WASAPI gives it only when Windows' low-latency engine takes it (a multiple of the
                                   // device's own step, at its own rate) - else a longer one (fifth outside review)
+    unsigned requestedFrames = 0; // capture-only: the period the caller asked for (Setup's Input period in frames,
+                                  // before it went on the device's step; 0: Windows' default)
     unsigned periods = 0;
     double latencyMs = 0;         // estimate: input period + output buffer (capture-only: input period); with
                                   // drift correction the AsyncInput's buffer comes on top

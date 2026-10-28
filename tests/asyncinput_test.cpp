@@ -74,8 +74,10 @@ struct Sim {
     double settleAfter = 1e9;
     double probeAt = -1.0, probed = 0.0; // the buffer (targetMs) at this time (s since start)
 
+    double start = 1000.0; // s on the shared clock where this run begins
+
     void run(AsyncInput& ai, double seconds) {
-        const double t0 = 1000.0;
+        const double t0 = start;
         Rng rng(seed);
         const double capRate = fs * (1.0 + driftPpm * 1e-6);
         int64_t capIndex = 0, k = 0, m = 0;
@@ -546,7 +548,8 @@ void fadeOut() {
             if (s.outL[i] >= 0.4999f) full = i;
         const double fadeIn = full ? static_cast<double>(full - back + 1) / 48.0 : 0.0;
         std::printf("   a quarter into the fade-out at %.3f of the level; fade-in over %.2f ms\n", quarter, fadeIn);
-        CHECK(quarter > 0.82 && quarter < 0.88);
+        // a raised cosine there: 0.848 (a straight line 0.75, a square-root curve 0.863 - ninth review)
+        CHECK(quarter > 0.840 && quarter < 0.856);
         CHECK_NEAR(fadeIn, 10.0, 0.3);
     }
 }
@@ -585,10 +588,12 @@ void priming() {
         s.signal = sine(440.0, 0.5, 48000);
         s.probeAt = 10.0;
         if (c == 1) s.firstPeriod = 3 * s.period;
-        if (c == 2) { // a first run, then reset and a late priming
+        if (c == 2) { // a first run, then reset and a late priming - later on the clock, as a restart is (ninth
+                      // review: on the same clock a reset that kept the first run's start time went unnoticed)
             s.run(ai, 3.0);
             ai.reset(48000);
             s = Sim();
+            s.start = 1600.0;
             s.signal = sine(440.0, 0.5, 48000);
             s.probeAt = 10.0;
             s.outStart = 0.025;
@@ -613,9 +618,61 @@ void priming() {
         s.primeCalls = 1000000; // every callback 20 us after the last
         s.run(ai, 1.0 + AsyncInput::kPrimeTimeoutS);
         const size_t first = firstSound(s.outL);
-        std::printf("   an output that never pauses: sound after %zu of %zu frames\n", first, s.outL.size());
+        // callbacks of 16 frames every 20 us: 800 000 frames a second of the clock
+        const double after = static_cast<double>(first) / (s.period / 2e-5);
+        std::printf("   an output that never pauses: sound after %.3f s (%zu of %zu frames)\n", after, first, s.outL.size());
         CHECK(first < s.outL.size());
+        CHECK_NEAR(after, 1.0, 0.02); // kPrimeTimeoutS itself (ninth review: 0.1 s and 10 s went unnoticed)
     }
+}
+
+// The input's block size as Health shows it, and blocks read twice (ninth outside review: the largest burst went over
+// Health's 10 ms line after one short stall; a repeated block was not noticed at all).
+void blockSizes() {
+    std::printf("-- the steady block size and repeated blocks\n");
+    struct Case {
+        int block, split;
+        double pause;
+        double steady;
+    };
+    for (const Case& c : {Case{128, 1, 0.008, 128 / 48.0}, Case{480, 4, 0.0, 10.0}, Case{177, 1, 0.015, 177 / 48.0}}) {
+        AsyncInput ai;
+        ai.reset(48000);
+        Sim s;
+        s.block = c.block;
+        s.split = c.split;
+        s.catchUp = true;
+        if (c.pause > 0.0) {
+            s.capPause[0] = 5.0;
+            s.capPause[1] = 5.0 + c.pause;
+        }
+        s.signal = sine(440.0, 0.5, 48000);
+        s.run(ai, 8.0);
+        const AsyncInputState st = ai.state();
+        std::printf("   %d frames%s%s: steady %.2f ms (expected %.2f), largest %.2f ms, repeats %lld\n", c.block,
+                    c.split > 1 ? " in 4 callbacks" : "", c.pause > 0.0 ? ", one stall" : "", st.steadyMs, c.steady,
+                    st.blockMs, st.repeats);
+        CHECK_NEAR(st.steadyMs, c.steady, 0.05);
+        CHECK(st.repeats == 0);
+        if (c.pause > 0.0) CHECK(st.blockMs > c.steady + 4.0); // the stall's catch-up: the largest, not the steady
+    }
+    AsyncInput r;
+    r.reset(48000);
+    std::vector<float> a(2 * 64), b(2 * 64), z(2 * 64, 0.0f);
+    for (int i = 0; i < 64; ++i) {
+        a[2 * static_cast<size_t>(i)] = a[2 * static_cast<size_t>(i) + 1] = static_cast<float>(0.5 * std::sin(0.1 * i));
+        b[2 * static_cast<size_t>(i)] = b[2 * static_cast<size_t>(i) + 1] = static_cast<float>(0.5 * std::sin(0.1 * (i + 64)));
+    }
+    double t = 1.0;
+    r.write(a.data(), 64, t += 0.01);
+    r.write(b.data(), 64, t += 0.01); // different: no repeat
+    r.write(b.data(), 64, t += 0.01); // the same again: a repeat
+    r.write(z.data(), 64, t += 0.01);
+    r.write(z.data(), 64, t += 0.01); // silence twice: not counted
+    r.write(a.data(), 32, t += 0.01);
+    r.write(a.data(), 32, t += 0.01); // under 16 frames would not count; 32 does
+    std::printf("   written: two equal sound blocks twice, silence twice: repeats %lld (expected 2)\n", r.state().repeats);
+    CHECK(r.state().repeats == 2);
 }
 
 void throughEngine() {
@@ -706,6 +763,7 @@ int main() {
     stallCatchUp();
     fadeOut();
     priming();
+    blockSizes();
     throughEngine();
     return test::finish("asyncinput_test");
 }
