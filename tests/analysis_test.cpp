@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 using namespace ap;
@@ -203,6 +204,27 @@ void scope() {
     std::printf("   bucket 137 holds its sample, the clip level counts and just under it does not, raw samples %s\n",
                 rawOk ? "right in both channels across the wrap" : "WRONG");
     CHECK(rawOk);
+    // tenth outside review: non-finite samples count as 0 (an infinity made its bucket infinite) - in each channel
+    WaveScope f;
+    f.reset(fs);
+    std::vector<float> fl(static_cast<size_t>(n), 0.25f), fr(static_cast<size_t>(n), -0.25f);
+    fl[static_cast<size_t>(395 * per)] = std::numeric_limits<float>::infinity();
+    fr[static_cast<size_t>(396 * per)] = -std::numeric_limits<float>::infinity();
+    fl[static_cast<size_t>(397 * per)] = std::numeric_limits<float>::quiet_NaN();
+    fr[static_cast<size_t>(397 * per)] = std::numeric_limits<float>::quiet_NaN();
+    f.feed(fl.data(), fr.data(), n);
+    bool finite = true;
+    for (int bk = 0; bk < WaveScope::kBuckets; ++bk)
+        for (int c = 0; c < 2; ++c)
+            finite = finite && std::isfinite(f.at(bk).hi[c]) && std::isfinite(f.at(bk).lo[c]) && f.at(bk).clipped[c] == 0;
+    const long long at50 = f.rawWritten - n + 395 * per, at60 = f.rawWritten - n + 396 * per, at70 = at50 + 2 * per;
+    const bool zeros = f.sample(0, at50) == 0.0f && f.sample(1, at60) == 0.0f && f.sample(0, at70) == 0.0f &&
+                       f.sample(1, at70) == 0.0f;
+    std::printf("   +-inf and NaN samples: buckets %s, raw samples %s\n", finite ? "finite" : "NOT FINITE",
+                zeros ? "0" : "WRONG");
+    CHECK(finite);
+    CHECK(zeros);
+    CHECK(f.at(395).lo[0] == 0.0f && f.at(396).hi[1] == 0.0f); // the 0 shows in its bucket
 }
 
 } // namespace

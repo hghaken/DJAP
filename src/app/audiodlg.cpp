@@ -898,26 +898,21 @@ void AudioWindow::refresh() {
                              deck, apiName(audio_.sys().api()), fromUtf8(in.input).c_str(),
                              inMs + a.targetMs + s.outputLatency * ms + look, inMs, a.targetMs, s.outputLatency * ms,
                              look, a.driftPpm, a.active ? L"" : L" (filling up)", a.underruns, a.overruns);
-                    // the running stream (ninth review: the Setup choice was read, not what runs): a shorter period
-                    // asked for but the input still in Windows' 10 ms blocks - what that mode needs; or another
-                    // length than asked (the device's own step)
-                    const double askedMs = in.requestedFrames * 1000.0 / s.sampleRate;
-                    if (in.requestedFrames > 0 && a.steadyMs >= 9.0) {
-                        state += b;
-                        swprintf(b, 480, L"; the input still comes in %.0f ms blocks - Windows' short periods need a "
-                                         L"device that has them, set to %s in Windows' sound settings",
-                                 a.steadyMs, khz(s.sampleRate).c_str());
-                    } else if (in.requestedFrames > 0 && a.steadyMs > 0.0 && std::fabs(a.steadyMs - askedMs) > 0.3) {
-                        state += b;
-                        swprintf(b, 480, L"; input period %.2f ms (%.0f asked: the device's own step)", a.steadyMs,
-                                 askedMs);
-                    }
-                    if (a.repeats > 0) { // the same block twice: read faster than filled (ninth review)
-                        state += b;
-                        swprintf(b, 480, L"; %lld input blocks came twice - the device is read faster than it is "
-                                         L"filled: choose a longer input period, or a faster timer in a virtual cable",
-                                 a.repeats);
-                    }
+                    // the running stream (ninth review: the Setup choice was read, not what runs) against what was
+                    // asked, bursts, repeated blocks: one rule, tested (tenth review)
+                    InputNoteFacts f;
+                    f.steadyMs = a.steadyMs;
+                    f.blockMs = a.blockMs;
+                    f.recentRepeats = a.recentRepeats;
+                    f.lowLatency = in.lowLatency;
+                    f.requestedMs = in.requestedFrames * 1000.0 / s.sampleRate;
+                    f.onStepMs = in.askedFrames * 1000.0 / s.sampleRate;
+                    f.defaultMs = in.defaultMs;
+                    f.rateDiffers = in.rateDiffers;
+                    f.sampleRate = s.sampleRate;
+                    state += b;
+                    state += fromUtf8(inputNotes(f));
+                    b[0] = L'\0';
                 } else {
                     swprintf(b, 480, L"\n%s: ASIO \x2192 ASIO. Latency %.2f ms (input %.2f + output %.2f + processing %.2f)",
                              deck, (s.inputLatency + s.outputLatency) * ms + look, s.inputLatency * ms,

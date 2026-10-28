@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-$private = @('AGENTS.md', 'CLAUDE.md', '.claude', 'docs/handover.md')
+$private = @('AGENTS.md', 'CLAUDE.md', '.claude', 'docs/handover.md', 'docs/ip-licence-review.md')
 
 if (git status --porcelain --untracked-files=no) { throw "commit or stash the changes first: the public commit is made from HEAD" }
 

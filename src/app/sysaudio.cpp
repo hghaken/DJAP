@@ -559,8 +559,12 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
             s->rate = sampleRate;
             // shared WASAPI: a period asked for goes on the device's step (else Windows' default)
             unsigned asked = periodFrames;
-            if (periodFrames > 0 && api == AudioApi::Wasapi && !exclusive && !g_nullBackend.load())
-                asked = onStep(periodsOf(inId->wasapi), periodFrames, sampleRate);
+            const bool lowLatency = periodFrames > 0 && api == AudioApi::Wasapi && !exclusive && !g_nullBackend.load();
+            EnginePeriods engine;
+            if (lowLatency) {
+                engine = periodsOf(inId->wasapi);
+                asked = onStep(engine, periodFrames, sampleRate);
+            }
             ma_device_config c = ma_device_config_init(ma_device_type_capture);
             c.sampleRate = static_cast<ma_uint32>(sampleRate);
             c.periodSizeInFrames = asked;
@@ -589,6 +593,9 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
             in.input = devices[d];
             in.askedFrames = asked;
             in.requestedFrames = periodFrames;
+            in.lowLatency = lowLatency;
+            in.defaultMs = engine.known && engine.rate > 0 ? 1000.0 * engine.defaultFrames / engine.rate : 0.0;
+            in.rateDiffers = engine.known && std::fabs(engine.rate - sampleRate) > 0.5;
             in.deviceRate = s->dev.capture.internalSampleRate;
             in.periodFrames = s->dev.capture.internalPeriodSizeInFrames;
             in.periods = s->dev.capture.internalPeriods;

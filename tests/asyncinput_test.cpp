@@ -656,23 +656,204 @@ void blockSizes() {
         CHECK(st.repeats == 0);
         if (c.pause > 0.0) CHECK(st.blockMs > c.steady + 4.0); // the stall's catch-up: the largest, not the steady
     }
+}
+
+// A writer test without its own output: an output period of the same length after each block, so the ring never
+// fills (a full ring drops the blocks before they are looked at).
+void drained(AsyncInput& in, const float* x, int n, double t) {
+    static std::vector<float> l, r;
+    l.resize(static_cast<size_t>(n));
+    r.resize(static_cast<size_t>(n));
+    in.write(x, n, t);
+    in.beginPeriod(n, t);
+    in.read(l.data(), r.data(), n);
+}
+
+// Blocks read twice (tenth outside review: DC, a test tone in whole periods and clipped plateaus counted too, and the
+// count never went away). `blocks`: a letter per block - a..e different sound, z silence, k DC, digits a 16-frame
+// block (0) or a 15-frame one (5), t a 1 kHz tone of 48 frames (one period: every block the same).
+long long repeatsOf(const char* blocks, int frames = 64) {
     AsyncInput r;
     r.reset(48000);
-    std::vector<float> a(2 * 64), b(2 * 64), z(2 * 64, 0.0f);
-    for (int i = 0; i < 64; ++i) {
-        a[2 * static_cast<size_t>(i)] = a[2 * static_cast<size_t>(i) + 1] = static_cast<float>(0.5 * std::sin(0.1 * i));
-        b[2 * static_cast<size_t>(i)] = b[2 * static_cast<size_t>(i) + 1] = static_cast<float>(0.5 * std::sin(0.1 * (i + 64)));
-    }
     double t = 1.0;
-    r.write(a.data(), 64, t += 0.01);
-    r.write(b.data(), 64, t += 0.01); // different: no repeat
-    r.write(b.data(), 64, t += 0.01); // the same again: a repeat
-    r.write(z.data(), 64, t += 0.01);
-    r.write(z.data(), 64, t += 0.01); // silence twice: not counted
-    r.write(a.data(), 32, t += 0.01);
-    r.write(a.data(), 32, t += 0.01); // under 16 frames would not count; 32 does
-    std::printf("   written: two equal sound blocks twice, silence twice: repeats %lld (expected 2)\n", r.state().repeats);
-    CHECK(r.state().repeats == 2);
+    for (const char* p = blocks; *p; ++p) {
+        const int n = *p == '0' ? 16 : *p == '5' ? 15 : *p == 't' ? 48 : frames;
+        std::vector<float> x(2 * static_cast<size_t>(n));
+        for (int i = 0; i < n; ++i) {
+            const size_t k = 2 * static_cast<size_t>(i);
+            if (*p >= 'a' && *p <= 'e') { // sound, L and R unequal
+                x[k] = static_cast<float>(0.5 * std::sin(0.1 * i + (*p - 'a')));
+                x[k + 1] = static_cast<float>(0.4 * std::sin(0.13 * i + (*p - 'a')));
+            } else if (*p == 'k') {
+                x[k] = x[k + 1] = -1.0f / 32768.0f; // an idle input's offset of -1 LSB
+            } else if (*p == 't' || *p == '0' || *p == '5') {
+                x[k] = x[k + 1] = static_cast<float>(0.5 * std::sin(2.0 * 3.14159265358979 * i / 48.0));
+            }
+        }
+        r.write(x.data(), n, t += 0.01);
+    }
+    return r.state().repeats;
+}
+
+void repeatedBlocks() {
+    std::printf("-- repeated blocks\n");
+    struct Case {
+        const char* blocks;
+        long long expected;
+        const char* what;
+    };
+    const Case cases[] = {
+        {"abbc", 1, "a block read twice"},
+        {"abbbc", 1, "three times"},
+        {"abbbbc", 1, "four times"},
+        {"abbbbbc", 0, "five times: a period, not a read"},
+        {"abb", 0, "twice, nothing after it yet"},
+        {"abbckkc", 1, "and DC twice (flat)"},
+        {"azzzc", 0, "silence"},
+        {"akkkkkkkc", 0, "DC of -1 LSB"},
+        {"atttttttttttttttttttc", 0, "a tone of whole periods per block"},
+        {"abbcbbdeeb", 3, "three reads twice"},
+        {"a00c", 1, "16 frames"},
+        {"a55c", 0, "15 frames: too short to tell"},
+    };
+    for (const Case& c : cases) {
+        const long long got = repeatsOf(c.blocks);
+        std::printf("   %-22s %-36s repeats %lld (expected %lld)\n", c.blocks, c.what, got, c.expected);
+        CHECK(got == c.expected);
+    }
+    // only one channel differs: not the same block
+    {
+        std::vector<float> a(128), b(128);
+        for (int i = 0; i < 64; ++i) {
+            a[2 * static_cast<size_t>(i)] = static_cast<float>(0.3 * std::sin(0.2 * i));
+            a[2 * static_cast<size_t>(i) + 1] = static_cast<float>(0.3 * std::cos(0.2 * i));
+            b[2 * static_cast<size_t>(i)] = static_cast<float>(0.2 * std::sin(0.3 * i));
+            b[2 * static_cast<size_t>(i) + 1] = static_cast<float>(0.2 * std::cos(0.3 * i));
+        }
+        std::vector<float> l = a, rr = a;
+        l[40] += 0.001f;  // only the left channel differs
+        rr[41] += 0.001f; // only the right
+        for (const std::vector<float>* odd : {&l, &rr}) {
+            AsyncInput q;
+            q.reset(48000);
+            double t = 1.0;
+            const std::vector<float>* order[] = {&b, &a, odd, &b};
+            for (const std::vector<float>* v : order) q.write(v->data(), 64, t += 0.01);
+            std::printf("   %s channel differs: repeats %lld (expected 0)\n", odd == &l ? "the left" : "the right",
+                        q.state().repeats);
+            CHECK(q.state().repeats == 0);
+        }
+    }
+    // the recent count: the window rolls, a reset clears all
+    {
+        AsyncInput r;
+        r.reset(48000);
+        std::vector<float> a(128), b(128);
+        for (int i = 0; i < 64; ++i)
+            for (int c = 0; c < 2; ++c) {
+                a[2 * static_cast<size_t>(i) + c] = static_cast<float>(0.4 * std::sin(0.1 * i + c));
+                b[2 * static_cast<size_t>(i) + c] = static_cast<float>(0.4 * std::cos(0.1 * i + c));
+            }
+        double t = 1.0;
+        for (int k = 0; k < 4; ++k) { // four reads twice at the start
+            r.write(a.data(), 64, t += 0.01);
+            r.write(a.data(), 64, t += 0.01);
+            r.write(b.data(), 64, t += 0.01);
+        }
+        const long long early = r.state().recentRepeats;
+        for (int k = 0; k < 4500; ++k) drained(r, (k % 2 ? b : a).data(), 64, t += 0.01); // 45 s, nothing repeated
+        const AsyncInputState s = r.state();
+        std::printf("   recent: %lld at first, %lld after 45 s without (all %lld)\n", early, s.recentRepeats, s.repeats);
+        CHECK(early == 4);
+        CHECK(s.recentRepeats == 0);
+        CHECK(s.repeats == 4);
+        drained(r, a.data(), 64, t += 0.01);
+        drained(r, a.data(), 64, t += 0.01); // a run open at the reset ...
+        r.reset(48000);
+        CHECK(r.state().repeats == 0 && r.state().recentRepeats == 0);
+        r.write(a.data(), 64, t += 0.01); // ... is forgotten: nothing left over inside, the next blocks start from 0
+        r.write(b.data(), 64, t += 0.01);
+        CHECK(r.state().recentRepeats == 0 && r.state().repeats == 0);
+    }
+}
+
+// The steady size is the median burst of the last 20-40 s (tenth outside review: the smallest let one short burst
+// show for up to 40 s; the windows were never rolled in a test).
+void steadyMedian() {
+    std::printf("-- the steady block size over the windows\n");
+    for (double fs : {48000.0, 44100.0}) {
+        AsyncInput r;
+        r.reset(fs);
+        const int n4 = static_cast<int>(std::lround(0.004 * fs)), n10 = static_cast<int>(std::lround(0.010 * fs));
+        std::vector<float> x(2 * static_cast<size_t>(n10) + 64);
+        for (size_t i = 0; i < x.size(); ++i) x[i] = static_cast<float>(0.1 * std::sin(0.01 * static_cast<double>(i)));
+        double t = 1.0;
+        for (int k = 0; k < 2500; ++k) drained(r, x.data(), n10, t += 0.010); // 25 s of 10 ms blocks
+        const double tenMs = r.state().steadyMs;
+        drained(r, x.data(), 16, t += 0.010); // one short burst, a gap on each side
+        t += 0.002;
+        // then 3 s of 4 ms blocks: more than the 10 ms ones of the current window, fewer than of both windows
+        for (int k = 0; k < 750; ++k) drained(r, x.data(), n4, t += 0.004);
+        const double mixed = r.state().steadyMs;
+        for (int k = 0; k < 12000; ++k) drained(r, x.data(), n4, t += 0.004); // 48 s: both windows hold 4 ms only
+        const double fourMs = r.state().steadyMs;
+        std::printf("   %.1f kHz: 10 ms blocks %.2f ms; one 16-frame burst and 3 s of 4 ms: %.2f ms; 48 s later %.2f ms\n",
+                    fs / 1000.0, tenMs, mixed, fourMs);
+        CHECK_NEAR(tenMs, 1000.0 * n10 / fs, 0.01);
+        CHECK_NEAR(mixed, 1000.0 * n10 / fs, 0.01); // the median: one short burst and fewer 4 ms ones do not move it
+        CHECK_NEAR(fourMs, 1000.0 * n4 / fs, 0.01);
+    }
+}
+
+// Health's notes on an input under the ASIO output, as a table (tenth outside review).
+void healthNotes() {
+    std::printf("-- Health's notes on the input\n");
+    struct Row {
+        double steady, block;
+        long long repeats;
+        bool lowLatency;
+        double requested, onStep, deflt;
+        bool rateDiffers;
+        const char* expect; // a part the notes must hold ("" = no notes)
+    };
+    const Row rows[] = {
+        {4.00, 4.00, 0, true, 4, 4.00, 10.0, false, ""},                                   // as asked
+        {10.00, 10.00, 0, false, 0, 0, 0, false, ""},                                      // Windows' default chosen
+        {10.00, 10.00, 0, true, 4, 4.00, 10.0, false, "still comes in 10.0 ms blocks"},    // the mode not taken
+        {9.80, 9.80, 0, true, 4, 4.00, 10.0, false, "still comes in 9.8 ms blocks"},       // within 0.3 of the default
+        {9.60, 9.60, 0, true, 4, 4.00, 10.0, false, "input period 9.60 ms (4.00 asked)"},  // neither
+        {9.00, 9.00, 0, true, 8, 9.00, 10.0, false, "input period 9.00 ms (8 asked: the device's own step)"},
+        {5.33, 5.33, 0, true, 5, 5.33, 10.0, false, "(5 asked: the device's own step)"},
+        {5.03, 5.03, 0, true, 5, 5.03, 10.0, false, ""},                                   // within 0.05 of the ask
+        {4.29, 4.29, 0, true, 4, 4.00, 10.0, false, ""},                                   // within 0.3 of the step
+        {4.31, 4.31, 0, true, 4, 4.00, 10.0, false, "input period 4.31 ms (4.00 asked)"},
+        {10.16, 10.16, 0, true, 8, 0.0, 10.16, false, "the device's step allows no period from 8 ms"},
+        {10.00, 10.00, 0, true, 4, 0.0, 10.0, true, "set to 48 kHz in Windows' sound settings"},
+        {10.00, 10.00, 0, true, 4, 0.0, 0.0, false, "offers Windows no shorter one"},
+        {10.00, 10.00, 0, false, 4, 4.0, 10.0, false, ""},                                 // exclusive: no advice
+        {4.00, 6.00, 0, true, 4, 4.00, 10.0, false, ""},                                   // bursts 1.5 x: not yet
+        {4.00, 6.10, 0, true, 4, 4.00, 10.0, false, "bursts of up to 6.1 ms"},
+        {4.00, 4.00, 2, true, 4, 4.00, 10.0, false, ""},                                   // two repeats: not shown
+        {4.00, 4.00, 3, true, 4, 4.00, 10.0, false, "3 input blocks came twice lately"},
+        {0.00, 0.00, 0, true, 4, 4.00, 10.0, false, ""},                                   // nothing measured yet
+    };
+    for (const Row& r : rows) {
+        InputNoteFacts f;
+        f.steadyMs = r.steady;
+        f.blockMs = r.block;
+        f.recentRepeats = r.repeats;
+        f.lowLatency = r.lowLatency;
+        f.requestedMs = r.requested;
+        f.onStepMs = r.onStep;
+        f.defaultMs = r.deflt;
+        f.rateDiffers = r.rateDiffers;
+        f.sampleRate = 48000;
+        const std::string notes = inputNotes(f);
+        const bool ok = *r.expect ? notes.find(r.expect) != std::string::npos : notes.empty();
+        std::printf("   steady %5.2f ask %g on step %5.2f default %5.2f: %s%s\n", r.steady, r.requested, r.onStep,
+                    r.deflt, notes.empty() ? "(nothing)" : notes.c_str() + 2, ok ? "" : "   <- WRONG");
+        CHECK(ok);
+    }
 }
 
 void throughEngine() {
@@ -764,6 +945,9 @@ int main() {
     fadeOut();
     priming();
     blockSizes();
+    repeatedBlocks();
+    steadyMedian();
+    healthNotes();
     throughEngine();
     return test::finish("asyncinput_test");
 }

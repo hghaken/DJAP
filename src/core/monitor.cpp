@@ -108,7 +108,9 @@ void WaveScope::reset(double rate) {
 
 void WaveScope::feed(const float* left, const float* right, int n) {
     for (int i = 0; i < n; ++i) {
-        // (a non-finite input sample counts as 0: a NaN would make its bucket's range NaN - ninth outside review)
+        // (a non-finite input sample counts as 0 - ninth outside review; tenth: an infinity would make its bucket's
+        // range infinite, a NaN only fails the bucket's comparisons and is dropped, and the raw samples drawn would
+        // carry either)
         const float x[2] = {std::isfinite(left[i]) ? left[i] : 0.0f, std::isfinite(right[i]) ? right[i] : 0.0f};
         raw[0][static_cast<size_t>(rawWritten & (kRaw - 1))] = x[0];
         raw[1][static_cast<size_t>(rawWritten & (kRaw - 1))] = x[1];

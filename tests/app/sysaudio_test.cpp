@@ -194,6 +194,14 @@ void onStep() {
     none = vac;
     none.stepFrames = 0;
     CHECK(SysAudio::onStep(none, 176, 44100.0) == 0);
+    // tenth outside review: a default not reported, the longest as the only bound, the rate's tolerance
+    SysAudio::EnginePeriods open = wide;
+    open.defaultFrames = 0;
+    CHECK(SysAudio::onStep(open, 353, 44100.0) == 512); // no default to stay under: the longest bounds it
+    CHECK(SysAudio::onStep(open, 768, 44100.0) == 768);
+    CHECK(SysAudio::onStep(open, 769, 44100.0) == 0);   // on the step 1024: over the longest
+    CHECK(SysAudio::onStep(vac, 176, 44100.4) == 176);  // a rate within half a hertz is the same
+    CHECK(SysAudio::onStep(vac, 176, 44100.6) == 0);
 }
 
 // The settings lock: a second taker waits until the first lets go (the program and a plug-in saving at once).

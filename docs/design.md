@@ -311,8 +311,8 @@ seventh outside review: the WASAPI input's 10 ms default period is the largest p
 device's step within its shortest and longest (`SysAudio::onStep`, from IAudioClient3's GetSharedModeEnginePeriod;
 eighth review: a request off the step was rounded down under itself and miniaudio kept 10 ms). The mode needs a
 device that has it, running at the ASIO rate in Windows; else 10 ms, and the Setup window says so from the measured
-input blocks (`AsyncInputState::blockMs`, also the input's latency shown - the device's reported period can be
-shorter than its packets). Why a choice and not "the shortest" (2026-10-28, live): the virtual cable allows 1.02 ..
+input blocks (`AsyncInputState::steadyMs`, also the input's latency shown - the device's reported period can be
+shorter than its packets; see Health's notes below). Why a choice and not "the shortest" (2026-10-28, live): the virtual cable allows 1.02 ..
 10 ms; "the shortest" took 1 ms and the sound came out distorted. Measured with a 1 kHz tone through the cable's
 unused second line (15-30 s per period; residual against a fitted sine per 50 ms): with the cable's timer at 3 ms,
 1-2 ms gave duplicated data (-7 .. -10 dB), 3 ms -29 dB, 5 ms 33 of 280 windows bad, 6-7 ms one click, 8-10 ms
@@ -351,6 +351,18 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
   blocks dropped) moves the read position to the target (a resync).
 - Shown: per deck the added latency (capture period + drift buffer), the drift in ppm, underruns and overruns, in
   the Setup window. A capture stream that stops by itself stops the audio with a message.
+- Health's notes on the input (`inputNotes` in asyncinput.cpp, a pure function with a table test; tenth outside
+  review): the input's period is the *median* finished burst of the last 20-40 s (`steadyMs`; histograms of 0.25 ms
+  bins with their sums, so a steady stream reads exactly - the ninth round's minimum let one 16-frame burst show
+  0.33 ms for up to 40 s). In shared WASAPI with a period asked for it is compared with the request on the device's
+  step and with the device's default period (not a fixed 9 ms: a step of 144 frames made 8 ms 9.00 ms, as the device
+  allows, and was reported as Windows' 10 ms blocks): no step fits (another rate in Windows / no low-latency mode /
+  the step), the device kept its default, another length than asked, or the device's own step. Exclusive mode gets
+  none of this advice. Bursts over 1.5 x the period are named (they set the drift buffer). Blocks read twice: a block
+  equal bit for bit to the one before (16+ frames, not flat) starts a run; a run of 1-3 repeats ended by a new block
+  counts - a test tone with whole periods per block repeats endlessly and DC or a clipped plateau is flat, neither
+  counts (the ninth round's rule counted both, for good). Shown from 3 in the last 20-40 s on, and gone 20-40 s after
+  the last.
 - The deck's own processing is unchanged; this is the only path where an input adds buffering beyond the devices'
   own, and only by the user's choice.
 

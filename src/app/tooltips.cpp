@@ -47,6 +47,19 @@ void Tooltips::add(HWND control, const wchar_t* text) {
     ti.hwnd = owner_;
     ti.uId = reinterpret_cast<UINT_PTR>(control);
     ti.lpszText = const_cast<wchar_t*>(text);
+    // controls gone first, with their tools (tenth outside review: purged only after the lookup below, a handle
+    // Windows gave to a new control matched the old one's entry and got no tool of its own)
+    added_.erase(std::remove_if(added_.begin(), added_.end(),
+                                [this](HWND h) {
+                                    if (IsWindow(h)) return false;
+                                    TTTOOLINFOW gone{};
+                                    gone.cbSize = sizeof gone;
+                                    gone.hwnd = owner_;
+                                    gone.uId = reinterpret_cast<UINT_PTR>(h);
+                                    SendMessageW(tip_, TTM_DELTOOLW, 0, reinterpret_cast<LPARAM>(&gone));
+                                    return true;
+                                }),
+                 added_.end());
     // again for the same control: its text updated in place (eighth outside review: TTM_ADDTOOL does not refuse a
     // second tool for the same control, so the first text stayed in front; ninth: deleting and adding it again hid
     // a tip that was showing)
@@ -54,7 +67,6 @@ void Tooltips::add(HWND control, const wchar_t* text) {
         SendMessageW(tip_, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
         return;
     }
-    added_.erase(std::remove_if(added_.begin(), added_.end(), [](HWND h) { return !IsWindow(h); }), added_.end());
     if (SendMessageW(tip_, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti))) added_.push_back(control);
 }
 

@@ -386,8 +386,9 @@ void MainWindow::createControls() {
         s.meter = createMeterView(hwnd_, idOf(d, iMeter));
         fillPresets(d);
     }
-    status_ = CreateWindowExW(0, STATUSCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP, 0, 0, 0, 0, hwnd_,
-                              nullptr, inst, nullptr);
+    // (its own tooltip shows the whole line when it does not fit - tenth outside review: a message at its end was cut)
+    status_ = CreateWindowExW(0, STATUSCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP | SBARS_TOOLTIPS, 0, 0,
+                              0, 0, hwnd_, nullptr, inst, nullptr);
 
     tips_.create(hwnd_);
     for (int d = 0; d < 2; ++d) {
@@ -726,6 +727,7 @@ void MainWindow::updateStatus() {
     if (!silent) quietSince_ = now;
     if (silent && now - quietSince_ >= 10ull * 60 * 1000) line += L"   |   Is the party over?";
     SendMessageW(status_, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(line.c_str()));
+    SendMessageW(status_, SB_SETTIPTEXTW, 0, reinterpret_cast<LPARAM>(line.c_str())); // shown only when cut off
     updateTrayTip();
 }
 

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace ap {
 
@@ -74,7 +75,10 @@ void AsyncInput::reset(double fs) {
     overruns_.store(0, std::memory_order_relaxed);
     writes_.store(0, std::memory_order_relaxed);
     repeats_.store(0, std::memory_order_relaxed);
-    lastWriteFrames_ = 0;
+    recentRepeats_.store(0, std::memory_order_relaxed);
+    lastWriteFrames_ = repeatRun_ = 0;
+    repeatsNow_ = repeatsBefore_ = 0;
+    repeatWindow_ = -1.0;
     writeBursts_ = Bursts();
     playBursts_ = Bursts();
     fadeOut_ = fadeRing_ = 0;
@@ -118,18 +122,32 @@ int AsyncInput::Bursts::add(int frames, double time, double fs, int cap, bool me
     if (!count) return std::max(now, before); // seen (for the gaps), not remembered
     if (windowStart < 0.0 || time - windowStart >= kBurstWindowS) {
         before = windowStart < 0.0 ? 0 : now;
-        minBefore = windowStart < 0.0 ? 0 : minNow;
-        now = minNow = 0;
+        histBefore = windowStart < 0.0 ? Histogram() : histNow;
+        now = 0;
+        histNow = Histogram();
         windowStart = time;
     }
-    if (finished > 0) minNow = minNow > 0 ? std::min(minNow, finished) : finished;
+    if (finished > 0) {
+        const int bin = std::min(kBins - 1, static_cast<int>(finished * 4000.0 / fs));
+        ++histNow.count[bin];
+        histNow.sum[bin] += finished;
+    }
     now = std::max(now, std::min(burst, cap));
     return std::max(now, before);
 }
 
 int AsyncInput::Bursts::steady() const {
-    if (minNow > 0 && minBefore > 0) return std::min(minNow, minBefore);
-    return minNow > 0 ? minNow : minBefore;
+    long long n = 0;
+    for (int b = 0; b < kBins; ++b) n += histNow.count[b] + histBefore.count[b];
+    if (n == 0) return 0;
+    long long seen = 0;
+    for (int b = 0; b < kBins; ++b) {
+        const int c = histNow.count[b] + histBefore.count[b];
+        seen += c;
+        if (2 * seen >= n) // the median's bin: the mean burst in it
+            return static_cast<int>((histNow.sum[b] + histBefore.sum[b] + c / 2) / c);
+    }
+    return 0;
 }
 
 int AsyncInput::burstCap(int frames) const {
@@ -150,19 +168,36 @@ void AsyncInput::write(const float* in, int frames, double now) {
     maxBlock_.store(writeBursts_.add(frames, now, fs_, burstCap(frames)), std::memory_order_relaxed); // (a dropped block does not count)
     steadyBlock_.store(writeBursts_.steady(), std::memory_order_relaxed);
     float* ring = ring_.get();
-    // the same block again, bit for bit and not silent: the device was read faster than it was filled (live,
-    // 2026-10-28: a virtual cable at a 1 ms period with its own timer at 3 ms; ninth outside review: count it, so
-    // Health can say so)
-    if (frames >= 16 && frames == lastWriteFrames_ && w >= frames) {
-        bool same = true, sound = false;
+    // the same block again, bit for bit: the device was read faster than it was filled (live, 2026-10-28: a virtual
+    // cable at a 1 ms period with its own timer at 3 ms; ninth outside review: count it, so Health can say so). Tenth
+    // review: a periodic signal (a 1 kHz test tone in 480-frame blocks, DC) repeats block for block and a clipped
+    // plateau is flat - neither is a fault: a flat block never counts, and a run of equal blocks counts when a new
+    // block ends it after at most kRepeatRunMax repeats (a device read 2-4 times per fill); a longer run is a period
+    bool same = false, flat = true;
+    if (frames >= 16 && frames == lastWriteFrames_ && w >= frames) { // (else: another length, or too short to tell)
+        same = true;
         for (int i = 0; i < frames && same; ++i) {
             const int64_t idx = (w - frames + i) & kMask;
             same = ring[2 * idx] == in[2 * i] && ring[2 * idx + 1] == in[2 * i + 1];
-            sound = sound || in[2 * i] != 0.0f || in[2 * i + 1] != 0.0f;
+            flat = flat && in[2 * i] == in[0] && in[2 * i + 1] == in[1];
         }
-        if (same && sound) bump(repeats_);
+    }
+    if (same && !flat) {
+        ++repeatRun_;
+    } else {
+        if (!same && repeatRun_ > 0 && repeatRun_ <= kRepeatRunMax) { // a new block ends a short run: count it
+            bump(repeats_);
+            ++repeatsNow_;
+        }
+        repeatRun_ = 0; // (a flat repeat ends a run uncounted, as it starts none)
     }
     lastWriteFrames_ = frames;
+    if (repeatWindow_ < 0.0 || now - repeatWindow_ >= kBurstWindowS) { // the recent ones: two windows, as the bursts
+        repeatsBefore_ = repeatWindow_ < 0.0 ? 0 : repeatsNow_;
+        repeatsNow_ = 0;
+        repeatWindow_ = now;
+    }
+    recentRepeats_.store(repeatsNow_ + repeatsBefore_, std::memory_order_relaxed);
     for (int i = 0; i < frames; ++i) {
         const int64_t idx = (w + i) & kMask;
         ring[2 * idx] = in[2 * i];
@@ -346,7 +381,53 @@ AsyncInputState AsyncInput::state() const {
     s.blockMs = maxBlock_.load(std::memory_order_relaxed) * 1000.0 / fs_;
     s.steadyMs = steadyBlock_.load(std::memory_order_relaxed) * 1000.0 / fs_;
     s.repeats = repeats_.load(std::memory_order_relaxed);
+    s.recentRepeats = recentRepeats_.load(std::memory_order_relaxed);
     return s;
+}
+
+// Compared with the device's default period, not a fixed 9 ms (tenth outside review: a step of 144 frames made 8 ms
+// 9.00 ms - taken as asked, yet reported as Windows' 10 ms blocks), and only where the low-latency periods apply
+// (exclusive mode got advice about Windows' sound settings).
+std::string inputNotes(const InputNoteFacts& f) {
+    std::string out;
+    char b[320];
+    if (f.lowLatency && f.requestedMs > 0.0 && f.steadyMs > 0.0) {
+        if (f.onStepMs <= 0.0) { // no period on the device's step fits: Windows' default
+            if (f.rateDiffers)
+                std::snprintf(b, sizeof b, "; the input runs at Windows' default period (%.1f ms) - a shorter one needs "
+                              "the device set to %g kHz in Windows' sound settings", f.steadyMs, f.sampleRate / 1000.0);
+            else if (f.defaultMs <= 0.0)
+                std::snprintf(b, sizeof b, "; the input runs at Windows' default period (%.1f ms) - the device offers "
+                              "Windows no shorter one", f.steadyMs);
+            else
+                std::snprintf(b, sizeof b, "; the input runs at Windows' default period (%.1f ms) - the device's step "
+                              "allows no period from %.0f ms up to it", f.steadyMs, f.requestedMs);
+            out += b;
+        } else if (f.defaultMs > 0.0 && f.onStepMs < f.defaultMs - 0.3 && f.steadyMs >= f.defaultMs - 0.3) {
+            std::snprintf(b, sizeof b, "; the input still comes in %.1f ms blocks (Windows' default) - the device did "
+                          "not take the %.1f ms period", f.steadyMs, f.onStepMs);
+            out += b;
+        } else if (std::fabs(f.steadyMs - f.onStepMs) > 0.3) {
+            std::snprintf(b, sizeof b, "; input period %.2f ms (%.2f asked)", f.steadyMs, f.onStepMs);
+            out += b;
+        } else if (std::fabs(f.onStepMs - f.requestedMs) > 0.05) {
+            std::snprintf(b, sizeof b, "; input period %.2f ms (%.0f asked: the device's own step)", f.steadyMs,
+                          f.requestedMs);
+            out += b;
+        }
+    }
+    // bursts of several blocks at once (a virtual cable's timer jitter): they, not the period, set the drift buffer
+    if (f.steadyMs > 0.0 && f.blockMs > 1.5 * f.steadyMs) {
+        std::snprintf(b, sizeof b, "; blocks came in bursts of up to %.1f ms lately (the drift buffer holds them)",
+                      f.blockMs);
+        out += b;
+    }
+    if (f.recentRepeats >= kRepeatsShown) { // the same block twice: read faster than filled (ninth review)
+        std::snprintf(b, sizeof b, "; %lld input blocks came twice lately - the device is read faster than it is "
+                      "filled: choose a longer input period, or a faster timer in a virtual cable", f.recentRepeats);
+        out += b;
+    }
+    return out;
 }
 
 } // namespace ap

@@ -44,6 +44,10 @@ struct SysStreamInfo {
                                   // device's own step, at its own rate) - else a longer one (fifth outside review)
     unsigned requestedFrames = 0; // capture-only: the period the caller asked for (Setup's Input period in frames,
                                   // before it went on the device's step; 0: Windows' default)
+    bool lowLatency = false;      // capture-only, shared WASAPI with a period asked for: Windows' low-latency periods
+                                  // apply (askedFrames is then the request on the device's step, 0: none fits)
+    double defaultMs = 0;         // capture-only: the device's default period in Windows (0: not known)
+    bool rateDiffers = false;     // capture-only: the device runs at another rate in Windows than the decks
     unsigned periods = 0;
     double latencyMs = 0;         // estimate: input period + output buffer (capture-only: input period); with
                                   // drift correction the AsyncInput's buffer comes on top

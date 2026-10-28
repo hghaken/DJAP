@@ -425,10 +425,18 @@ void healthAndSafety() {
     CHECK(h.heaviestPercent > 0.0 && h.heaviestPercent >= h.lastPercent);
     CHECK(gAllocs.load() == 0);
     CHECK(csr == 0x1F80);
+    // the processing time in all, in seconds (tenth outside review: its unit and double counting untested): at least
+    // the heaviest period's share, at most every period at the heaviest share
+    const double period = 64 / 48000.0, total = h.busySeconds;
+    std::printf("   processing time %.3f ms in all; the heaviest period %.4f ms, every period at most %.3f ms\n",
+                total * 1000.0, period * h.heaviestPercent * 10.0, h.blocks * period * h.heaviestPercent * 10.0);
+    CHECK(total >= period * (h.heaviestPercent - 0.1) / 100.0);
+    CHECK(total <= h.blocks * period * (h.heaviestPercent + 0.1) / 100.0);
     e.resetHealth();
     dev.run(e, signals(64));
     h = e.health();
     CHECK(h.blocks == 1 && h.overHalf <= 1);
+    CHECK(h.busySeconds > total); // not reset with the counters
     // the processing time in all (the status bar's share of a core) grows and is not reset; the core as noted
     const double busy = h.busySeconds;
     e.noteCore(3);

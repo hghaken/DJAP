@@ -9,6 +9,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <string>
 
 namespace ap {
 
@@ -23,10 +24,28 @@ struct AsyncInputState {
     long long resyncs = 0;     // read position moved to the target (the fill was far too high)
     long long writes = 0;      // input blocks received
     double blockMs = 0;        // the largest input block (burst) lately, as measured: what the buffer must hold
-    double steadyMs = 0;       // the smallest finished input burst lately: the input's period as it really runs
-    long long repeats = 0;     // input blocks that repeated the block before bit for bit (not silence): a device read
-                               // faster than it is filled (a virtual cable's timer slower than the period chosen)
+    double steadyMs = 0;       // the median finished input burst lately: the input's period as it really runs
+    long long repeats = 0;     // input blocks read twice (up to 4 times) bit for bit: a device read faster than it is
+                               // filled (a virtual cable's timer slower than the period chosen); a long run of equal
+                               // blocks (a test tone's period) and a flat block (DC, a clipped plateau) never count
+    long long recentRepeats = 0; // of them, those of the last kBurstWindowS .. 2 x kBurstWindowS seconds
 };
+
+// What Health says about an input of another API under the ASIO output (tenth outside review: a pure function, so a
+// table test can pin its rules). Empty: nothing to say; else "; ..." parts to append to the deck's line.
+struct InputNoteFacts {
+    double steadyMs = 0, blockMs = 0;
+    long long recentRepeats = 0;
+    bool lowLatency = false;   // shared WASAPI: Windows' low-latency periods apply
+    double requestedMs = 0;    // Setup's Input period (0: Windows' default)
+    double onStepMs = 0;       // the request on the device's step (0: none fits - Windows' default)
+    double defaultMs = 0;      // the device's default period in Windows (0: not known)
+    bool rateDiffers = false;  // the device runs at another rate in Windows than the decks
+    double sampleRate = 48000; // the decks' rate (for the message)
+};
+std::string inputNotes(const InputNoteFacts& f);
+// Health shows repeated blocks from this many in the recent window on (one is a coincidence or the stream's start).
+constexpr long long kRepeatsShown = 3;
 
 class AsyncInput {
 public:
@@ -91,13 +110,21 @@ private:
 
     // The largest burst (see kBurstWindowS) of one side: blocks closer than kBurstGap of the last one's length.
     struct Bursts {
+        // the finished bursts of a window by length, in bins of 0.25 ms (the last bin: everything longer): how many
+        // and their sum in frames - the median's bin and the mean length in it (exact for a steady stream)
+        static constexpr int kBins = 96;
+        struct Histogram {
+            int count[kBins] = {};
+            int64_t sum[kBins] = {};
+        };
         int burst = 0, lastFrames = 0, now = 0, before = 0;
-        int minNow = 0, minBefore = 0; // the smallest finished burst of the two windows: the steady block size
+        Histogram histNow, histBefore;
         double lastTime = -1.0, windowStart = -1.0;
         // count false: only the time and size are noted (for the gap test), the window keeps what it had
         int add(int frames, double time, double fs, int cap, bool merge = true, bool count = true);
-        // the smallest finished burst lately (0: none finished yet) - unlike the largest, a stall's catch-up does
-        // not move it (ninth outside review: Health's message went off on the largest)
+        // the median finished burst of the two windows (0: none finished yet) - unlike the largest, a stall's
+        // catch-up does not move it (ninth outside review), and unlike the smallest (the ninth round's rule) one
+        // short burst does not either (tenth review: 16 frames showed 0.33 ms for up to 40 s)
         int steady() const;
     };
     int burstCap(int frames) const;
@@ -109,9 +136,14 @@ private:
     std::atomic<int64_t> written_{0};
     std::atomic<double> writeTime_{0.0};
     std::atomic<int> maxBlock_{0}, steadyBlock_{0};
-    std::atomic<long long> overruns_{0}, writes_{0}, repeats_{0};
+    std::atomic<long long> overruns_{0}, writes_{0}, repeats_{0}, recentRepeats_{0};
     Bursts writeBursts_; // writer only
-    int lastWriteFrames_ = 0; // writer only: the last block's length (a block repeated bit for bit)
+    // writer only: the last block's length, and how many blocks in a row repeated the one before bit for bit (a short
+    // run counts when a new block ends it; a periodic signal repeats block for block, endlessly)
+    int lastWriteFrames_ = 0, repeatRun_ = 0;
+    static constexpr int kRepeatRunMax = 3; // a block read up to 4 times counts; longer runs are a signal's period
+    long long repeatsNow_ = 0, repeatsBefore_ = 0; // writer only: repeats per window of kBurstWindowS
+    double repeatWindow_ = -1.0;
     // reader -> writer
     std::atomic<int64_t> oldestNeeded_{0};
     // reader only
