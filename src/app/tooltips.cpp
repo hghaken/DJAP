@@ -46,8 +46,10 @@ void Tooltips::add(HWND control, const wchar_t* text) {
     ti.hwnd = owner_;
     ti.uId = reinterpret_cast<UINT_PTR>(control);
     ti.lpszText = const_cast<wchar_t*>(text);
-    if (!SendMessageW(tip_, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti)))
-        SendMessageW(tip_, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
+    // again for the same control: replaced (eighth outside review: TTM_ADDTOOL does not refuse a second tool for the
+    // same control, so the first text stayed in front)
+    SendMessageW(tip_, TTM_DELTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
+    SendMessageW(tip_, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
 }
 
 void Tooltips::addRect(HWND window, UINT_PTR id, const wchar_t* text) {

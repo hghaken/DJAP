@@ -124,12 +124,18 @@ bool AudioIO::startDevice(double sampleRate, long bufferSize, const AsioChannels
         // the capture streams at the rate the driver runs (silence on those decks until they have filled up)
         AsyncInput* const targets[2] = {inputs_.device[0].empty() ? nullptr : &async_[0],
                                         inputs_.device[1].empty() ? nullptr : &async_[1]};
-        // a short input period: the ASIO buffer's length (at least 32 frames); Windows takes the nearest size its
-        // low-latency mode allows, or keeps its default when the device has no such mode (seventh outside review:
-        // the 10 ms default is the largest part of the latency left)
-        const unsigned capFrames = inputs_.shortPeriod
-                                       ? static_cast<unsigned>(std::max(32L, host_.state().bufferSize))
-                                       : inputs_.periodFrames;
+        // a short input period (seventh outside review: the 10 ms default is the largest part of the latency left).
+        // Shared: 1 frame asked - Windows' low-latency mode rounds a request down to a multiple of the device's step
+        // and kept 10 ms when that came out under the request (eighth review); clamped up to the device's shortest
+        // period it is always taken, when the device has the mode and runs at the ASIO rate in Windows. Exclusive:
+        // the ASIO buffer's length, at least 32 frames, never more than 10 ms (with a 1024- or 2048-frame buffer the
+        // request was longer than the default)
+        const double rate = host_.state().sampleRate;
+        const unsigned capFrames =
+            !inputs_.shortPeriod ? inputs_.periodFrames
+            : !inputs_.exclusive ? 1u
+                                 : static_cast<unsigned>(std::min(std::max(32L, host_.state().bufferSize),
+                                                                  static_cast<long>(std::lround(rate * 0.01))));
         if (!sys_.startCapture(inputs_.api, inputs_.device, host_.state().sampleRate, capFrames, inputs_.exclusive,
                                targets, error)) {
             host_.stop();

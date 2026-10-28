@@ -634,23 +634,27 @@ void colour() {
     // 10-15 kHz either way). Seventh review: measured from the start the peak was the first 5 ms' glide (-1.52 dBFS),
     // which let a bend of 1-3 dB pass; now the steady peak, from the start on (the first configuration is taken at
     // once), and with the limiter on the bend must be off (the clipper up to the ceiling, the limiter after it)
-    auto peakFrom = [](const Buffer& b, size_t at) {
+    auto peakFrom = [](const Buffer& b, size_t at, size_t end = 0) {
         float p = 0.0f;
-        for (size_t i = at; i < b.size(); ++i) p = std::max(p, std::fabs(b[i]));
+        for (size_t i = at; i < (end ? std::min(end, b.size()) : b.size()); ++i) p = std::max(p, std::fabs(b[i]));
         return linToDb(p);
     };
     Buffer low = sig::sine(fs, 100, -1, 1.0);
     o = run(fs, v, low, low);
-    const double lowStart = peakFrom(o.l, 0), lowSteady = peakFrom(o.l, static_cast<size_t>(fs / 2));
+    // eighth outside review: the first 5 ms on their own too - the drive was not checked there (only the bend)
+    const double lowStart = peakFrom(o.l, 0), lowSteady = peakFrom(o.l, static_cast<size_t>(fs / 2)),
+                 lowFirst = peakFrom(o.l, 0, static_cast<size_t>(fs * 0.005));
     v[pLimOn] = 1;
     o = run(fs, v, low, low);
     const double lowLim = peakFrom(o.l, static_cast<size_t>(fs / 2));
     v[pLimOn] = 0;
-    std::printf("   soft clipper, 100 Hz driven 9 dB in: limiter off peak %.2f dBFS (from the start %.2f; ceiling -1, the "
-                "curve 1.5 dB under it), limiter on %.2f dBFS\n", lowSteady, lowStart, lowLim);
+    std::printf("   soft clipper, 100 Hz driven 9 dB in: limiter off peak %.2f dBFS (from the start %.2f, first 5 ms "
+                "%.2f; ceiling -1, the curve 1.5 dB under it), limiter on %.2f dBFS\n", lowSteady, lowStart, lowFirst,
+                lowLim);
     CHECK_NEAR(lowSteady, -2.50, 0.05);
     CHECK_NEAR(lowStart, lowSteady, 0.05);
-    CHECK(lowLim > -1.6);
+    CHECK_NEAR(lowFirst, lowSteady, 0.05);
+    CHECK_NEAR(lowLim, -1.10, 0.05); // (eighth review: "> -1.6" let a bend of 0.3-0.5 dB with the limiter on pass)
 
     // the exciter's saturation runs at twice the rate too: a 10 kHz tone's 3rd overtone (30 kHz) folded back to
     // 18 kHz at the base rate (-20.6 dBc in the outside review)

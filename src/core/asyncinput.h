@@ -22,6 +22,7 @@ struct AsyncInputState {
     long long overruns = 0;    // input blocks dropped because the ring was full
     long long resyncs = 0;     // read position moved to the target (the fill was far too high)
     long long writes = 0;      // input blocks received
+    double blockMs = 0;        // the largest input block (burst) lately, as measured: what the input really hands over
 };
 
 class AsyncInput {
@@ -54,6 +55,8 @@ public:
     // the read speed jumped to its limit (+2000 ppm, 3.5 cents - a pitch step; sixth outside review). 0.3 ms/s is a
     // read speed of 300 ppm (0.5 cent).
     static constexpr double kTargetFallMsPerS = 0.3;
+    // An output whose callbacks never leave a gap starts reading after this anyway (eighth outside review).
+    static constexpr double kPrimeTimeoutS = 1.0;
 
     AsyncInput();
     AsyncInput(const AsyncInput&) = delete;
@@ -87,7 +90,8 @@ private:
     struct Bursts {
         int burst = 0, lastFrames = 0, now = 0, before = 0;
         double lastTime = -1.0, windowStart = -1.0;
-        int add(int frames, double time, double fs, int cap, bool merge = true);
+        // count false: only the time and size are noted (for the gap test), the window keeps what it had
+        int add(int frames, double time, double fs, int cap, bool merge = true, bool count = true);
     };
     int burstCap(int frames) const;
 
@@ -122,6 +126,7 @@ private:
     double fade_ = 1.0;     // fade-in position 0..1 (1: done)
     bool active_ = false, periodOk_ = false, haveAvg_ = false;
     int playGaps_ = 0; // the output's real gaps since reset, up to 2: merge from the first, read from the second
+    double playStart_ = -1.0; // the output's first callback since reset (kPrimeTimeoutS)
     // reader -> display
     std::atomic<bool> activeShown_{false};
     std::atomic<double> targetShown_{0}, fillShown_{0}, driftShown_{0}, corrShown_{0};

@@ -173,6 +173,36 @@ void scope() {
     CHECK(clipL == 0);
     CHECK(hiR == 1.0f);
     CHECK(clipR > n / 3 && clipR < n / 2);
+
+    // eighth outside review: only the totals were checked. A bucket's place in time, the clip level itself, and the
+    // raw samples per channel across the ring's wrap.
+    WaveScope p;
+    p.reset(fs);
+    const int per = static_cast<int>(fs * WaveScope::kSeconds / WaveScope::kBuckets); // 240 frames
+    std::vector<float> z(static_cast<size_t>(n), 0.0f), y(static_cast<size_t>(n), 0.0f);
+    z[static_cast<size_t>(137 * per + 5)] = 0.75f;                         // left: one sample in bucket 137
+    y[static_cast<size_t>(200 * per)] = WaveScope::kClipLevel;             // right: exactly at the clip level ...
+    y[static_cast<size_t>(201 * per)] = std::nextafter(WaveScope::kClipLevel, 0.0f); // ... and just under it
+    p.feed(z.data(), y.data(), n);
+    CHECK(p.at(137).hi[0] == 0.75f && p.at(136).hi[0] == 0.0f && p.at(138).hi[0] == 0.0f);
+    CHECK(p.at(137).hi[1] == 0.0f);
+    CHECK(p.at(200).clipped[1] == 1 && p.at(201).clipped[1] == 0 && p.at(200).clipped[0] == 0);
+    WaveScope w;
+    w.reset(fs);
+    const int m = WaveScope::kRaw + 1000; // past the wrap
+    std::vector<float> a(static_cast<size_t>(m)), b(static_cast<size_t>(m));
+    for (int i = 0; i < m; ++i) {
+        a[static_cast<size_t>(i)] = static_cast<float>(i % 1000) / 1000.0f;
+        b[static_cast<size_t>(i)] = -static_cast<float>(i % 777) / 1000.0f;
+    }
+    w.feed(a.data(), b.data(), 300); // in pieces, as the taps come
+    w.feed(a.data() + 300, b.data() + 300, m - 300);
+    bool rawOk = w.rawWritten == m;
+    for (long long i : {static_cast<long long>(m) - 1, static_cast<long long>(m) - 2, static_cast<long long>(m) - WaveScope::kRaw})
+        rawOk = rawOk && w.sample(0, i) == a[static_cast<size_t>(i)] && w.sample(1, i) == b[static_cast<size_t>(i)];
+    std::printf("   bucket 137 holds its sample, the clip level counts and just under it does not, raw samples %s\n",
+                rawOk ? "right in both channels across the wrap" : "WRONG");
+    CHECK(rawOk);
 }
 
 } // namespace

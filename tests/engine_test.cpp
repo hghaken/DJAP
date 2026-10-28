@@ -431,9 +431,21 @@ void healthAndSafety() {
     CHECK(h.blocks == 1 && h.overHalf <= 1);
 }
 
+// A device period in the decks' frames (AsyncInput's burst cap; eighth outside review: untested, the null devices run
+// at the decks' rate).
+void periodAtRate() {
+    std::printf("-- a device period in the decks' frames\n");
+    CHECK(framesAtRate(480, 48000, 48000.0) == 480);
+    CHECK(framesAtRate(960, 96000, 48000.0) == 480);  // a 96 kHz device under 48 kHz decks: half
+    CHECK(framesAtRate(441, 44100, 48000.0) == 480);  // 10 ms either way
+    CHECK(framesAtRate(1024, 192000, 44100.0) == 235); // rounded
+    CHECK(framesAtRate(512, 0, 48000.0) == 512);      // rate unknown: as it is
+}
+
 } // namespace
 
 int main() {
+    periodAtRate();
     formats();
     bypassThroughDevice();
     formatsThroughDevice();

@@ -630,9 +630,14 @@ void AnalysisWindow::paintScope(HDC dc, int d, const RECT& p, bool live, int th)
     const bool ceilingShown = !input && v[pLimOn] >= 0.5 && settings_.deck[d].processing;
     const double ceiling = dbToLin(v[pLimCeiling]);
     const int span = scopeMs_[d];
+    // the span that fits the kept samples (eighth outside review: at 88.2 kHz and up "200 ms" showed 85-186 ms)
+    const double fitsMs = s.fs > 0.0 ? 1000.0 * (WaveScope::kRaw / 2) / s.fs : span;
+    wchar_t spanText[24];
+    if (span >= 1000) swprintf(spanText, 24, L"last 2 s");
+    else if (span > fitsMs) swprintf(spanText, 24, L"%.0f ms", fitsMs);
+    else swprintf(spanText, 24, L"%d ms", span);
     text(dc, p.left + px(6), p.top + px(4),
-         std::wstring(input ? L"Scope: input" : L"Scope: output") + L", L / R - " +
-             (span >= 1000 ? std::wstring(L"last 2 s") : std::to_wstring(span) + L" ms") + L"  (right-click: more)",
+         std::wstring(input ? L"Scope: input" : L"Scope: output") + L", L / R - " + spanText + L"  (right-click: more)",
          kDim);
     const int l = p.left + px(22), r = p.right - px(8), t = p.top + th + px(10), b = p.bottom - th - px(12);
     const int gap = px(8), laneH = (b - t - gap) / 2;
@@ -660,12 +665,15 @@ void AnalysisWindow::paintScope(HDC dc, int d, const RECT& p, bool live, int th)
         }
         if (!live) continue;
         const COLORREF wave = input ? kOrange : kTeal;
-        if (span >= 1000) { // the last 2 s: each bucket's range
-            for (int k = 0; k < WaveScope::kBuckets; ++k) {
-                const WaveScope::Bucket& bk = s.at(k);
-                const int x = l + static_cast<int>(static_cast<double>(r - l) * k / WaveScope::kBuckets);
-                line(dc, x, yOf(bk.hi[c]), x, yOf(bk.lo[c]) + 1, bk.clipped[c] > 0 ? kRed : wave);
-            }
+        if (span >= 1000) { // the last 2 s: each bucket's range; the clipped ones last, so a narrow panel (several
+                            // buckets on one column) never paints over them (eighth outside review)
+            for (const bool red : {false, true})
+                for (int k = 0; k < WaveScope::kBuckets; ++k) {
+                    const WaveScope::Bucket& bk = s.at(k);
+                    if ((bk.clipped[c] > 0) != red) continue;
+                    const int x = l + static_cast<int>(static_cast<double>(r - l) * k / WaveScope::kBuckets);
+                    line(dc, x, yOf(bk.hi[c]), x, yOf(bk.lo[c]) + 1, red ? kRed : wave);
+                }
             continue;
         }
         // the samples of `span` ms, ending at the newest rising zero crossing of the left channel within the last

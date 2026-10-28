@@ -307,9 +307,12 @@ input pair (e.g. a player's output through a virtual cable), while its output st
 the Audio window: ASIO input pairs, or the devices of one other API; per deck a device or its ASIO pair. Saved as
 `AsioInputs` and `AsioInputDeviceA / B`; WASAPI exclusive applies to these inputs too. Input period (2026-10-28,
 seventh outside review: the WASAPI input's 10 ms default period is the largest part of the latency left - about
-14 ms of a measured 31.9): `[Audio] ShortInputPeriod` 0 (default: Windows' 10 ms) / 1 (ask for periods of the ASIO
-buffer's length, at least 32 frames; shared WASAPI takes it through Windows' low-latency mode, IAudioClient3, at the
-nearest size the device allows, or keeps 10 ms when the device has no such mode - the Setup window says so). Off by
+14 ms of a measured 31.9): `[Audio] ShortInputPeriod` 0 (default: Windows' 10 ms) / 1 (shared WASAPI: 1 frame asked, which
+Windows' low-latency mode, IAudioClient3, clamps up to the device's shortest period - eighth review: a request of the
+ASIO buffer's length was rounded down to the device's step, came out under the request and miniaudio then kept
+10 ms; exclusive: the ASIO buffer's length, 32 frames to 10 ms). The mode needs a device that has it, running at the
+ASIO rate in Windows; else 10 ms, and the Setup window says so from the measured input blocks (`AsyncInputState::
+blockMs`, also the input's latency shown - the device's reported period can be shorter than its packets). Off by
 default: untried on real devices, and more callbacks. WASAPI only (DirectSound / MME have no such mode); in the
 Setup window in the drift choice's place, which ASIO does not use.
 
@@ -332,7 +335,9 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
   callbacks within half the last one's length, the largest of the last 20-40 s, at most 50 ms or 1.5 device periods
   (2026-10-27, fourth to sixth outside reviews: underruns after the start; a stall's catch-up kept the buffer up); the
   output's callbacks merge from its first real gap and reading starts after its second (seventh review: the start's
-  priming counted as a burst when it came after the first capture block). The target falls at most 0.3 ms/s. The PI loop's
+  priming counted as a burst when it came after the first capture block); callbacks before the first gap are not
+  remembered (eighth review: a DirectSound stream's first callback is its whole buffer), and an output with no gap
+  starts reading after 1 s. The target falls at most 0.3 ms/s. The PI loop's
   integral learns only while the read speed is inside its limits. An underrun fades out what is left (up to 3 ms).
   (Each underrun adds
   2 ms up to 20; each minute without one takes 0.5 ms back - 2026-10-26, after an outside review: the margin only

@@ -51,7 +51,7 @@ const wchar_t* const kCredits[] = {
     L"25 October 2026 - the name DJAP",
     L"26 October 2026 - the plug-in",
     L"27 October 2026 - drift correction, the scope",
-    L"28 October 2026 - seven reviews later",
+    L"28 October 2026 - reviewed, tuned, released",
     L"",
     L"Thanks for listening.",
 };
@@ -64,7 +64,7 @@ bool AboutWindow::takeKey(const MSG& m) {
     HWND active = GetActiveWindow();
     wchar_t cls[64] = {};
     if (!active || !GetClassNameW(active, cls, 64) || wcscmp(cls, kClass) != 0) return false;
-    PostMessageW(active, kCreditsMsg, 0, 0);
+    if (!(m.lParam & (1 << 30))) PostMessageW(active, kCreditsMsg, 0, 0); // not the key's auto-repeat
     return true;
 }
 

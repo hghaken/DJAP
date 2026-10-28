@@ -49,6 +49,7 @@ struct WaveScope {
     // the last samples themselves, for the short time spans (client, 2026-10-27: "the sines are too close together"):
     // kRaw frames, 0.68 s at 48 kHz
     static constexpr int kRaw = 32768;
+    static_assert((kRaw & (kRaw - 1)) == 0, "kRaw is a power of two: sample() masks with it");
     std::vector<float> raw[2] = {std::vector<float>(kRaw), std::vector<float>(kRaw)};
     long long rawWritten = 0; // frames written so far: the newest is rawWritten - 1
     double fs = 48000.0;

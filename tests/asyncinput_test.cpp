@@ -60,6 +60,7 @@ struct Sim {
     int playSplit = 1;        // ... asked for as this many callbacks straight after each other
     int primeCalls = 0;       // the output's first callbacks all at once (a stream filling its buffer at the start)
     double outStart = 0.0;    // s: the output starts this late (its priming after the first capture blocks)
+    int firstPeriod = 0;      // the output's first callback this long instead (a DirectSound stream: its whole buffer)
     int devicePeriod = 0;     // AsyncInput::setDevicePeriod (0: not set)
     bool catchUp = false;     // the capture blocks of a capPause come all at once after it (else they are lost)
     double capJitter = 0.0;   // s: capture callbacks come up to this late
@@ -119,7 +120,7 @@ struct Sim {
                 tc = capTime();
             } else {
                 if (!paused(outPause, to - t0)) {
-                    const int part = period / playSplit;
+                    const int part = m == 0 && firstPeriod > 0 ? firstPeriod : period / playSplit;
                     for (int p = 0; p < playSplit; ++p) {
                         ai.beginPeriod(part, to + 1e-3 * p);
                         for (int pos = 0; pos < part; pos += 256) {
@@ -535,6 +536,18 @@ void fadeOut() {
         CHECK(from > 0 && ai.state().underruns >= 1);
         CHECK_NEAR(ms, 3.0, 0.1); // the design's 3 ms (not the constant itself: a changed constant must show)
         CHECK(worstLR < 1e-5);
+        // its shape: a raised cosine stands at 0.85 a quarter of the way down (a straight line: 0.75); and the
+        // fade-in when reading starts again lasts 10 ms (eighth outside review: neither was pinned)
+        const double quarter = from + 35 < s.outL.size() ? s.outL[from + 35] / 0.5 : 0.0;
+        size_t back = 0, full = 0;
+        for (size_t i = to + 1; i < s.outL.size() && !back; ++i)
+            if (s.outL[i] != 0.0f) back = i;
+        for (size_t i = back; back && i < s.outL.size() && !full; ++i)
+            if (s.outL[i] >= 0.4999f) full = i;
+        const double fadeIn = full ? static_cast<double>(full - back + 1) / 48.0 : 0.0;
+        std::printf("   a quarter into the fade-out at %.3f of the level; fade-in over %.2f ms\n", quarter, fadeIn);
+        CHECK(quarter > 0.82 && quarter < 0.88);
+        CHECK_NEAR(fadeIn, 10.0, 0.3);
     }
 }
 
@@ -560,6 +573,48 @@ void priming() {
         std::printf("   output starting at %4.1f ms: buffer at 10 s %.2f ms, with 3 periods at once at the start %.2f ms\n",
                     start * 1000.0, t[0], t[1]);
         CHECK_NEAR(t[1], t[0], 0.1);
+    }
+    // eighth outside review: a DirectSound stream's first callback is its whole buffer (here 3 periods) - as a burst it
+    // held the target 20 ms higher for 40-65 s; and the same AsyncInput started again (the program reuses it at every
+    // start: reset() must forget the gaps, else the second start's priming counts again)
+    double base = 0.0;
+    for (int c = 0; c < 3; ++c) {
+        AsyncInput ai;
+        ai.reset(48000);
+        Sim s;
+        s.signal = sine(440.0, 0.5, 48000);
+        s.probeAt = 10.0;
+        if (c == 1) s.firstPeriod = 3 * s.period;
+        if (c == 2) { // a first run, then reset and a late priming
+            s.run(ai, 3.0);
+            ai.reset(48000);
+            s = Sim();
+            s.signal = sine(440.0, 0.5, 48000);
+            s.probeAt = 10.0;
+            s.outStart = 0.025;
+            s.primeCalls = 3;
+        }
+        s.run(ai, 11.0);
+        if (c == 0) base = s.probed;
+        std::printf("   %s: buffer at 10 s %.2f ms (%.2f without), underruns %lld\n",
+                    c == 0 ? "plain start" : c == 1 ? "first callback 3 periods long" : "second start after reset, late priming",
+                    s.probed, base, ai.state().underruns);
+        CHECK_NEAR(s.probed, base, 0.1);
+        CHECK(ai.state().underruns == 0);
+    }
+    // an output whose callbacks never pause (faster than real time for good): reading starts after kPrimeTimeoutS
+    // anyway instead of never (eighth outside review)
+    {
+        AsyncInput ai;
+        ai.reset(48000);
+        Sim s;
+        s.signal = sine(440.0, 0.5, 48000);
+        s.period = 16;          // (short: the run makes some 60000 callbacks)
+        s.primeCalls = 1000000; // every callback 20 us after the last
+        s.run(ai, 1.0 + AsyncInput::kPrimeTimeoutS);
+        const size_t first = firstSound(s.outL);
+        std::printf("   an output that never pauses: sound after %zu of %zu frames\n", first, s.outL.size());
+        CHECK(first < s.outL.size());
     }
 }
 

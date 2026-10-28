@@ -220,4 +220,8 @@ void silence(SampleFormat f, void* buffer, std::size_t offset, int frames) {
                     static_cast<std::size_t>(b) * static_cast<std::size_t>(frames));
 }
 
+int framesAtRate(unsigned frames, unsigned deviceRate, double deckRate) {
+    return deviceRate ? static_cast<int>(std::llround(frames * deckRate / deviceRate)) : static_cast<int>(frames);
+}
+
 } // namespace ap

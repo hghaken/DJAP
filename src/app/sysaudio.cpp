@@ -1,6 +1,7 @@
 #include "sysaudio.h"
 
 #include "appstate.h"
+#include "sampleformat.h"
 
 #include <windows.h>
 #include <mmdeviceapi.h>
@@ -43,10 +44,8 @@ void onHelper(F&& f) {
 std::string maError(const char* what, ma_result r) { return std::string(what) + ": " + ma_result_description(r); }
 
 // A device's period (in its own rate's frames) in the decks' frames, for AsyncInput::setDevicePeriod: a device at
-// 96 kHz under decks at 48 kHz made the burst cap twice too large (seventh outside review).
-int deckFrames(ma_uint32 frames, ma_uint32 deviceRate, double deckRate) {
-    return deviceRate ? static_cast<int>(std::llround(frames * deckRate / deviceRate)) : static_cast<int>(frames);
-}
+// 96 kHz under decks at 48 kHz made the burst cap twice too large (seventh outside review). (sampleformat.h)
+int deckFrames(ma_uint32 frames, ma_uint32 deviceRate, double deckRate) { return framesAtRate(frames, deviceRate, deckRate); }
 
 // Device names as UTF-8: WASAPI reports UTF-8, DirectSound and MME the ANSI code page (handbook 12).
 std::string nameOf(AudioApi api, const char* raw) {

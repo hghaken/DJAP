@@ -757,8 +757,10 @@ deck's input and output device (16.3). The two devices run on their own crystals
 (typically up to +-100 ppm); a buffer read at the nominal rate would run dry or overflow within minutes.
 With ASIO output the input's period counts twice: once as the input's own latency and once in the drift buffer
 (which holds a whole input block). Shared WASAPI hands over 10 ms by default; Setup's *Input period: short* asks for
-the ASIO buffer's length, which Windows' low-latency shared mode (IAudioClient3) grants in steps of the device's own
-period between its minimum and 10 ms - if the device has that mode at all.
+the device's shortest period through Windows' low-latency shared mode (IAudioClient3; a request is rounded down to
+the device's step and falls back to 10 ms when that comes out under it, so 1 frame is asked and clamped up to the
+minimum). The mode needs a device that has it, running at the same rate in Windows as the ASIO interface. The input
+latency shown is the measured block size, not the device's reported period.
 
 **The input's format.** The sample rate sets the highest frequency that can pass, half the rate (Nyquist): 22.05 kHz
 at 44.1 kHz, 24 kHz at 48 kHz - both above hearing, so the rate itself makes no audible difference. A *change* of
@@ -791,14 +793,17 @@ float, which holds 24 bits without loss.
   counting only the callback gave underruns after each start). The output's callbacks are merged only from its first
   real gap on, and reading starts after its second (a stream fills its buffer at the start with callbacks straight
   after each other, and that is no burst; seventh review: whether the first capture block came before or after that
-  must not matter; and an output period cut in two is counted whole before reading starts - at the cost of one
-  output period more at the start). The largest burst of the last 20-40 s counts, at most 50 ms or
+  must not matter; and an output period cut in two is counted whole before reading starts - at the cost of one to
+  two output periods more at the start: eighth review, +2.7 ms at 64 frames, +10 ms at 480, +43 ms at 2048, about
+  nothing in the usual start where reading waits for the fill anyway). Callbacks before the first gap are not
+  remembered at all (a DirectSound stream's first callback is its whole buffer, and counted it held the target 20 ms
+  higher for 40-65 s); an output that never pauses starts reading after 1 s anyway. The largest burst of the last 20-40 s counts, at most 50 ms or
   1.5 device periods, whichever is more: the catch-up after a stall is a burst too, and it must not raise the buffer
   for good (a fifth outside review measured 125 ms after a 100 ms stall). The target goes up at once but down by at
   most 0.3 ms per second - a read speed of 300 ppm (0.5 cent): a forgotten burst dropped it 40 ms at once and the
   read speed jumped to +2000 ppm, a pitch step (sixth review). So after a 100 ms stall the burst stays counted for
   20-40 s and then comes down at 0.3 ms per second: the target is within 1 ms of its base after about 3 minutes
-  (seventh review: 65 ms until 25-60 s, 38 ms at 150 s, 24 ms at 200 s), and the 2 ms of margin the stall's underrun
+  (seventh and eighth reviews: 65 ms until 25-60 s, about 38 ms at 120 s, 29 ms at 150 s, 24 ms at 200 s), and the 2 ms of margin the stall's underrun
   added decay after that (0.5 ms per quiet minute). The price of that: a stall of 70-80 ms or more that comes back every minute or so gives a dropout each
   time, where a buffer that only grew would have swallowed the later ones. The drift estimate learns only
   while the read speed is inside its limits (anti-windup): a fill far over the target ran it into the limit, and it

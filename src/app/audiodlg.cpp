@@ -227,10 +227,11 @@ void AudioWindow::createControls() {
                       L"device (one clock): one stream, no buffer. Always: corrected also then (if a device glitches "
                       L"now and then on Auto). Off: always one stream from input to output, no buffer.");
     tips_.add(inPeriod_, L"With ASIO and WASAPI inputs: how often Windows hands over the input's sound. Default: every "
-                         L"10 ms - the largest part of the latency (the drift buffer holds a whole period). Short: as "
-                         L"often as the ASIO buffer, when the device has Windows' low-latency mode - up to about 14 ms "
-                         L"less latency; a device without that mode keeps 10 ms (Health then says so). Try it while "
-                         L"you listen, and watch the underruns.");
+                         L"10 ms - the largest part of the latency (the drift buffer holds a whole period). Short: the "
+                         L"shortest period the device allows, through Windows' low-latency mode - about 14-17 ms less "
+                         L"latency at ASIO buffers of 64-128 frames. It needs a device that has the mode, set in "
+                         L"Windows' sound settings to the same sample rate as the ASIO interface; otherwise the input "
+                         L"keeps 10 ms (Health then says so). Try it while you listen, and watch the underruns.");
     tips_.add(inputs_, L"With ASIO: where the decks' inputs come from - the interface's ASIO input pairs, or per "
                        L"deck an input device of WASAPI, DirectSound or MME (for example a player sending into a "
                        L"virtual cable). The outputs stay ASIO.\nSuch an input runs on its own clock: the program "
@@ -467,7 +468,7 @@ void AudioWindow::fillAll() {
     // ASIO: one clock, its inputs of other APIs always corrected - the drift choice's place holds the input period
     SendMessageW(inPeriod_, CB_RESETCONTENT, 0, 0);
     addItem(inPeriod_, L"Input period: Windows' default (10 ms)", 0);
-    addItem(inPeriod_, L"Input period: short, as the ASIO buffer (when the device allows)", 1);
+    addItem(inPeriod_, L"Input period: short (the shortest the device allows)", 1);
     selectData(inPeriod_, settings_.shortInputPeriod ? 1 : 0);
     ShowWindow(drift_, current != AudioApi::Asio ? SW_SHOW : SW_HIDE);
     ShowWindow(inPeriod_, current == AudioApi::Asio ? SW_SHOW : SW_HIDE);
@@ -909,19 +910,22 @@ void AudioWindow::refresh() {
                     // an input of another API: its period, the drift buffer, the measured drift
                     const AsyncInputState a = audio_.asyncState(d);
                     const SysStreamInfo in = audio_.sys().info(d);
+                    // the input's part: the blocks it really hands over, as measured (eighth outside review: without
+                    // Windows' low-latency mode the device's reported period can be shorter than its packets)
+                    const double inMs = a.blockMs > 0.0 ? a.blockMs : in.latencyMs;
                     swprintf(b, 480,
                              L"\n%s: %hs \x201C%s\x201D \x2192 ASIO. Latency \x2248 %.1f ms (input %.1f + drift buffer "
                              L"%.1f + output %.2f + processing %.2f); drift %+.1f ppm%s; underruns %lld, overruns %lld",
                              deck, apiName(audio_.sys().api()), fromUtf8(in.input).c_str(),
-                             in.latencyMs + a.targetMs + s.outputLatency * ms + look, in.latencyMs, a.targetMs,
-                             s.outputLatency * ms, look, a.driftPpm, a.active ? L"" : L" (filling up)", a.underruns,
-                             a.overruns);
-                    // a short input period asked for (Setup): whether Windows took it
-                    const double asked = in.deviceRate > 0 ? in.askedFrames * in.deviceRate / s.sampleRate : in.askedFrames;
-                    if (in.askedFrames && in.periodFrames > asked + 1.0) {
+                             inMs + a.targetMs + s.outputLatency * ms + look, inMs, a.targetMs, s.outputLatency * ms,
+                             look, a.driftPpm, a.active ? L"" : L" (filling up)", a.underruns, a.overruns);
+                    // a short input period asked for (Setup) but the input still comes in Windows' 10 ms blocks: say
+                    // what that mode needs
+                    if (settings_.shortInputPeriod && a.blockMs >= 9.0) {
                         state += b;
-                        swprintf(b, 480, L"; the input device has no periods this short (Windows runs %u frames, "
-                                         L"not the %u asked for)", in.periodFrames, in.askedFrames);
+                        swprintf(b, 480, L"; the input still comes in %.0f ms blocks - Windows' short periods need a "
+                                         L"device that has them, set to %s in Windows' sound settings",
+                                 a.blockMs, khz(s.sampleRate).c_str());
                     }
                 } else {
                     swprintf(b, 480, L"\n%s: ASIO \x2192 ASIO. Latency %.2f ms (input %.2f + output %.2f + processing %.2f)",

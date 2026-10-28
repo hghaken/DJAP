@@ -91,6 +91,7 @@ void AsyncInput::reset(double fs) {
     fade_ = 1.0;
     active_ = periodOk_ = haveAvg_ = false;
     playGaps_ = 0;
+    playStart_ = -1.0;
     activeShown_.store(false, std::memory_order_relaxed);
     targetShown_.store(0, std::memory_order_relaxed);
     fillShown_.store(0, std::memory_order_relaxed);
@@ -105,10 +106,11 @@ void AsyncInput::reset(double fs) {
 // The largest burst decays (two windows) and is capped: a stall's catch-up raised the buffer for good (fifth review).
 // Sixth review: half, not a quarter, of the last piece's length - pieces 2.7-4 ms apart (a 10 ms packet) were not
 // merged and underran.
-int AsyncInput::Bursts::add(int frames, double time, double fs, int cap, bool merge) {
+int AsyncInput::Bursts::add(int frames, double time, double fs, int cap, bool merge, bool count) {
     burst = merge && lastTime >= 0.0 && time - lastTime < kBurstGap * lastFrames / fs ? burst + frames : frames;
     lastTime = time;
     lastFrames = frames;
+    if (!count) return std::max(now, before); // seen (for the gaps), not remembered
     if (windowStart < 0.0 || time - windowStart >= kBurstWindowS) {
         before = windowStart < 0.0 ? 0 : now;
         now = 0;
@@ -155,10 +157,15 @@ void AsyncInput::beginPeriod(int frames, double now) {
     // second, when one whole burst has been seen (seventh outside review: "no input yet" missed a priming that came
     // after the first capture block - the target stood 20 ms higher for 20-45 s; started at once, the priming then
     // read three periods at once and underran; an output cut in two needs its whole burst counted before reading)
+    // Eighth review: before the first gap the callbacks are not remembered at all - a DirectSound stream's first
+    // callback is its whole buffer, and as a burst it held the target 20 ms higher for 40-65 s. An output that never
+    // pauses (callbacks faster than real time for good) starts reading after kPrimeTimeoutS anyway.
+    if (playStart_ < 0.0) playStart_ = now;
     if (playGaps_ < 2 && playBursts_.lastTime >= 0.0 &&
         now - playBursts_.lastTime >= kBurstGap * playBursts_.lastFrames / fs_)
         ++playGaps_;
-    period_ = playBursts_.add(frames, now, fs_, burstCap(frames), playGaps_ >= 1);
+    if (playGaps_ < 2 && now - playStart_ >= kPrimeTimeoutS) playGaps_ = 2;
+    period_ = playBursts_.add(frames, now, fs_, burstCap(frames), playGaps_ >= 1, playGaps_ >= 1);
     const double written = static_cast<double>(w);
     const int block = maxBlock_.load(std::memory_order_relaxed);
     // the input's position now: the last block's end, moved on by the time since it came (at most one block), so
@@ -310,6 +317,7 @@ AsyncInputState AsyncInput::state() const {
     s.overruns = overruns_.load(std::memory_order_relaxed);
     s.resyncs = resyncs_.load(std::memory_order_relaxed);
     s.writes = writes_.load(std::memory_order_relaxed);
+    s.blockMs = maxBlock_.load(std::memory_order_relaxed) * 1000.0 / fs_;
     return s;
 }
 

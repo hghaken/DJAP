@@ -370,7 +370,7 @@ the audio again (a short fade-out and fade-in).
 | **Audio API** | ASIO, WASAPI, DirectSound or MME (see 3.3). Choosing another API stops the audio. **Exclusive** (WASAPI only): lower latency, but the devices are taken from other programs while the audio runs. |
 | **Drift correction** (WASAPI, DirectSound, MME) | *Auto* (default): each deck's input is read a little faster or slower so that an input and output device on different clocks never drift apart; adds a buffer of about 8-23 ms (smaller with a smaller buffer size). WASAPI leaves an input and output of the same device as one stream without it. *Always*: also those. *Off*: no buffer, but a glitch now and then unless input and output are the same device (see 3.3). Changing it while the audio runs starts the audio again. |
 | **Deck inputs** / **Input from** (ASIO only) | Where the decks' inputs come from: *ASIO input pairs*, or devices of WASAPI, DirectSound or MME (drift-corrected; adds a buffer of about 15-20 ms with a 10 ms input). The outputs stay ASIO. |
-| **Input period** (ASIO with WASAPI inputs; in the place of Drift correction) | How often Windows hands over the input's sound. *Windows' default (10 ms)*, the default. *Short, as the ASIO buffer*: as often as the ASIO buffer, when the device has Windows' low-latency mode - the input's 10 ms and part of the drift buffer go, up to about 14 ms less latency. A device without that mode keeps 10 ms, and the Health section then says "the input device has no periods this short". Try it while you listen and watch the underruns; changing it while the audio runs starts the audio again. |
+| **Input period** (ASIO with WASAPI inputs; in the place of Drift correction) | How often Windows hands over the input's sound. *Windows' default (10 ms)*, the default. *Short (the shortest the device allows)*: through Windows' low-latency mode - the input's 10 ms and part of the drift buffer go, about 14-17 ms less latency at ASIO buffers of 64-128 frames (less at larger buffers). It needs a device that has that mode, set in Windows' sound settings (*Advanced*) to the same sample rate as the ASIO interface. Otherwise the input keeps 10 ms, and the Health section then says "the input still comes in 10 ms blocks". The input's latency in Health is the block size measured as it arrives. Try it while you listen and watch the underruns; changing it while the audio runs starts the audio again. |
 | **ASIO driver** | The installed ASIO drivers. **Open driver** opens it (DJAP asks first: it may take the interface from other programs); **Close driver** releases it; **Control panel** opens the driver's own settings (buffer size, clock source). Under it: the driver's state. |
 | **Deck A / B input**, **output** | ASIO: a channel pair per deck, with the driver's channel names once it is open. Other APIs: an input and an output device per deck; *(none)* = the deck does not run. A saved device that is not connected shows "(not found)". |
 | **Sample rate** | 44.1, 48, 88.2 or 96 kHz. ASIO uses this rate if the driver accepts it, else the interface's own rate. Other APIs convert when a device runs at another rate. |
@@ -659,7 +659,7 @@ The auto tone holds still during breakdowns and fades, so a quiet part does not 
 
 ![The analysis window](images/analysis.png)
 
-Click **Graphs** on a deck strip. The window has a row per deck with five panels:
+Click **Graphs** on a deck strip. The window has a row per deck with six panels:
 
 1. **Signal chain** - a row per step in chain order, from *Input* to *Output*. Each step has a lamp (lit when the step
    changes the level by 0.1 dB or more; turquoise = up, orange = down) and a bar against a dB scale from -12 to +12
@@ -675,7 +675,9 @@ Click **Graphs** on a deck strip. The window has a row per deck with five panels
 4. **Gain** - the leveller, compressor and density gains over the last 60 seconds.
 5. **Scope** - an oscilloscope of the waveform, left channel above and right below, to see whether the sound clips:
    50 ms across by default (a tone stands still: the picture starts at a rising zero crossing), or 1, 5, 10, 20 or
-   200 ms, or the last 2 s (then each moment's highest and lowest sample). The red dotted lines are full scale (0 dBFS); red
+   200 ms, or the last 2 s (then each moment's highest and lowest sample). At 88.2 kHz and more the longest span the
+   kept samples hold is shorter than 200 ms; the title then shows the span drawn. The scope shows the samples
+   themselves (sample peak; the meters show the true peak). The red dotted lines are full scale (0 dBFS); red
    parts stood at full scale - that is clipping. Under the scope: each channel's peak and the clipped samples of the
    last 2 s, whatever the time across. For the output the yellow dotted lines are the limiter's ceiling, which the
    sound should stay inside. **Right-click** the scope for the *input* (orange: what comes in - clipping there is in

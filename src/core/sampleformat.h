@@ -31,4 +31,8 @@ void fromFloat(const float* in, SampleFormat f, void* buffer, std::size_t offset
 // Writes silence (0) into `frames` samples from `offset`.
 void silence(SampleFormat f, void* buffer, std::size_t offset, int frames);
 
+// A device's period of `frames` at its own `deviceRate` in frames at `deckRate` (a device at 96 kHz under decks at
+// 48 kHz: half; seventh outside review). A rate of 0 (unknown): the frames as they are.
+int framesAtRate(unsigned frames, unsigned deviceRate, double deckRate);
+
 } // namespace ap
