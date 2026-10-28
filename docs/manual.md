@@ -222,6 +222,57 @@ Opening a driver or a device in exclusive mode takes it from other programs, and
 still be routed to speakers. For a first test, use outputs nobody listens to, start with a low volume on the
 amplifier, and watch the meters before you turn up.
 
+### 3.5 Sample rate, bit depth and the virtual cable
+
+Two numbers describe digital audio:
+
+| | Sample rate (for example 44,100 or 48,000 Hz) | Bit depth (for example 16 or 24 bits) |
+|---|---|---|
+| What it is | How often per second the signal is measured | How finely each measurement is stored |
+| What it sets | The highest frequency that can pass: half the rate | How far the noise floor lies under full scale: about 6 dB per bit |
+| 44.1 kHz / 16 bits | up to 22.05 kHz | about 96 dB |
+| 48 kHz / 24 bits | up to 24 kHz | about 144 dB in theory (real converters reach 110-120 dB) |
+| Audible difference? | No: hearing ends around 16-20 kHz | Only when the sound is turned down and later up again along the way |
+
+**Sample rate: one rate through the whole chain.** 44.1 and 48 kHz both cover all you can hear; the difference
+between them is inaudible. What can be heard is a conversion between rates: every device or program that runs at
+another rate than the music resamples it, and a simple resampler (the virtual cable's own is linear) dulls the
+highest tones or adds faint tones that do not belong to the music. Choose the rate of your music - 44.1 kHz for CDs
+and most MP3s, 48 kHz for video - and set it everywhere: the player or DJ software, Windows' default format of the
+cable (both its playback and its recording device), the cable's format range, and DJAP's Setup window. Higher rates
+(88.2 or 96 kHz) are not needed for DJAP: the soft clipper and the exciter already work at 2 to 8 times the rate
+inside (5.1, Oversampling). At the same buffer size in frames a higher rate gives a little less latency in
+milliseconds, but the difference is tiny (64 frames: 1.45 ms at 44.1 kHz, 1.33 ms at 48 kHz).
+
+**Bit depth: 24 bits on the cable.** As a final format 16 bits is enough - a CD's noise lies 96 dB under full scale.
+The trouble is a level that is turned down along the way and up again later: the noise of 16 bits comes up with it.
+With Windows' sound through a virtual cable that happens: the Windows volume turns the sound down before the cable
+(at 30 % by roughly 20 dB), DJAP undoes that at its input when the outputs follow the Windows volume (5.2), and the
+leveller may lift a quiet passage by up to 12 dB more. In 16 bits the noise floor can then come up from -96 to
+about -65 dB, audible in quiet passages, fades and breaks. With 24 bits it starts about 48 dB lower and stays far
+under hearing. DJAP itself computes in 32-bit floating point and asks Windows for 32-bit floating-point samples;
+nothing is lost there. The virtual cable carries no floating-point formats: 24 bits is its best.
+
+**The virtual cable's settings** (VAC: its Control Panel, a cable selected, then **Set**; the cable must not be in
+use - stop DJAP's audio and the player first):
+
+| Setting | Choose | Why |
+|---|---|---|
+| **SR** (format range) | your music's rate at both ends, for example 44100 .. 44100 | one rate, no conversion in the cable |
+| **BPS** (format range) | up to 24, for example 16 .. 24 | the cable may carry 24 bits |
+| Windows **Sound** settings, the cable's device under **Playback** and under **Recording**, *Advanced* | 24 bit, the same rate | the format Windows uses for the cable in shared mode |
+| **Capture / Render port** | Auto (shows WR: WaveRT) | the most efficient kind |
+| **Packet mode** | off | on helps only in rare cases and can cause clicks of its own when the margin is short |
+| **Min RT buf** | No | it does not affect programs that use WASAPI, such as DJAP |
+| **Volume control** | off | the samples pass unchanged and it costs no CPU |
+| **Clock corr ratio** | 100 % | DJAP corrects the drift between the cable and the output itself; two corrections would work against each other |
+| **Channel mixing** | on | the standard channel conversion |
+| **Ms per int** | 3 | the cable adds about one such period; 2 saves about 1 ms but gives the system more timer load, 1 is not advised |
+
+A new format takes effect when the cable opens again: stop the player and DJAP's audio and start them again. The
+cable's list then shows the format in use under *Current format* - for example `ExtPCM/44100/24/2` - and its
+*Oflows* / *Uflows* columns stay empty while all runs well.
+
 ## 4. The main window
 
 ![The main window with two decks](images/main.jpg)
@@ -902,6 +953,8 @@ old file stays.
 | **Pre-fader** | A signal taken before the mixer's channel fader, so fader moves do not change it. |
 | **Goniometer** | A stereo display: mono is a vertical line, wide stereo a cloud. |
 | **Correlation** | How similar left and right are: +1 mono, 0 unrelated, -1 out of phase. |
+| **Sample rate** | Measurements per second (44,100 Hz, 48,000 Hz); the highest frequency that can pass is half of it (3.5). |
+| **Bit depth** | How finely each measurement is stored; about 6 dB of distance to the noise floor per bit (3.5). |
 
 ---
 

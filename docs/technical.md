@@ -759,7 +759,21 @@ With ASIO output the input's period counts twice: once as the input's own latenc
 (which holds a whole input block). Shared WASAPI hands over 10 ms by default; Setup's *Input period: short* asks for
 the ASIO buffer's length, which Windows' low-latency shared mode (IAudioClient3) grants in steps of the device's own
 period between its minimum and 10 ms - if the device has that mode at all.
-`AsyncInput` (`src/core/asyncinput.*`) solves this:
+
+**The input's format.** The sample rate sets the highest frequency that can pass, half the rate (Nyquist): 22.05 kHz
+at 44.1 kHz, 24 kHz at 48 kHz - both above hearing, so the rate itself makes no audible difference. A *change* of
+rate does: each resampler on the way filters and interpolates, and a virtual cable's own one is linear (it dulls the
+top octave and lets images through). Hence one rate from the source to DJAP's output, the music's own (manual 3.5);
+DJAP's oversampling of the clipper and exciter (2x-8x, IIR halfbands) makes a higher overall rate unnecessary. The
+bit depth sets the quantisation noise: a full-scale sine against the rounding error gives 6.02 N + 1.76 dB - about
+98 dB at 16 bits and 146 dB at 24 bits (converters reach 110-120 dB in practice). The floor matters where gain is
+taken back later: the Windows volume turns the sound down before the cable, the volume follower undoes that at
+DJAP's input (5.2 of the manual), and the leveller adds up to +12 dB. A cut of 20 dB undone and +12 dB on top lift a
+16-bit floor from about -98 to about -66 dB relative to full scale - audible in fades and breaks; at 24 bits it
+stays near -114 dB. The cable carries fixed-point formats only (no float), so 24 bits; DJAP asks WASAPI for 32-bit
+float, which holds 24 bits without loss.
+
+`AsyncInput` (`src/core/asyncinput.*`) solves the drift:
 
 - **Ring.** The capture stream writes stereo blocks with a time stamp into a lock-free ring of 32768 frames.
 - **Interpolator.** The ASIO side reads it through a 32-tap windowed-sinc interpolator (Kaiser beta 8, cut-off at
