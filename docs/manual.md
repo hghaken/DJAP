@@ -837,6 +837,8 @@ The window is one deck strip of the program:
 - **Look-ahead** - the limiter's look-ahead, 0, 1.5, 2, 3 or 5 ms (see 5.1), a list of these five in the DJ software
   too; the DJ software is told the new delay. An old project's 0.5 or 1.0 ms runs as 1.5 ms.
 - **Bypass** - lit: the input goes out unchanged, delayed by the same look-ahead.
+- **About** - the version, the settings file in use, the licences, the update check (9.4) and a link to DJAP's
+  GitHub page. The button reads **Update** and is lit when a newer version exists.
 - **Loudness** and **Colour** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
   and colour windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
 - **The four bass sliders** (4.2).
@@ -866,6 +868,13 @@ The window is one deck strip of the program:
 The plug-in is updated by the same setup as the program (chapter 11). If the DJ software has the plug-in loaded
 during an update, the setup never closes the DJ software: the new plug-in takes the old one's place the next time
 Windows starts.
+
+The plug-in looks for a new version itself too, so an installation without the program is not left behind: once each
+time the DJ software loads it (the first time its window opens), when "Check GitHub for a new version once a day" is
+on in the program's settings file (on by default, also without the program). **Check now** in its About window asks
+at once. When a newer version exists, the About button reads **Update**; the About window's **Download** button opens
+the release's page on GitHub, where the setup can be downloaded. The plug-in never installs anything itself: close
+the DJ software, then run the setup.
 
 ## 10. Latency and real-time health
 
@@ -901,6 +910,34 @@ The Setup window shows the total.
 If late periods appear, raise the buffer size, close other heavy programs, or use fewer density bands. The processing
 of both decks together uses only a few percent of one CPU core.
 
+### 10.1 The reference system
+
+DJAP was developed, tuned and measured live on this computer. Its numbers show what to expect; a slower or
+differently set-up computer can need a larger buffer.
+
+| Part | Reference system |
+|---|---|
+| Processor | Intel Core i7-12700F (12th generation): 12 cores - 8 performance cores with 2 threads each and 4 efficiency cores - 20 logical processors |
+| Memory | 64 GB DDR4 (2 × 32 GB Kingston FURY, running at 2400 MT/s) |
+| Main board | MSI MAG Z690 TOMAHAWK WIFI DDR4 |
+| Audio interface | Focusrite Scarlett 16i16 (4th generation), USB, driver *Focusrite Audio Drivers* 4.150.0.432 with *Focusrite Control 2* 1.1210 |
+| Virtual cable | VAC (Virtual Audio Cable) 4.71, full version, 2 cables |
+| Operating system | Windows 11 Pro 26H2, build 26300.9550; latest updates installed: KB5121794 (October 2026), KB5124009, KB5124010 and KB5126052 (September 2026) |
+
+**The set-up that was measured:** two decks on ASIO at 44.1 kHz with a buffer of 64 frames (1.45 ms per period),
+both decks' inputs from VAC's Line 1 over WASAPI (24 bits, VAC's timer at 1 ms) and *Input period* 4 ms, the outputs
+on the interface's outputs 3-4 and 5-6.
+
+| Measured | Value |
+|---|---|
+| Latency per deck, input to output | 19.9 ms (input 4.0 + drift buffer 10.3 + output 4.13 + processing 1.50); 31.9 ms with Windows' 10 ms input period |
+| Processing of both decks (offline test, 48 kHz, Very Loud) | about 4.5 % of one core |
+| CPU in the status bar while running | about 0.3 % of the whole computer; *audio* about 5 % of the core it runs on |
+| Heaviest period (Health) | 17-35 %; 0 late periods, 0 underruns over 25 minutes |
+| Every logical processor fully loaded for 2 minutes (20 processes at normal priority) | 0 late periods, 0 underruns, heaviest 17.3 %, no click heard |
+| LatencyMon (a free tool for real-time audio) | "suitable for real-time audio": interrupt to process at most 621 µs (average 6 µs), driver routines (ISR) at most 152 µs, deferred calls (DPC) at most 360 µs (the network driver) |
+| Drift between VAC and the interface | -24 .. -35 ppm, corrected by DJAP |
+
 ## 11. Updates
 
 With "Check GitHub for a new version once a day" on (default), DJAP asks the project's public GitHub page about 15
@@ -924,6 +961,8 @@ Install update:
 
 If something goes wrong the Setup window says what. The setup's log of the last update is in
 `%TEMP%\DJAP-update\setup.log`.
+
+The plug-in checks too, but only shows the news and opens the download page (9.4).
 
 ## 12. The command-line program DJAPCmd
 

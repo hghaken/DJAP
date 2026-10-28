@@ -40,13 +40,17 @@ public:
     void setBeatSource(std::function<const WaveScope*()> source) { beat_ = std::move(source); }
     // The message loop's key filter: true when `m` was a key of the About window's own (then not dispatched).
     static bool takeKey(const MSG& m);
+    // The plug-in: its DLL's module (window class, logo); not modal; Download opens the release's page.
+    static void setModule(HINSTANCE instance);
+    static void unregisterClass(); // the plug-in's last window: no class may point into an unloaded DLL
+    void setPlugin(bool on) { plugin_ = on; }
+    void close(); // (nothing when it is not open)
 
 private:
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
     void create();
     void setFonts();
-    void close();
     void loadLogo();
     void releaseLogo();
     void paintTop(HDC dc);  // the logo (pulsing) or the credits, over the metal
@@ -73,6 +77,7 @@ private:
     bool credits_ = false;
     double creditsY_ = 0.0;
     bool animating_ = false;
+    bool plugin_ = false; // setPlugin
     IStream* stream_ = nullptr;
     Gdiplus::Bitmap* logo_ = nullptr;
     theme::Metal metal_;

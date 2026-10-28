@@ -4,11 +4,15 @@
 #include "plugin.h"
 #include "pluginids.h"
 #include "stages.h"
+#include "updater.h"
 #include "version.h"
 
 #include "pluginterfaces/gui/iplugview.h"
 
 #include <commctrl.h>
+#include <shellapi.h>
+
+#include <memory>
 
 #include <algorithm>
 #include <cmath>
@@ -26,7 +30,7 @@ namespace ap::plugin {
 namespace {
 
 const wchar_t* const kClass = L"DJAPPluginView";
-enum Id { idPreset = 1, idColour, idLook, idBypass, idEdit, idEditColour, idOversampling, idSlider0 = 10, idMeter = 20 };
+enum Id { idPreset = 1, idColour, idLook, idBypass, idEdit, idEditColour, idOversampling, idAbout, idSlider0 = 10, idMeter = 20 };
 enum Slider { slLevel, slEnhancer, slWidth, slFreq, kSliders };
 const wchar_t* const kSliderName[kSliders] = {L"Bass level", L"Bass enhancer", L"Bass width", L"Bass frequency"};
 const int kSliderMin[kSliders] = {-24, 0, 0, 8}, kSliderMax[kSliders] = {24, 20, 20, 50}; // 0.5 dB / 5 % / 5 Hz
@@ -42,6 +46,12 @@ const wchar_t* const kSliderTip[kSliders] = {
 };
 
 int g_views = 0; // open windows of this DLL: the classes and GDI+ live while one is open
+// The update check of this DLL (client, 2026-10-28: "what if the user installs only the plug-in - can it update?"):
+// one for every window, made with the first and ended (its thread joined) with the last; GitHub is asked once per
+// load of the DLL, when the program's daily check is on (the plug-in is opened and closed often - GitHub answers 60
+// questions an hour per network)
+std::unique_ptr<Updater> g_updater;
+bool g_checked = false;
 
 std::wstring wide(const std::string& s) {
     if (s.empty()) return {};
@@ -73,6 +83,7 @@ void PluginView::detach() {
 
 void PluginView::teardown() {
     if (plugin_) plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
+    aboutWnd_.close();                    // likewise (its owner is the host's window, not this one)
     if (hwnd_) {
         KillTimer(hwnd_, 1);
         DestroyWindow(hwnd_);
@@ -97,11 +108,15 @@ void PluginView::registerClasses(HINSTANCE instance) {
     RegisterClassW(&wc);
     registerMeterView(instance);
     EditWindow::setModule(instance); // the preset window registers its classes when it is first opened
+    AboutWindow::setModule(instance); // About likewise
+    if (!g_updater) g_updater = std::make_unique<Updater>();
     INITCOMMONCONTROLSEX icc{sizeof icc, ICC_BAR_CLASSES | ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES};
     InitCommonControlsEx(&icc);
 }
 
 void PluginView::unregisterClasses() {
+    g_updater.reset(); // waits for a check still running (its thread must not outlive the DLL)
+    AboutWindow::unregisterClass();
     EditWindow::unregisterClasses();
     unregisterMeterView();
     UnregisterClassW(kClass, ghInst);
@@ -134,6 +149,28 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
     create();
     layout();
     fill();
+    // About: the plug-in's (not modal; Download opens the release's page - the plug-in runs inside the DJ software
+    // and the setup needs an administrator: it is not started from here)
+    aboutWnd_.setPlugin(true);
+    aboutWnd_.setBeatSource([this] { return &monitor_.analysis().scopeOut; });
+    aboutWnd_.setUpdates(
+        [this] { return g_updater ? updateViewOf(*g_updater, plugin_ && plugin_->checkUpdates(), false, false) : UpdateView(); },
+        [this] {
+            if (g_updater && !g_updater->busy()) g_updater->check(hwnd_, std::string(), AP_VERSION_STRING);
+        },
+        [] {
+            if (!g_updater) return;
+            const std::string page = g_updater->release().page.empty() ? Updater::kLatestPage : g_updater->release().page;
+            if (page.compare(0, 19, "https://github.com/") == 0) // only GitHub's own pages
+                ShellExecuteW(nullptr, L"open", wide(page).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        });
+    // (DJAP_NO_UPDATE_CHECK set: a test with editorhost - the plug-in reads the real settings file, and a test asks
+    // GitHub nothing)
+    if (g_updater && !g_checked && plugin_->checkUpdates() && !GetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", nullptr, 0)) {
+        g_checked = true;
+        g_updater->check(hwnd_, std::string(), AP_VERSION_STRING);
+    }
+    updateNote();
     SetTimer(hwnd_, 1, 50, nullptr);
     return r;
 }
@@ -159,10 +196,19 @@ LRESULT CALLBACK PluginView::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 LRESULT PluginView::handle(UINT msg, WPARAM wp, LPARAM lp) {
     LRESULT result = 0;
     if (metal_.handle(hwnd_, msg, wp, lp, result)) return result;
+    if (msg == Updater::message()) { // a check ended
+        aboutWnd_.refresh();
+        updateNote();
+        return 0;
+    }
     switch (msg) {
     case WM_TIMER:
         if (dirty_) fill();
         meters();
+        if (++ticks_ % 20 == 0) { // once a second: the update line (another window may have started the check)
+            aboutWnd_.refresh();
+            updateNote();
+        }
         return 0;
     case WM_HSCROLL:
         if (lp) slider(reinterpret_cast<HWND>(lp), LOWORD(wp));
@@ -186,12 +232,12 @@ void PluginView::create() {
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), ghInst, nullptr);
     };
     title_ = make(L"STATIC", L"DJAP", SS_LEFT | SS_CENTERIMAGE, 0);
-    version_ = make(L"STATIC", (L"DJ Audio Processor " + wide(AP_VERSION_STRING)).c_str(),
-                    SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0);
+    version_ = make(L"STATIC", wide(AP_VERSION_STRING).c_str(), SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0);
     lookLabel_ = make(L"STATIC", L"Look-ahead", SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0);
     look_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idLook);
     oversampling_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOversampling);
     bypass_ = make(L"BUTTON", L"Bypass", BS_OWNERDRAW | WS_TABSTOP, idBypass);
+    about_ = make(L"BUTTON", L"About", BS_OWNERDRAW | WS_TABSTOP, idAbout);
     presetLabel_ = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
     preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
     colourLabel_ = make(L"STATIC", L"Colour", SS_LEFT | SS_CENTERIMAGE, 0);
@@ -209,7 +255,7 @@ void PluginView::create() {
         sliderValue_[k] = make(L"STATIC", L"", SS_RIGHT | SS_CENTERIMAGE | SS_NOTIFY, 0);
     }
     meter_ = createMeterView(hwnd_, idMeter);
-    for (HWND b : {bypass_, edit_, editColour_}) theme::makeButton(b);
+    for (HWND b : {bypass_, edit_, editColour_, about_}) theme::makeButton(b);
     for (HWND c : {preset_, colour_, look_, oversampling_}) theme::makeCombo(c);
 
     fillLists();
@@ -244,6 +290,10 @@ void PluginView::create() {
                              L"little more CPU. Adds no latency.");
     tips_.add(bypass_, L"Bypass (lit): the input goes out unchanged, delayed by the same look-ahead, so switching "
                        L"never shifts the sound in time.");
+    tips_.add(about_, L"About DJAP: the version, the licences, the settings file, DJAP's GitHub page - and the updates: "
+                      L"Check now asks GitHub for a newer DJAP, Download opens its page. With the program's daily "
+                      L"check on (its Setup window), the plug-in asks once each time the DJ software loads it; when a "
+                      L"newer version is there this button says Update and is lit.");
     for (int k = 0; k < kSliders; ++k)
         for (HWND h : {sliderLabel_[k], slider_[k], sliderValue_[k]}) tips_.add(h, kSliderTip[k]);
 }
@@ -268,14 +318,16 @@ void PluginView::layout() {
     GetClientRect(hwnd_, &rc);
     const int m = px(12), gap = px(6), rowH = px(28), W = rc.right - 2 * m;
     int y = m;
-    // DJAP  DJ Audio Processor 0.1.x ........ Look-ahead [....] [Bypass]
-    const int bypassW = px(90), lookW = px(150), lookLabelW = px(78), osW = px(126);
+    // DJAP  0.1.x ........ [Oversampling] Look-ahead [....] [Bypass] [About]
+    const int aboutW = px(64), bypassW = px(80), lookW = px(140), lookLabelW = px(74), osW = px(122);
+    const int right = m + W - aboutW - gap; // the controls' right edge, About after them
     MoveWindow(title_, m, y, px(70), rowH, TRUE);
-    MoveWindow(version_, m + px(74), y + px(2), W - px(74) - bypassW - lookW - lookLabelW - osW - 4 * gap, rowH, TRUE);
-    MoveWindow(oversampling_, m + W - bypassW - lookW - lookLabelW - osW - 3 * gap, y, osW, px(300), TRUE);
-    MoveWindow(lookLabel_, m + W - bypassW - lookW - lookLabelW - 2 * gap, y, lookLabelW, rowH, TRUE);
-    MoveWindow(look_, m + W - bypassW - lookW - gap, y, lookW, px(300), TRUE);
-    MoveWindow(bypass_, m + W - bypassW, y, bypassW, rowH, TRUE);
+    MoveWindow(version_, m + px(74), y + px(2), right - (m + px(74)) - bypassW - lookW - lookLabelW - osW - 4 * gap, rowH, TRUE);
+    MoveWindow(oversampling_, right - bypassW - lookW - lookLabelW - osW - 3 * gap, y, osW, px(300), TRUE);
+    MoveWindow(lookLabel_, right - bypassW - lookW - lookLabelW - 2 * gap, y, lookLabelW, rowH, TRUE);
+    MoveWindow(look_, right - bypassW - lookW - gap, y, lookW, px(300), TRUE);
+    MoveWindow(bypass_, right - bypassW, y, bypassW, rowH, TRUE);
+    MoveWindow(about_, m + W - aboutW, y, aboutW, rowH, TRUE);
     y += rowH + gap;
     // Preset [....] [Edit...]  Colour [....] [Edit...]
     const int labelW = px(48), colourLabelW = px(50), editW = px(64);
@@ -431,10 +483,26 @@ void PluginView::command(int id, int code) {
     } else if (id == idBypass && code == BN_CLICKED) {
         plugin_->edit(kBypassId, plugin_->plainOf(kBypassId) >= 0.5 ? 0.0 : 1.0);
         fill();
+    } else if (id == idAbout && code == BN_CLICKED) {
+        aboutWnd_.show(GetAncestor(hwnd_, GA_ROOT), plugin_->iniFile());
     } else if ((id == idEdit || id == idEditColour) && code == BN_CLICKED) {
         plugin_->openEditor(id == idEditColour, GetAncestor(hwnd_, GA_ROOT));
     } else if (id == idMeter && code >= kMeterOpenRow && code < kMeterOpenRow + kMeterTargets) { // a row or bar
         plugin_->openEditor(false, GetAncestor(hwnd_, GA_ROOT), meterStage(code - kMeterOpenRow));
+    }
+}
+
+// A newer version found: the About button says "Update" (the version line has no room for a sentence).
+void PluginView::updateNote() {
+    if (!about_) return;
+    const bool newer = g_updater && g_updater->state() == Updater::State::Available &&
+                       compareVersions(g_updater->release().version, AP_VERSION_STRING) > 0;
+    const wchar_t* t = newer ? L"Update" : L"About";
+    wchar_t now[32] = {};
+    GetWindowTextW(about_, now, 32);
+    if (std::wcscmp(t, now) != 0) {
+        SetWindowTextW(about_, t);
+        theme::setChecked(about_, newer); // lit, as a reminder
     }
 }
 

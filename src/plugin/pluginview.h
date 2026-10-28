@@ -1,9 +1,11 @@
 // The plug-in's window inside the host: one deck strip as in the program - preset and colour with their Edit
 // buttons (the program's preset window), look-ahead, Bypass, the four bass sliders and the meter panel (LED bars, the
-// gain of each stage, the spectrum; a click on a row opens its tab) - on the brushed metal. Every value is also a
+// gain of each stage, the spectrum; a click on a row opens its tab) - on the brushed metal; and About with the
+// update check (one per DLL, asked once per load when the program's daily check is on). Every value is also a
 // parameter the host shows in its own list.
 #pragma once
 
+#include "aboutwnd.h"
 #include "monitor.h"
 #include "theme.h"
 #include "tooltips.h"
@@ -48,13 +50,16 @@ private:
     void meters();   // the meter panel from the deck
     void slider(HWND bar, int code);
     void command(int id, int code);
+    void updateNote(); // the About button: "Update" (lit) when the check found a newer version
     int px(int v) const { return MulDiv(v, static_cast<int>(dpi_), 96); }
     static Steinberg::ViewRect sizeFor(UINT dpi);
 
     Plugin* plugin_;
     HWND hwnd_ = nullptr, title_ = nullptr, version_ = nullptr, presetLabel_ = nullptr, preset_ = nullptr,
          colourLabel_ = nullptr, colour_ = nullptr, lookLabel_ = nullptr, look_ = nullptr, bypass_ = nullptr, oversampling_ = nullptr,
-         meter_ = nullptr, edit_ = nullptr, editColour_ = nullptr;
+         meter_ = nullptr, edit_ = nullptr, editColour_ = nullptr, about_ = nullptr;
+    AboutWindow aboutWnd_; // the About window with the update check (client, 2026-10-28)
+    int ticks_ = 0;
     HWND sliderLabel_[4] = {}, slider_[4] = {}, sliderValue_[4] = {};
     HFONT font_ = nullptr, bold_ = nullptr;
     // counted in g_views (attached() succeeded so far): removed() and detach() share one teardown, so a host that

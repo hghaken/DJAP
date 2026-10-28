@@ -777,11 +777,21 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   by its ini key - the values themselves, so a project sounds the same on a computer where that preset does not
   exist or was changed; unknown keys of a newer version are skipped.
 - **Window** (`pluginview.*`, 740 x 640 at 96 DPI, scaled to the host window's DPI): the program's deck strip -
-  DJAP and the version, look-ahead, Bypass; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
+  DJAP and the version, oversampling, look-ahead, Bypass, About; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same
   code). On the brushed metal (`theme.*`); tooltips on every control. Its own common controls 6 through the DLL's
   manifest and `ISOLATION_AWARE_ENABLED`. The window classes and GDI+ live while a window of the DLL is open and are
   removed with the last one (a class left behind would point into an unloaded DLL).
+- **About and updates** (client, 2026-10-28: "an About (with the update) in the plug-in" - an installation of the
+  plug-in alone has no program to report updates): an About button at the right of the top row opens the program's
+  About window (`aboutwnd.*`, plug-in mode: not modal, its own placement `PluginAbout`) with the version, the settings
+  file, the licences, the GitHub link and the update check. One `Updater` per DLL (created with the window classes,
+  removed with them); it asks GitHub once per load of the DLL, when a window first opens and `[Updates]
+  CheckUpdates` in the settings file is on (default; hosts open and close a plug-in often, and GitHub answers 60
+  questions an hour per network), and on Check now. A newer version turns the About button into a lit "Update".
+  The plug-in never downloads or runs a setup (it lives inside the DJ software, whose module the setup can only
+  replace at the next Windows start): Download opens the release's GitHub page, only a `https://github.com/` page.
+  `DJAP_NO_UPDATE_CHECK` in the environment stops the automatic check (tests with the editor host).
 - **Build**: `src/plugin/CMakeLists.txt` in its own directory, so the SDK's compiler options (`/fp:fast`, `/W3`) do
   not reach the program; the plug-in's own files are compiled with `/W4 /WX /fp:precise`. The SDK is added with
   `EXCLUDE_FROM_ALL`: its validator and editor test host are built only for the tests. The build never copies or

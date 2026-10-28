@@ -61,6 +61,8 @@ public:
     bool active() const { return active_.load(); }
     const std::vector<Preset>& presets() const { return settings_.presets; }
     bool tooltips() const { return settings_.showTooltips; } // the program's switch (read from the settings file)
+    bool checkUpdates() const { return settings_.checkUpdates; } // the program's daily-check switch, likewise
+    const std::filesystem::path& iniFile() const { return ini_; } // (not "settingsFile": plugin.cpp's own function)
     const std::vector<Preset>& colours() const { return settings_.colours; }
     int presetIndex() const; // in its list; the list's size = "(other values)"
     int colourIndex() const;

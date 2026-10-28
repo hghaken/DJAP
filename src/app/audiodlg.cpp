@@ -844,38 +844,9 @@ void AudioWindow::command(int id, int code) {
 
 // Updates: this version and what the last check found; installing while the audio runs asks first.
 UpdateView AudioWindow::updateView() const {
-    UpdateView v;
-    if (!updater_) return v;
-    const bool running = audio_.deviceRunning();
-    {
-        const Updater::State st = updater_->state();
-        const std::wstring me = fromUtf8(AP_VERSION_STRING), next = fromUtf8(updater_->release().version);
-        const std::wstring when = updater_->checkedAt().empty() ? L"" : L", checked at " + fromUtf8(updater_->checkedAt());
-        std::wstring text;
-        switch (st) {
-        case Updater::State::Checking: text = L"DJAP " + me + L" - asking GitHub..."; break;
-        case Updater::State::UpToDate:
-            text = L"DJAP " + me + L" is up to date" + when +
-                   (updater_->error().empty() ? L"" : L" (" + fromUtf8(updater_->error()) + L")");
-            break;
-        case Updater::State::Available:
-            text = L"DJAP " + next + L" is available (this is " + me + L")" +
-                   (running ? L" - the audio pauses while it installs" : L"");
-            break;
-        case Updater::State::Downloading:
-            text = L"Downloading DJAP " + next + L": " + std::to_wstring(updater_->percent()) + L" %";
-            break;
-        case Updater::State::Ready: text = L"Starting the setup of DJAP " + next + L"..."; break;
-        case Updater::State::Failed: text = L"Update: " + fromUtf8(updater_->error()); break;
-        default:
-            text = L"DJAP " + me + (settings_.checkUpdates ? L" - GitHub is asked once a day" : L" - the daily check is off");
-            break;
-        }
-        const bool newer = !next.empty() && compareVersions(updater_->release().version, AP_VERSION_STRING) > 0;
-        v.text = text;
-        v.canCheck = !updater_->busy() && st != Updater::State::Ready;
-        v.canInstall = newer && !audio_.simulating() && (st == Updater::State::Available || st == Updater::State::Failed);
-    }
+    if (!updater_) return UpdateView();
+    UpdateView v = updateViewOf(*updater_, settings_.checkUpdates, audio_.deviceRunning(), true);
+    v.canInstall = v.canInstall && !audio_.simulating(); // a test's simulation is never ended by an update
     return v;
 }
 

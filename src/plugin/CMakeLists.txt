@@ -25,9 +25,12 @@ smtg_add_vst3plugin(DJAPPlugin PACKAGE_NAME "DJAP" SOURCES_LIST
     ${CMAKE_SOURCE_DIR}/src/app/tooltips.cpp
     ${CMAKE_SOURCE_DIR}/src/app/editwnd.cpp
     ${CMAKE_SOURCE_DIR}/src/app/placement.cpp
-    ${CMAKE_SOURCE_DIR}/src/app/appstate.cpp)
+    ${CMAKE_SOURCE_DIR}/src/app/appstate.cpp
+    # the About window with the update check (client, 2026-10-28: a plug-in installed on its own got no update notice)
+    ${CMAKE_SOURCE_DIR}/src/app/aboutwnd.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/updater.cpp)
 target_include_directories(DJAPPlugin PRIVATE ${CMAKE_SOURCE_DIR}/src/app "${CMAKE_BINARY_DIR}/generated")
-target_link_libraries(DJAPPlugin PRIVATE sdk apcore comctl32 gdi32 gdiplus user32 uxtheme shell32 ole32)
+target_link_libraries(DJAPPlugin PRIVATE sdk apcore comctl32 gdi32 gdiplus user32 uxtheme shell32 ole32 winhttp)
 # the window parts use common controls 6 from the DLL's own manifest (whatever the host's says)
 target_compile_definitions(DJAPPlugin PRIVATE ${AP_DEFINES} ISOLATION_AWARE_ENABLED=1)
 target_compile_options(DJAPPlugin PRIVATE ${AP_OPTIONS} /W4 /WX /fp:precise /EHsc)

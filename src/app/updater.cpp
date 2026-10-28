@@ -1,6 +1,7 @@
 #include "updater.h"
 
 #include "appstate.h"
+#include "version.h"
 
 #include <shellapi.h>
 #include <shlobj.h>
@@ -443,6 +444,33 @@ bool Updater::launch(const fs::path& testIni, std::string& error) {
         return false;
     }
     return true;
+}
+
+UpdateView updateViewOf(const Updater& u, bool checkEnabled, bool audioRuns, bool installHere) {
+    UpdateView v;
+    const Updater::State st = u.state();
+    const std::wstring me = fromUtf8(AP_VERSION_STRING), next = fromUtf8(u.release().version);
+    const std::wstring when = u.checkedAt().empty() ? L"" : L", checked at " + fromUtf8(u.checkedAt());
+    switch (st) {
+    case Updater::State::Checking: v.text = L"DJAP " + me + L" - asking GitHub..."; break;
+    case Updater::State::UpToDate:
+        v.text = L"DJAP " + me + L" is up to date" + when + (u.error().empty() ? L"" : L" (" + fromUtf8(u.error()) + L")");
+        break;
+    case Updater::State::Available:
+        v.text = L"DJAP " + next + L" is available (this is " + me + L")" +
+                 (!installHere ? L" - Download opens its page" : audioRuns ? L" - the audio pauses while it installs" : L"");
+        break;
+    case Updater::State::Downloading:
+        v.text = L"Downloading DJAP " + next + L": " + std::to_wstring(u.percent()) + L" %";
+        break;
+    case Updater::State::Ready: v.text = L"Starting the setup of DJAP " + next + L"..."; break;
+    case Updater::State::Failed: v.text = L"Update: " + fromUtf8(u.error()); break;
+    default: v.text = L"DJAP " + me + (checkEnabled ? L" - GitHub is asked once a day" : L" - the daily check is off"); break;
+    }
+    const bool newer = !next.empty() && compareVersions(u.release().version, AP_VERSION_STRING) > 0;
+    v.canCheck = !u.busy() && st != Updater::State::Ready;
+    v.canInstall = newer && (st == Updater::State::Available || st == Updater::State::Failed);
+    return v;
 }
 
 } // namespace ap

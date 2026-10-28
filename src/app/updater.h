@@ -67,4 +67,9 @@ private:
     std::thread worker_;
 };
 
+// The line and buttons the About window shows of `u` (the program's Setup / About and the plug-in's About share it).
+// `checkEnabled`: the settings' daily check; `audioRuns`: the program's audio would pause for the install;
+// `installHere`: the program installs the update itself - the plug-in (inside DJ software) opens the release's page.
+UpdateView updateViewOf(const Updater& u, bool checkEnabled, bool audioRuns, bool installHere);
+
 } // namespace ap

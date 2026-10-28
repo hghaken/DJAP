@@ -169,10 +169,24 @@ void AboutWindow::paintTop(HDC target) {
     DeleteDC(dc);
 }
 
-// The wide logo from the exe's resources (RCDATA, PNG), decoded by GDI+; its stream lives as long as the image.
+namespace {
+// The module the window class and the logo belong to: the program, or the plug-in DLL (AboutWindow::setModule).
+HINSTANCE g_module = nullptr;
+bool g_registered = false;
+HINSTANCE moduleInstance() { return g_module ? g_module : GetModuleHandleW(nullptr); }
+} // namespace
+
+void AboutWindow::setModule(HINSTANCE instance) { g_module = instance; }
+
+void AboutWindow::unregisterClass() {
+    if (g_registered) UnregisterClassW(kClass, moduleInstance());
+    g_registered = false;
+}
+
+// The wide logo from the module's resources (RCDATA, PNG), decoded by GDI+; its stream lives as long as the image.
 void AboutWindow::loadLogo() {
     if (logo_) return;
-    HINSTANCE inst = GetModuleHandleW(nullptr);
+    HINSTANCE inst = moduleInstance();
     HRSRC res = FindResourceW(inst, MAKEINTRESOURCEW(IDR_LOGO), RT_RCDATA);
     HGLOBAL data = res ? LoadResource(inst, res) : nullptr;
     const DWORD size = res ? SizeofResource(inst, res) : 0;
@@ -203,14 +217,17 @@ void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
         return;
     }
     owner_ = owner;
-    body_ = L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING) +
-            L"\n\nTwo-deck loudness and dynamics processor for DJs: a leveller, compressor, density, de-esser, "
-            L"stereo width, colour and a true-peak limiter per deck, with only the limiter's look-ahead as delay.";
+    body_ = plugin_ ? L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING) +
+                          L" - plug-in\n\nOne deck of DJAP inside DJ software: a leveller, compressor, density, de-esser, "
+                          L"stereo width, colour and a true-peak limiter, with only the limiter's look-ahead as delay."
+                    : L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING) +
+                          L"\n\nTwo-deck loudness and dynamics processor for DJs: a leveller, compressor, density, "
+                          L"de-esser, stereo width, colour and a true-peak limiter per deck, with only the limiter's "
+                          L"look-ahead as delay.";
     path_ = L"Settings and own loudness presets and colours: " + settingsFile.wstring();
     loadLogo();
-    static bool registered = false;
-    HINSTANCE inst = GetModuleHandleW(nullptr);
-    if (!registered) {
+    HINSTANCE inst = moduleInstance();
+    if (!g_registered) {
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof wc;
         wc.lpfnWndProc = proc;
@@ -219,7 +236,7 @@ void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
         wc.hIcon = LoadIconW(wc.hInstance, MAKEINTRESOURCEW(IDI_APP));
         wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
         wc.lpszClassName = kClass;
-        registered = RegisterClassExW(&wc) != 0;
+        g_registered = RegisterClassExW(&wc) != 0;
     }
     const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU;
     hwnd_ = CreateWindowExW(WS_EX_DLGMODALFRAME, kClass, L"About DJAP", style, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -230,8 +247,9 @@ void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
     AdjustWindowRectExForDpi(&r, style, FALSE, WS_EX_DLGMODALFRAME, dpi_);
     SetWindowPos(hwnd_, nullptr, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
     refresh();
-    placement::remember(hwnd_, "About", owner);
-    EnableWindow(owner_, FALSE); // modal, as a message box
+    placement::remember(hwnd_, plugin_ ? "PluginAbout" : "About", owner);
+    // modal, as a message box - not in the plug-in: it would block the DJ software's own window
+    if (!plugin_) EnableWindow(owner_, FALSE);
     ShowWindow(hwnd_, SW_SHOWNORMAL);
     SetFocus(ok_);
 }
@@ -253,7 +271,7 @@ LRESULT CALLBACK AboutWindow::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 void AboutWindow::create() {
-    HINSTANCE inst = GetModuleHandleW(nullptr);
+    HINSTANCE inst = moduleInstance();
     const int x = px(20), w = px(kWidth - 40), top = px(20 + kLogoH + 16);
     auto label = [&](const std::wstring& s, DWORD style, int y, int h) {
         return CreateWindowExW(0, L"STATIC", s.c_str(), WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX | style, x,
@@ -272,7 +290,7 @@ void AboutWindow::create() {
         return b;
     };
     checkNow_ = button(L"Check now", idCheckNow, x);
-    install_ = button(L"Install update", idInstall, x + px(118));
+    install_ = button(plugin_ ? L"Download" : L"Install update", idInstall, x + px(118));
     updateText_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX | SS_NOTIFY,
                                   x + px(240), top + px(146), w - px(240), px(36), hwnd_, nullptr, inst, nullptr);
     updateShown_.clear();
@@ -280,8 +298,11 @@ void AboutWindow::create() {
     tips_.create(hwnd_);
     tips_.setDpi(dpi_);
     tips_.add(checkNow_, L"Asks GitHub now whether a newer DJAP is there. Nothing is downloaded or installed.");
-    tips_.add(install_, L"Downloads the newer DJAP, checks it against GitHub's checksum and installs it. DJAP closes "
-                        L"for this and starts again by itself; running audio starts again too.");
+    tips_.add(install_, plugin_ ? L"Opens the newer DJAP's page on GitHub in your web browser: download its setup "
+                                  L"program there and run it (the plug-in is replaced when the DJ software has let go "
+                                  L"of it - at the latest after a restart of the computer)."
+                                : L"Downloads the newer DJAP, checks it against GitHub's checksum and installs it. DJAP "
+                                  L"closes for this and starts again by itself; running audio starts again too.");
     // the program's GitHub page (client, 2026-10-28): opens in the default browser
     const std::wstring url = fromUtf8(Updater::kRepo);
     link_ = CreateWindowExW(0, WC_LINK, (L"Source, releases and manuals: <a href=\"" + url + L"\">" + url + L"</a>").c_str(),
@@ -317,7 +338,8 @@ void AboutWindow::refresh() {
 }
 
 void AboutWindow::close() {
-    EnableWindow(owner_, TRUE); // before the window goes, so the owner gets the activation back
+    if (!hwnd_) return;
+    if (!plugin_) EnableWindow(owner_, TRUE); // before the window goes, so the owner gets the activation back
     DestroyWindow(hwnd_);
 }
 

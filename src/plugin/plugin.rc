@@ -1,10 +1,11 @@
-// Version information and the icon (the preset window's) of the plug-in DLL (the manifest is added by CMake from
+// Version information, the icon (the preset window's) and the About window's logo of the plug-in DLL (the manifest is added by CMake from
 // plugin.manifest).
 #include <winres.h>
 #include "version.h"
 #include "resource.h"
 
 IDI_APP ICON "../../assets/DJAP.ico"
+IDR_LOGO RCDATA "../../assets/logo.png"
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION AP_VERSION_MAJOR, AP_VERSION_MINOR, AP_BUILD_NUMBER, 0
