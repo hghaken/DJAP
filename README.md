@@ -8,6 +8,14 @@ Copyright (C) 2026 hghaken. Licence: GPL-3.0-or-later (`LICENSE`); free software
 The code was written with the AI assistant Claude (Anthropic), implemented from public standards and papers (the
 sources are listed in the technical manual), and improved with outside reviews by Grok (xAI).
 
+## Video
+
+[![DJAP in three minutes - watch on YouTube](https://img.youtube.com/vi/1PePjk0rk-Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=1PePjk0rk-Y)
+
+[DJAP in three minutes on YouTube](https://www.youtube.com/watch?v=1PePjk0rk-Y): before and after, the loudness presets,
+every value, the colours, the analysis, Setup, Windows' own sound and the plug-in. (Intro, b-roll and voice-over are
+AI-generated.)
+
 ## Download
 
 The setup program is on the [releases page](https://github.com/hghaken/DJAP/releases/latest)
