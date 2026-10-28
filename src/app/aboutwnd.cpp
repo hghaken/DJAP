@@ -5,7 +5,10 @@
 #include "resource.h"
 #include "version.h"
 
+#include <windowsx.h>
+
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <string>
 
@@ -24,8 +27,145 @@ const wchar_t* const kClass = L"APAboutWindow";
 const int kLogoW = 520, kLogoH = 130; // the wide logo (assets/logo.png, 4:1) at 100 %
 const int kWidth = 560, kHeight = 430;
 enum { idCheckNow = 201, idInstall };
+const UINT_PTR kAnimTimer = 1;
+const UINT kAnimMs = 30;
+const UINT kCreditsMsg = WM_APP + 1;
+const double kPulseSeconds = 20.0, kPulseGrow = 0.06; // the logo up to 6 % larger on a beat
+const double kCreditsSpeed = 0.9;                       // px (at 96 dpi) per tick
+
+const wchar_t* const kCredits[] = {
+    L"DJAP",
+    L"DJ Audio Processor",
+    L"",
+    L"Idea, ears and every decision",
+    L"hghaken",
+    L"",
+    L"DSP, code and manuals",
+    L"Claude",
+    L"",
+    L"Outside reviews",
+    L"Grok",
+    L"",
+    L"25 October 2026 - the name DJAP",
+    L"26 October 2026 - the plug-in",
+    L"27 October 2026 - drift correction, the scope",
+    L"28 October 2026 - seven reviews later",
+    L"",
+    L"Thanks for listening.",
+};
 
 } // namespace
+
+bool AboutWindow::takeKey(const MSG& m) {
+    if (m.message != WM_KEYDOWN || m.wParam != 'D' || GetKeyState(VK_CONTROL) >= 0 || GetKeyState(VK_SHIFT) >= 0)
+        return false;
+    HWND active = GetActiveWindow();
+    wchar_t cls[64] = {};
+    if (!active || !GetClassNameW(active, cls, 64) || wcscmp(cls, kClass) != 0) return false;
+    PostMessageW(active, kCreditsMsg, 0, 0);
+    return true;
+}
+
+RECT AboutWindow::topRect() const { return RECT{0, 0, px(kWidth), px(20 + kLogoH + 12)}; }
+
+// Deck A's bass against its own average: a low-pass at 120 Hz, its power over 25 ms against over 1 s - a kick drum
+// stands out, a steady level does not (the output's peaks sit at the limiter's ceiling all the time).
+double AboutWindow::readBeat() {
+    const WaveScope* s = beat_ ? beat_() : nullptr;
+    if (!s || s->fs <= 0.0) return 0.0;
+    const long long end = s->rawWritten;
+    long long from = beatRead_ < 0 || beatRead_ > end ? end : beatRead_;
+    from = std::max(from, end - WaveScope::kRaw / 2);
+    const double pi = 3.14159265358979;
+    const double aLp = 1.0 - std::exp(-2.0 * pi * 120.0 / s->fs), aFast = 1.0 - std::exp(-1.0 / (0.025 * s->fs)),
+                 aSlow = 1.0 - std::exp(-1.0 / (1.0 * s->fs));
+    for (long long i = from; i < end; ++i) {
+        lp_ += aLp * (0.5 * (s->sample(0, i) + s->sample(1, i)) - lp_);
+        const double e = lp_ * lp_;
+        fast_ += aFast * (e - fast_);
+        slow_ += aSlow * (e - slow_);
+    }
+    beatRead_ = end;
+    if (slow_ < 1e-8) return 0.0; // silence
+    return std::clamp((fast_ / slow_ - 1.2) / 1.5, 0.0, 1.0);
+}
+
+void AboutWindow::animate() {
+    const ULONGLONG now = GetTickCount64();
+    const double beat = now < pulseUntil_ ? readBeat() : 0.0;
+    pulse_ = std::max(beat, pulse_ * 0.82); // up at once, down over about 150 ms
+    if (credits_) {
+        creditsY_ += kCreditsSpeed * dpi_ / 96.0;
+        const RECT r = topRect();
+        const double lines = static_cast<double>(sizeof kCredits / sizeof kCredits[0]);
+        if (creditsY_ > (r.bottom - r.top) + lines * px(22)) credits_ = false; // all lines passed
+    }
+    const RECT r = topRect();
+    InvalidateRect(hwnd_, &r, FALSE);
+    if (!credits_ && now >= pulseUntil_ && pulse_ < 0.001) {
+        pulse_ = 0.0;
+        KillTimer(hwnd_, kAnimTimer);
+        animating_ = false;
+    }
+}
+
+void AboutWindow::paintTop(HDC target) {
+    const RECT r = topRect();
+    const int w = r.right - r.left, h = r.bottom - r.top;
+    HDC dc = CreateCompatibleDC(target);
+    HBITMAP bmp = CreateCompatibleBitmap(target, w, h);
+    HGDIOBJ old = SelectObject(dc, bmp);
+    metal_.paint(dc, r, hwnd_);
+    {
+        Gdiplus::Graphics g(dc);
+        g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        const double grow = 1.0 + kPulseGrow * pulse_;
+        const double lw = px(kLogoW) * grow, lh = px(kLogoH) * grow;
+        const double cx = px(20) + px(kLogoW) / 2.0, cy = px(20) + px(kLogoH) / 2.0;
+        if (logo_ && !credits_)
+            g.DrawImage(logo_, Gdiplus::RectF(static_cast<Gdiplus::REAL>(cx - lw / 2), static_cast<Gdiplus::REAL>(cy - lh / 2),
+                                              static_cast<Gdiplus::REAL>(lw), static_cast<Gdiplus::REAL>(lh)));
+        if (credits_) { // a dark plate in the logo's place and shape, the lines rolling up through it
+            const Gdiplus::REAL x0 = static_cast<Gdiplus::REAL>(px(20)), y0 = static_cast<Gdiplus::REAL>(px(20)),
+                                w0 = static_cast<Gdiplus::REAL>(px(kLogoW)), h0 = static_cast<Gdiplus::REAL>(px(kLogoH)),
+                                d = static_cast<Gdiplus::REAL>(px(28)); // corner diameter
+            Gdiplus::GraphicsPath plate;
+            plate.AddArc(x0, y0, d, d, 180, 90);
+            plate.AddArc(x0 + w0 - d, y0, d, d, 270, 90);
+            plate.AddArc(x0 + w0 - d, y0 + h0 - d, d, d, 0, 90);
+            plate.AddArc(x0, y0 + h0 - d, d, d, 90, 90);
+            plate.CloseFigure();
+            Gdiplus::SolidBrush shade(Gdiplus::Color(245, 22, 24, 28));
+            g.FillPath(&shade, &plate);
+            Gdiplus::Pen rim(Gdiplus::Color(255, 90, 92, 96), static_cast<Gdiplus::REAL>(px(1.5)));
+            g.DrawPath(&rim, &plate);
+            g.SetClip(&plate);
+            g.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAlias);
+            Gdiplus::FontFamily family(L"Segoe UI");
+            Gdiplus::Font title(&family, static_cast<Gdiplus::REAL>(px(15)), Gdiplus::FontStyleBold, Gdiplus::UnitPixel);
+            Gdiplus::Font line(&family, static_cast<Gdiplus::REAL>(px(13)), Gdiplus::FontStyleRegular, Gdiplus::UnitPixel);
+            Gdiplus::StringFormat centre;
+            centre.SetAlignment(Gdiplus::StringAlignmentCenter);
+            Gdiplus::SolidBrush bright(Gdiplus::Color(255, 235, 235, 235)), gold(Gdiplus::Color(255, 240, 200, 90));
+            const int n = static_cast<int>(sizeof kCredits / sizeof kCredits[0]);
+            for (int i = 0; i < n; ++i) {
+                const double y = px(20) + px(kLogoH) - creditsY_ + i * px(22);
+                if (y < px(20) - px(22) || y > px(20) + px(kLogoH)) continue;
+                // names in gold, the rest white; the first line as the title
+                const bool name = i > 0 && kCredits[i - 1][0] != L'\0' && kCredits[i][0] != L'\0' && i < 12 && (i % 3 == 1);
+                g.DrawString(kCredits[i], -1, i == 0 ? &title : &line,
+                             Gdiplus::PointF(static_cast<Gdiplus::REAL>(cx), static_cast<Gdiplus::REAL>(y)), &centre,
+                             name || i == 0 ? &gold : &bright);
+            }
+        }
+    }
+    BitBlt(target, r.left, r.top, w, h, dc, 0, 0, SRCCOPY);
+    SelectObject(dc, old);
+    DeleteObject(bmp);
+    DeleteDC(dc);
+}
 
 // The wide logo from the exe's resources (RCDATA, PNG), decoded by GDI+; its stream lives as long as the image.
 void AboutWindow::loadLogo() {
@@ -184,15 +324,31 @@ LRESULT AboutWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC dc = BeginPaint(hwnd_, &ps);
-        if (logo_) { // over the metal: its rounded corners are transparent
-            Gdiplus::Graphics g(dc);
-            g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
-            g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
-            g.DrawImage(logo_, Gdiplus::Rect(px(20), px(20), px(kLogoW), px(kLogoH)));
-        }
+        paintTop(dc); // the logo over the metal (its rounded corners are transparent), drawn off screen
         EndPaint(hwnd_, &ps);
         return 0;
     }
+    case WM_LBUTTONDOWN: {
+        const POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+        const RECT logo{px(20), px(20), px(20 + kLogoW), px(20 + kLogoH)};
+        if (PtInRect(&logo, pt)) {
+            const ULONGLONG now = GetTickCount64();
+            if (logoClicks_ == 0 || now - firstClick_ > 3000) {
+                logoClicks_ = 0;
+                firstClick_ = now;
+            }
+            if (++logoClicks_ >= 5) {
+                logoClicks_ = 0;
+                pulseUntil_ = now + static_cast<ULONGLONG>(kPulseSeconds * 1000.0);
+                beatRead_ = -1;
+                if (!animating_) animating_ = SetTimer(hwnd_, kAnimTimer, kAnimMs, nullptr) != 0;
+            }
+        }
+        return 0;
+    }
+    case WM_TIMER:
+        if (wp == kAnimTimer) animate();
+        return 0;
     case WM_COMMAND:
         // OK, Enter, Escape; only clicks (an owner-drawn button also sends BN_SETFOCUS with its id)
         if ((LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) && HIWORD(wp) == BN_CLICKED) close();
@@ -204,11 +360,24 @@ LRESULT AboutWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         close();
         return 0;
     case WM_DESTROY: // (also when the main window goes first: before GDI+ shuts down in main)
+        KillTimer(hwnd_, kAnimTimer);
+        animating_ = credits_ = false;
+        pulseUntil_ = 0;
+        pulse_ = 0.0;
+        logoClicks_ = 0;
         if (font_) DeleteObject(font_);
         font_ = nullptr;
         releaseLogo();
         return 0;
     default:
+        if (msg == kCreditsMsg) { // Ctrl+Shift+D (takeKey)
+            credits_ = !credits_;
+            creditsY_ = 0.0;
+            if (!animating_) animating_ = SetTimer(hwnd_, kAnimTimer, kAnimMs, nullptr) != 0;
+            const RECT r = topRect();
+            InvalidateRect(hwnd_, &r, FALSE);
+            return 0;
+        }
         break;
     }
     return DefWindowProcW(hwnd_, msg, wp, lp);

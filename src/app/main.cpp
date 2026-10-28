@@ -191,6 +191,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 
             MSG msg;
             while (GetMessageW(&msg, nullptr, 0, 0) > 0) {
+                if (AboutWindow::takeKey(msg)) continue;
                 HWND active = GetActiveWindow(); // keyboard navigation in the main window and the preset window
                 if (!active || !IsDialogMessageW(active, &msg)) {
                     TranslateMessage(&msg);

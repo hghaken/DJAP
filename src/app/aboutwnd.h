@@ -4,6 +4,7 @@
 // Enter, Escape or the close box end it.
 #pragma once
 
+#include "monitor.h"
 #include "theme.h"
 #include "tooltips.h"
 #include "updater.h"
@@ -35,6 +36,10 @@ public:
     }
     void refresh(); // the update line and buttons (from the main window's timer and the updater's messages)
     HWND hwnd() const { return hwnd_; }
+    // Deck A's output samples (the Graphs window's scope), for the logo's pulse; GUI thread.
+    void setBeatSource(std::function<const WaveScope*()> source) { beat_ = std::move(source); }
+    // The message loop's key filter: true when `m` was a key of the About window's own (then not dispatched).
+    static bool takeKey(const MSG& m);
 
 private:
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -44,6 +49,10 @@ private:
     void close();
     void loadLogo();
     void releaseLogo();
+    void paintTop(HDC dc);  // the logo (pulsing) or the credits, over the metal
+    void animate();         // a timer tick of the pulse / the credits
+    RECT topRect() const;   // the area they use
+    double readBeat();      // 0..1: how far the bass now stands over its recent average
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
 
     HWND hwnd_ = nullptr, owner_ = nullptr, text_ = nullptr, pathText_ = nullptr, legal_ = nullptr, ok_ = nullptr;
@@ -55,6 +64,15 @@ private:
     std::wstring body_, path_;
     std::wstring updateShown_; // the update line as set (compared whole: a long error was set again at every tick)
     Tooltips tips_;
+    // five clicks on the logo: it pulses with deck A's bass for a while; Ctrl+Shift+D: the credits roll over it
+    std::function<const WaveScope*()> beat_;
+    int logoClicks_ = 0;
+    ULONGLONG firstClick_ = 0, pulseUntil_ = 0;
+    long long beatRead_ = -1;
+    double lp_ = 0.0, fast_ = 0.0, slow_ = 0.0, pulse_ = 0.0;
+    bool credits_ = false;
+    double creditsY_ = 0.0;
+    bool animating_ = false;
     IStream* stream_ = nullptr;
     Gdiplus::Bitmap* logo_ = nullptr;
     theme::Metal metal_;

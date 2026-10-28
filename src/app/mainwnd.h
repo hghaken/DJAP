@@ -109,6 +109,7 @@ private:
     // the program's CPU use, as Task Manager shows it (% of the whole computer), measured over about a second
     double cpuPercent_ = -1.0;
     unsigned long long cpuLastBusy_ = 0, cpuLastWall_ = 0;
+    unsigned long long quietSince_ = 0; // GetTickCount64 when the decks last had sound (or the audio stopped)
     void measureCpu();
     TrayIcon tray_;
     HICON iconSmall_ = nullptr;

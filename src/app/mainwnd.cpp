@@ -135,6 +135,7 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     updateTrayTip();
     nextCheck_ = GetTickCount64() + 15000; // the first update check a little after the start
     audioWindow_.setUpdater(&updater_);
+    about_.setBeatSource([this] { return &audio_.analysis(0).scopeOut; });
     about_.setUpdates([this] { return audioWindow_.updateView(); }, [this] { checkForUpdate(); },
                       [this] { installUpdate(); });
     return true;
@@ -674,6 +675,13 @@ void MainWindow::updateStatus() {
     if (updater_.state() == Updater::State::Available)
         line += L"   |   DJAP " + fromUtf8(updater_.release().version) + L" is available (right-click: About DJAP)";
     if (!saveError_.empty()) line += L"   |   " + fromUtf8(saveError_);
+    // ten minutes of silence on every deck while the audio runs
+    const ULONGLONG now = GetTickCount64();
+    bool silent = audio_.deviceRunning() || audio_.systemRunning();
+    for (int d = 0; d < settings_.decks && silent; ++d)
+        silent = audio_.meters(d).inM < -70.0 && audio_.meters(d).outM < -70.0;
+    if (!silent) quietSince_ = now;
+    if (silent && now - quietSince_ >= 10ull * 60 * 1000) line += L"   |   Is the party over?";
     SendMessageW(status_, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(line.c_str()));
     updateTrayTip();
 }
