@@ -723,13 +723,23 @@ void AnalysisWindow::paintScope(HDC dc, int d, const RECT& p, bool live, int th)
     if (!live) {
         info = L"no audio";
     } else {
-        for (int c = 0; c < 2; ++c) {
-            info += c == 0 ? L"L " : L"   R ";
-            info += peak[c] > 0.0f ? num(L"%.1f dBFS", linToDb(peak[c])) : std::wstring(L"silent");
+        // in full, else (a narrow panel: the counts ran into the next one) without the units and spaces
+        for (int form = 0; form < 2; ++form) {
+            const bool full = form == 0;
+            info.clear();
+            for (int c = 0; c < 2; ++c) {
+                info += c == 0 ? L"L " : (full ? L"   R " : L"  R ");
+                info += peak[c] > 0.0f ? num(full ? L"%.1f dBFS" : L"%.1f", linToDb(peak[c])) : std::wstring(L"silent");
+            }
+            if (!full) info += L" dBFS";
+            info += clipped[0] + clipped[1] > 0
+                        ? (full ? L"   clipped: " : L"  clipped ") + std::to_wstring(clipped[0]) + L" / " +
+                              std::to_wstring(clipped[1]) + (full ? L" samples" : L"")
+                        : std::wstring(full ? L"   no clipping" : L"  no clipping");
+            SIZE sz{};
+            GetTextExtentPoint32W(dc, info.c_str(), static_cast<int>(info.size()), &sz);
+            if (sz.cx <= p.right - p.left - px(12)) break;
         }
-        info += clipped[0] + clipped[1] > 0
-                    ? L"   clipped: " + std::to_wstring(clipped[0]) + L" / " + std::to_wstring(clipped[1]) + L" samples"
-                    : std::wstring(L"   no clipping");
     }
     text(dc, p.left + px(6), p.bottom - th - px(4), info, live && clipped[0] + clipped[1] > 0 ? kRed : kDim);
 }

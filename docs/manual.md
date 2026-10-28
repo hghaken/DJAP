@@ -754,15 +754,8 @@ Click **Graphs** on a deck strip. The window has a row per deck with six panels:
 3. **Loudness** - the momentary loudness of the input (original, orange) and output (processed, turquoise) over the
    last 60 seconds, relative to the target.
 4. **Gain** - the leveller, compressor and density gains over the last 60 seconds.
-5. **Scope** - an oscilloscope of the waveform, left channel above and right below, to see whether the sound clips:
-   50 ms across by default (a tone stands still: the picture starts at a rising zero crossing), or 1, 5, 10, 20 or
-   200 ms, or the last 2 s (then each moment's highest and lowest sample). At 88.2 kHz and more the longest span the
-   kept samples hold is shorter than 200 ms; the title then shows the span drawn. The scope shows the samples
-   themselves (sample peak; the meters show the true peak). The red dotted lines are full scale (0 dBFS); red
-   parts stood at full scale - that is clipping. Under the scope: each channel's peak and the clipped samples of the
-   last 2 s, whatever the time across. For the output the yellow dotted lines are the limiter's ceiling, which the
-   sound should stay inside. **Right-click** the scope for the *input* (orange: what comes in - clipping there is in
-   the source) or the *output* (turquoise), and for the time across.
+5. **Scope** - an oscilloscope of the waveform, left channel above and right below, to see whether the sound clips
+   (the output by default; see "The scope" below).
 6. **Stereo** - a goniometer of the output (mono is the vertical line, left and right the diagonals), with bars for
    the output's correlation (+1 = mono, 0 = unrelated, negative = out of phase) and the stereo width of input and
    output (0 % = mono). They do not depend on the level: two decks with the same music show nearly the same values
@@ -771,6 +764,37 @@ Click **Graphs** on a deck strip. The window has a row per deck with six panels:
    dynamics.
 
 The history is cleared at every start of the audio.
+
+**The scope**
+
+![The scope: a clean output (left) and an input that clips (right)](images/scope.png)
+
+The scope draws the waveform itself, sample by sample, so you can see what the meters only summarise: whether the
+sound reaches full scale and is cut off there.
+
+- **What it shows** - the title says which signal and how much time across. **Right-click** the scope to choose:
+  - *Scope of the input* (orange) - what comes into DJAP. Clipping here is already in the source - the music file,
+    the DJ software's gain or the virtual cable's level - and DJAP cannot undo it: turn the source down.
+  - *Scope of the output* (turquoise, the default) - what DJAP sends out, after the limiter.
+  - The time across: 1, 5, 10, 20, **50** (default), 200 ms or the **last 2 s**. Up to 200 ms the scope draws the
+    samples as a line and starts at a rising zero crossing, so a steady tone stands still. The last 2 s draws each
+    moment's highest and lowest sample: the whole recent past at a glance, best for catching a short clip. At
+    88.2 kHz and more the longest span the scope keeps is shorter than 200 ms; the title then shows the span drawn.
+- **The lines** - the red dotted lines are full scale (0 dBFS), the highest a sample can be. On the output the
+  yellow dotted lines are the limiter's ceiling: the output should stay inside them. The
+  middle line of each channel is silence (0).
+- **Red** - a part of the waveform drawn red stood at full scale: that is clipping, heard as a hard, crackling edge.
+  In the last 2 s view each moment with a clipped sample is a red bar.
+- **The line under it** - the peak of each channel in dBFS and the number of samples at full scale in the last 2 s,
+  whatever the time across ("no clipping" when there were none); red when something clipped.
+
+How to read it: a clean output stays inside the yellow lines and never turns red (left in the picture). An input
+that is red (right: a source played 9 dB too hot) is clipped before DJAP; the output can still look clean, because
+the limiter keeps it under the ceiling, but the damage is in the sound already. With the limiter on and its ceiling
+under 0 dBTP (the default is -1 dBTP), the output never turns red - the output gain after the limiter only turns
+down. A red output means the limiter is switched off in the loudness preset, its ceiling is set to 0 dBTP, or Bypass
+is lit and the input clips. The scope shows the samples themselves (sample
+peak); the meters show the true peak, which can be a little higher between the samples.
 
 ### 8.2 The spectrum window
 
