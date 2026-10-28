@@ -278,8 +278,8 @@ cable's list then shows the format in use under *Current format* - for example `
 ![The main window with two decks](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
-no menu bar: **right-click anywhere in it** for *Setup...*, *About DJAP...* (the version, the settings file in use
-and the licences) and *Shutdown*. Every control has a tooltip that explains it
+no menu bar: **right-click anywhere in it** for *Setup...*, *About DJAP...* (the version, the settings file in use,
+the licences, the updates and a link to DJAP's GitHub page - source, releases and manuals) and *Shutdown*. Every control has a tooltip that explains it
 when the mouse rests on it. The window can be made as large as you like; it cannot be made smaller than the size
 that still shows every meter row and a readable spectrum.
 

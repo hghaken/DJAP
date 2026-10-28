@@ -5,6 +5,8 @@
 #include "resource.h"
 #include "version.h"
 
+#include <commctrl.h>
+#include <shellapi.h>
 #include <windowsx.h>
 
 #include <algorithm>
@@ -26,7 +28,7 @@ namespace {
 const wchar_t* const kClass = L"APAboutWindow";
 const int kLogoW = 520, kLogoH = 130; // the wide logo (assets/logo.png, 4:1) at 100 %
 const int kWidth = 560, kHeight = 430;
-enum { idCheckNow = 201, idInstall };
+enum { idCheckNow = 201, idInstall, idLink };
 const UINT_PTR kAnimTimer = 1;
 const UINT kAnimMs = 30;
 const UINT kCreditsMsg = WM_APP + 1;
@@ -280,6 +282,13 @@ void AboutWindow::create() {
     tips_.add(checkNow_, L"Asks GitHub now whether a newer DJAP is there. Nothing is downloaded or installed.");
     tips_.add(install_, L"Downloads the newer DJAP, checks it against GitHub's checksum and installs it. DJAP closes "
                         L"for this and starts again by itself; running audio starts again too.");
+    // the program's GitHub page (client, 2026-10-28): opens in the default browser
+    const std::wstring url = fromUtf8(Updater::kRepo);
+    link_ = CreateWindowExW(0, WC_LINK, (L"Source, releases and manuals: <a href=\"" + url + L"\">" + url + L"</a>").c_str(),
+                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | LWS_TRANSPARENT, x, top + px(196), w, px(20), hwnd_,
+                            reinterpret_cast<HMENU>(static_cast<INT_PTR>(idLink)), inst, nullptr);
+    tips_.add(link_, L"Opens DJAP's page on GitHub in your web browser: the source code, every release with its setup "
+                     L"program, and the manuals.");
     ok_ = CreateWindowExW(0, L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                           px(kWidth - 20 - 96), px(kHeight - 20 - 30), px(96), px(30), hwnd_,
                           reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDOK)), inst, nullptr);
@@ -291,7 +300,7 @@ void AboutWindow::setFonts() {
     ncm.cbSize = sizeof ncm;
     SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0, dpi_);
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
-    for (HWND h : {text_, pathText_, legal_, updateText_, checkNow_, install_, ok_})
+    for (HWND h : {text_, pathText_, legal_, updateText_, checkNow_, install_, link_, ok_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -349,6 +358,15 @@ LRESULT AboutWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_TIMER:
         if (wp == kAnimTimer) animate();
         return 0;
+    case WM_NOTIFY: { // the GitHub link: a click or Enter opens it in the default browser
+        const NMHDR* h = reinterpret_cast<const NMHDR*>(lp);
+        if (h->idFrom == idLink && (h->code == NM_CLICK || h->code == NM_RETURN)) {
+            const NMLINK* l = reinterpret_cast<const NMLINK*>(lp);
+            ShellExecuteW(hwnd_, L"open", l->item.szUrl, nullptr, nullptr, SW_SHOWNORMAL);
+            return 0;
+        }
+        break;
+    }
     case WM_COMMAND:
         // OK, Enter, Escape; only clicks (an owner-drawn button also sends BN_SETFOCUS with its id)
         if ((LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) && HIWORD(wp) == BN_CLICKED) close();

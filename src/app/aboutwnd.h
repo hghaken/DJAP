@@ -56,7 +56,7 @@ private:
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
 
     HWND hwnd_ = nullptr, owner_ = nullptr, text_ = nullptr, pathText_ = nullptr, legal_ = nullptr, ok_ = nullptr;
-    HWND checkNow_ = nullptr, install_ = nullptr, updateText_ = nullptr;
+    HWND checkNow_ = nullptr, install_ = nullptr, updateText_ = nullptr, link_ = nullptr;
     std::function<UpdateView()> view_;
     std::function<void()> checkNowDo_, installDo_;
     HFONT font_ = nullptr;
