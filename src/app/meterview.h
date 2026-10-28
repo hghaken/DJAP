@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The meter panel of a deck strip: LED bars of the input's and output's peak per channel (In L / R, Out L / R) with
 // the loudness of each (momentary LUFS) and the target as lines across them, a dB and a LUFS scale; the gain of each
 // stage (leveller up / down, compressor, de-esser, clipper, limiter) and under them the spectrum of input and output

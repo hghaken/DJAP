@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The plug-in for DJ software (docs/design.md section 10): one deck - stereo in, stereo out - with the same chain,
 // presets and colours as the program. Processor and controller in one object (SingleComponentEffect), so the
 // window reads the deck's meters directly. Every chain value is a parameter the host can show and automate; the

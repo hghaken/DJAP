@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The update check's pure part: SHA-256 against the standard's vectors, reading a GitHub release answer, version
 // order, and answers that must be refused.
 #include "check.h"

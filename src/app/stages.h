@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The nine stage switches of a preset: their parameters, names and tooltips (preset window check boxes, meter rows).
 #pragma once
 

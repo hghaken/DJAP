@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Look-ahead true-peak limiter on hostile signals (handbook 10.10, fault 11 and fault 25).
 #include "check.h"
 #include "deck.h"

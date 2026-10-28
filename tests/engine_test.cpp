@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The live audio path without a driver: device sample formats and the engine that the ASIO host calls once per
 // period (docs/design.md section 6, handbook 11, 12). The test plays the driver: it hands the engine buffers.
 #include "check.h"

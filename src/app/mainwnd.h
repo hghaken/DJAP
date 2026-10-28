@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Main window: two deck strips side by side (loudness preset and colour - one set, on deck A, when the presets are
 // linked -, processing / bypass, Graphs, meters), no menu bar (a right-click opens Setup / Shutdown)
 // and a status bar (audio state, latency added by the processing). The stage switches are in the preset window.

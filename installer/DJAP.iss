@@ -42,6 +42,9 @@ AppId={{{#AppGuid}}
 AppName=DJAP
 AppVersion={#AppVersion}
 AppVerName=DJAP (DJ Audio Processor) {#AppVersion}
+AppCopyright=Copyright (C) 2026 hghaken. GPL-3.0-or-later.
+AppPublisher=hghaken
+AppPublisherURL=https://github.com/hghaken/DJAP
 DefaultDirName={autopf}\DJAP
 ; the same AppId as AudioProcessor's setup: an update; its old folder is replaced by the new one (see [Code])
 UsePreviousAppDir=no
@@ -80,7 +83,7 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 [CustomMessages]
 VacTitle=VAC (Virtual Audio Cable)
 VacSubtitle=Needed only to run Windows' own sound through DJAP.
-VacText=VAC was not found on this PC.%n%nYou need it (the free Lite version is enough) to send ordinary Windows sound - browser, music player, video - through DJAP with one channel: make a VAC line the Windows default playback device, choose that line as the input in DJAP's Setup window and your speakers as the output.%n%nDJ use with two decks through an ASIO audio interface does not need it.%n%nVAC is a separate program by another author and setup does not install it. Leave "Open the VAC download page" ticked on the last page to get it.
+VacText=VAC was not found on this PC.%n%nYou need it (the free Lite version is enough) to send ordinary Windows sound - browser, music player, video - through DJAP with one channel: make a VAC line the Windows default playback device, choose that line as the input in DJAP's Setup window and your speakers as the output.%n%nDJ use with two decks through an ASIO® audio interface does not need it.%n%nVAC is a separate program by another author and setup does not install it. Leave "Open the VAC download page" ticked on the last page to get it.
 MediaTitle=Media Foundation
 MediaSubtitle=A part of Windows that this edition does not have.
 MediaText=This Windows edition (an N edition) has no Media Foundation. DJAP itself runs without it, but the command-line tool DJAPCmd needs it to start and to read MP3, M4A, WMA and FLAC files.%n%nSetup can add Microsoft's Media Feature Pack now; Windows downloads it from Windows Update, which can take a few minutes.
@@ -96,8 +99,8 @@ ReadyMediaMissing=Media Foundation: missing (only DJAPCmd needs it)
 ReadyMediaAdd=Media Feature Pack: will be added from Windows Update
 ReadyVacFound=VAC: found (%1)
 ReadyVacMissing=VAC: not found (only needed for Windows' own sound)
-ReadyAsio=ASIO drivers: %1
-ReadyNoAsio=ASIO drivers: none (two decks need an ASIO interface; one channel also works with WASAPI)
+ReadyAsio=ASIO® drivers: %1
+ReadyNoAsio=ASIO® drivers: none (two decks need an ASIO interface; one channel also works with WASAPI)
 OpenVacPage=Open the VAC download page
 DeleteSettings=Also delete your DJAP settings and own presets?%n%n%1
 StartupGroup=When Windows starts:

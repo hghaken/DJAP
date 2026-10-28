@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Loudness measurement after ITU-R BS.1770-5 and EBU Tech 3341 / 3342.
 #pragma once
 

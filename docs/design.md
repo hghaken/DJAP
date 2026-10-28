@@ -14,10 +14,13 @@ to the sections of the `audio-processing` handbook (the design basis below, not 
 technical manual cites the public sources.
 
 DJAP is a standalone Windows audio processor for DJs: two independent stereo channels (deck A and deck B)
-come in on an ASIO interface (4 inputs), each runs its own dynamics chain, and goes out on 4 outputs. The same DSP
+come in on an ASIO® interface (4 inputs), each runs its own dynamics chain, and goes out on 4 outputs. The same DSP
 code renders WAV files offline (for tests and checks) and is kept free of Windows / GUI code; it also runs as the
-plug-in for DJ software (section 10, since 2026-10-26). Licence GPL-3.0; all code written fresh. Design basis: the
-`audio-processing` skill's handbook (sections 3-5, 9-12, 16, Appendix B) and the standards / papers it cites.
+plug-in for DJ software (section 10, since 2026-10-26). Licence GPL-3.0-or-later; the code was written for DJAP with
+the AI assistant Claude (one adapted design routine: hiir's halfband designer, `THIRD_PARTY.md`). Design basis: the
+`audio-processing` skill's handbook (sections 3-5, 9-12, 16, Appendix B) - the developer's own knowledge base, built
+from public standards, papers and measurements, which rules out presets, values or layouts of commercial products -
+and the standards / papers it cites (technical manual, chapter 21).
 
 ## 1. Requirements
 
@@ -369,7 +372,7 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
 ## 7. DJ-specific notes
 
 - An ASIO driver usually serves one program. With DJ software on the same interface, the standalone app needs the
-  signal on separate inputs (e.g. a second interface or external sources). The VST3 route avoids this.
+  signal on separate inputs (e.g. a second interface or external sources). The plug-in route avoids this.
 - The deck signal should be **pre-fader** (before the channel fader / crossfader): the leveller then settles while the
   DJ pre-listens, and fader moves are not "corrected". Post-fader works, but the hold rule then carries the fades.
 - EQ kills and filter sweeps look like level changes to the leveller; the hold rule catches deep cuts (a freeze switch

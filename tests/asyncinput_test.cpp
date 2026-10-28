@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // A deck input on another clock (docs/design.md section 6.1): the capture side and the output side are simulated
 // with their own clocks - drift in ppm, late callbacks, pauses - and the reader must hold its fill, measure the drift,
 // never run dry in normal running, recover from faults, and pass the signal unchanged (bit-exact at read speed 1,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The stages of the chain, each on its own with known answers (handbook 10, 16.1).
 #include "check.h"
 #include "deckrun.h"

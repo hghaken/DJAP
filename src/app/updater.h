@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Updates (docs/design.md section 8, "Updates"; client, 2026-10-25: "check daily, report, install after one click
 // and an off switch in Setup"; 2026-10-26: running audio starts again after the update). Asks GitHub for the latest release, downloads its setup into
 // %TEMP%\DJAP-update, checks it against the SHA-256 GitHub publishes for it (no checksum: no install), and starts it

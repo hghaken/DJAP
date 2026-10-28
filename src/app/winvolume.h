@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The volume of Windows' default playback device - what the keyboard's volume keys, the taskbar and the volume
 // flyout change. Read on the GUI thread by polling (COM in the GUI thread's apartment); the default device is looked
 // up again every second, so a new default device is followed.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Audio through the Windows APIs other than ASIO - WASAPI (shared or exclusive), DirectSound, MME - with miniaudio
 // (third_party/miniaudio). Each deck is one duplex stream: its input device -> the deck -> its output device, on the
 // stream's own thread; a deck without devices does not run. With drift correction (the default; the input and the

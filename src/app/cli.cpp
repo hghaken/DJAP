@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // DJAPCmd: the command-line program (docs/design.md section 8). Renders WAV files through the real deck
 // processors, lists the presets, measures files (EBU R 128 / BS.1770) and lists the ASIO drivers. Never plays audio.
 #include "appstate.h"

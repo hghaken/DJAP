@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The streams of WASAPI / DirectSound / MME (sysaudio.*) on miniaudio's null backend: devices that make no sound and
 // run on a timer, so nothing is heard and no real device is opened. Checks the route a deck takes - one duplex
 // stream, or with drift correction a capture stream into the deck's AsyncInput and a playback stream that reads it -

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Analysis for the GUI's graphs (docs/design.md section 8): spectrum (FFT, log-frequency points) and stereo
 // statistics (correlation, width, goniometer points). Fed on the GUI thread with samples the deck copied into its
 // analysis rings; nothing here runs on the audio thread.

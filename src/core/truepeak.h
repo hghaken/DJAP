@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // True-peak detection after ITU-R BS.1770-5 Annex 2: polyphase windowed-sinc interpolation.
 #pragma once
 

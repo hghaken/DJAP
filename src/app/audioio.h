@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The GUI's audio side: owns the engine (both decks), keeps each deck's configuration and publishes it for the
 // sample rate in use, drains the decks' meter rings into loudness meters (EBU M / S / I / LRA, true peak, gain of
 // each stage), and - for tests without a device - runs a WAV file through the engine in real time with the output

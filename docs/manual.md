@@ -71,10 +71,10 @@ Things to know up front:
 ### 2.1 What you need
 
 - Windows 10 or 11, 64-bit.
-- For two decks: an audio interface with an **ASIO** driver and at least 4 inputs and 4 outputs (two stereo pairs
+- For two decks: an audio interface with an **ASIO®** driver and at least 4 inputs and 4 outputs (two stereo pairs
   each way).
 - For one channel (Windows' own sound): any sound card. To run Windows' sound through DJAP you need a virtual audio
-  cable, such as VAC (Virtual Audio Cable; the free Lite version is enough) - see 3.2.
+  cable, such as VAC (Virtual Audio Cable®; the free Lite version is enough) - see 3.2.
 
 No other software is needed: the programs carry their own runtime.
 
@@ -258,9 +258,11 @@ The virtual cable's settings, step by step and with pictures, are in 3.6.
 
 ### 3.6 Setting up the virtual cable (VAC), step by step
 
+<img src="images/vac-logo.png" width="64" alt="Virtual Audio Cable">
+
 A virtual cable brings sound from one program to another inside the computer: what a player or Windows plays into
 the cable's **playback** device comes out of its **recording** device, where DJAP picks it up. VAC (Virtual Audio
-Cable) adds one or more such cables, called *Line 1*, *Line 2* and so on. The Lite version has one cable; the full
+Cable, by Eugene Muzychenko - <https://vac.muzychenko.net/en/>) adds one or more such cables, called *Line 1*, *Line 2* and so on. The Lite version has one cable; the full
 version more - two decks from one DJ program that sends each deck to its own output need two.
 
 The settings below were measured with DJAP: a 1 kHz tone through the cable, recorded at each setting (chapter 10
@@ -299,13 +301,13 @@ in the taskbar) and then *More sound settings* for the classic Sound dialog.
   Format* **24 bit, 44100 Hz (Studio Quality)** - or the rate of your music. Leave the two *Exclusive Mode* boxes on.
   On the tab *Enhancements* (if it is there): all off.
 
-![The cable's playback device, Advanced tab: 2 channel, 24 bit, 44100 Hz (here the cable was renamed "VAC-Line 1" in Windows; the name does not matter)](images/windows-line-playback.png)
+![The cable's playback device, Advanced tab: 2 channel, 24 bit, 44100 Hz (here the cable was renamed "VAC-Line 1" in Windows; the name does not matter). Used with permission from Microsoft.](images/windows-line-playback.png)
 
 - On the **Recording** tab, double-click the same cable, tab **Advanced**: the same format, **24 bit, 44100 Hz**.
   Tab **Listen**: *Listen to this device* **off** - on, Windows plays the cable to the speakers itself as well, and
   you hear everything twice (once without DJAP's processing).
 
-![The cable's recording device, Advanced tab: the same format (the Listen tab next to it: "Listen to this device" off)](images/windows-line-recording.png)
+![The cable's recording device, Advanced tab: the same format (the Listen tab next to it: "Listen to this device" off). Used with permission from Microsoft.](images/windows-line-recording.png)
 
 - For **Windows' own sound** through DJAP (one channel, 3.2): make the cable's playback device the **default
   playback device** (right-click it: *Set as Default Device*). For a **player or DJ software**: choose the cable as
@@ -356,7 +358,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
 no menu bar: **right-click anywhere in it** for *Setup...*, *About DJAP...* (the version, the settings file in use,
-the licences, the updates and a link to DJAP's GitHub page - source, releases and manuals) and *Shutdown*. Every control has a tooltip that explains it
+the copyright and licences with the ASIO Compatible logo, the updates, a link to DJAP's GitHub page - source, releases and manuals - and a Disclaimer button) and *Shutdown*. Every control has a tooltip that explains it
 when the mouse rests on it. The window can be made as large as you like; it cannot be made smaller than the size
 that still shows every meter row and a readable spectrum.
 
@@ -862,7 +864,7 @@ The window is one deck strip of the program:
 - **Look-ahead** - the limiter's look-ahead, 0, 1.5, 2, 3 or 5 ms (see 5.1), a list of these five in the DJ software
   too; the DJ software is told the new delay. An old project's 0.5 or 1.0 ms runs as 1.5 ms.
 - **Bypass** - lit: the input goes out unchanged, delayed by the same look-ahead.
-- **About** - the version, the settings file in use, the licences, the update check (9.4) and a link to DJAP's
+- **About** - the version, the settings file in use, the copyright and licences, the update check (9.4), a Disclaimer button and a link to DJAP's
   GitHub page. The button reads **Update** and is lit when a newer version exists.
 - **Loudness** and **Colour** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
   and colour windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
@@ -1106,5 +1108,23 @@ old file stays.
 
 ---
 
-DJAP is free software under the GNU General Public License v3. ASIO is a trademark and software of Steinberg Media
-Technologies GmbH.
+**Disclaimer.** DJAP is provided "as is", without warranty of any kind, and you use it at your own risk (GNU GPL,
+sections 15 and 16). It can make sound louder than its source: start with the volume low, and never set levels that
+can damage hearing, speakers or other equipment - the authors are not liable for any damage to hearing, equipment,
+recordings, data or settings, or for loss of income, for example from a dropout during a performance. Its meters
+follow the published loudness standards but are not a certified measuring instrument: check a delivery that must
+meet a broadcaster's or platform's specification with a certified meter. The code was written with an AI assistant
+and tested, but it may still contain errors. Third-party software such as a virtual audio cable is installed and
+used under its own licence and at your own responsibility. DJAP is not affiliated with, endorsed or sponsored by
+any company or product named in this manual; such names only identify what DJAP works with.
+
+DJAP is free software: Copyright (C) 2026 hghaken, licensed under the GNU General Public License version 3 or (at
+your option) any later version, with ABSOLUTELY NO WARRANTY. Written with the AI assistant Claude (Anthropic) and
+improved with outside reviews by Grok (xAI).
+
+<img src="images/vst-compatible-logo.png" width="90" alt="VST compatible"> <img src="images/asio-compatible-logo.png" width="90" alt="ASIO compatible">
+
+VST is a registered trademark of Steinberg Media Technologies GmbH. ASIO is a registered trademark of Steinberg
+Media Technologies GmbH. Windows is a trademark of the Microsoft group of companies. Virtual Audio Cable is a
+registered trademark of its developer, Eugene Muzychenko; its logo and the screenshots of its Control Panel are shown
+only to identify it. Other names are trademarks of their respective owners.

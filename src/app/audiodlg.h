@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Setup window (client, 2026-10-25: "all settings in one window"; was the Audio window, docs/design.md section 6):
 // the program-wide settings - limiter look-ahead, start with Windows - and the audio API - ASIO, WASAPI (shared or exclusive), DirectSound, MME.
 // ASIO: the driver (from the registry; opened only on request, after a warning), the channel pair of each deck's

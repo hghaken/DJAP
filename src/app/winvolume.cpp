@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "winvolume.h"
 
 #include "appstate.h"

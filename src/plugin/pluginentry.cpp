@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The plug-in's factory: one class, an audio effect (processor and controller in one).
 #include "plugin.h"
 #include "pluginids.h"

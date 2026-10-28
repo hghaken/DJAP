@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The look of the main, preset and Audio windows (docs/design.md section 8): a brushed aluminium background - a light
 // to darker gradient under a random pattern of fine horizontal brush strokes - and dark 3D push buttons that light up
 // green while checked (owner-drawn, anti-aliased with GDI+). The meter panel and the analysis graphs keep their own

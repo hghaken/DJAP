@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The user-visible parameters of one deck's chain, their metadata, and the shipped presets.
 #pragma once
 

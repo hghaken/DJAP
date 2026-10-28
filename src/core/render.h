@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Offline rendering through the real deck processors, in the same chunks as a device would use.
 #pragma once
 

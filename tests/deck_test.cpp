@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The whole deck: bit-exact bypass and neutral chain, bad input, MXCSR, no allocation on the audio path, no clicks
 // on changes, deck independence and latency through renderOffline, CPU, and the shipped presets (handbook 11, 16).
 #include "check.h"

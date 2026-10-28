@@ -1,10 +1,12 @@
 # DJAP (DJ Audio Processor)
 
 A standalone Windows loudness and dynamics processor. For DJs: two independent stereo channels - deck A and deck
-B - come in on an ASIO interface, each runs its own processing chain with its own preset, and goes out again on
+B - come in on an ASIO® interface, each runs its own processing chain with its own preset, and goes out again on
 its own output pair. For other Windows users: one channel, one stereo processor (Setup window, "Processing"). A
 plug-in brings the same processing into DJ software, one deck per plug-in. The same code renders WAV files offline.
-Licence: GPL-3.0. The code was improved with outside reviews by Grok (xAI).
+Copyright (C) 2026 hghaken. Licence: GPL-3.0-or-later (`LICENSE`); free software, with ABSOLUTELY NO WARRANTY.
+The code was written with the AI assistant Claude (Anthropic), implemented from public standards and papers (the
+sources are listed in the technical manual), and improved with outside reviews by Grok (xAI).
 
 ## Download
 
@@ -13,8 +15,10 @@ The setup program is on the [releases page](https://github.com/hghaken/DJAP/rele
 plug-in for DJ software (into the computer's plug-in folder; an installation for all users).
 
 <img src="docs/images/vst-compatible-logo.png" width="110" alt="VST compatible">
+<img src="docs/images/asio-compatible-logo.png" width="90" alt="ASIO compatible">
 
-VST is a registered trademark of Steinberg Media Technologies GmbH.
+VST is a registered trademark of Steinberg Media Technologies GmbH. ASIO is a registered trademark of Steinberg Media
+Technologies GmbH.
 
 ## Manuals
 
@@ -112,10 +116,12 @@ with a Start menu entry and an uninstaller - and, on its "Select Components" pag
 - the Windows components the programs use (no Visual C++ redistributable is needed: the runtime is linked in);
 - Media Foundation, which the N editions of Windows lack: only `DJAPCmd` needs it, and setup offers to
   add Microsoft's Media Feature Pack from Windows Update;
-- VAC (Virtual Audio Cable; the free Lite version is enough), needed only to run Windows' own sound through the
+- VAC (Virtual Audio Cable®, <https://vac.muzychenko.net/en/>; the free Lite version is enough), needed only to run Windows' own sound through the
   processor with one channel - not for DJ use through an ASIO interface. Setup does not install it; when it is
   missing it says what it is for and offers its download page;
 - the ASIO drivers it finds (listed on the last page before installing).
+
+<img src="docs/images/vac-logo.png" width="48" alt="Virtual Audio Cable">
 
 After the installation DJAP starts and, at the first start, opens the Setup window. A plug-in that DJ software has
 loaded is never a reason to close that software: the setup replaces it when Windows starts again. Setup updates an existing
@@ -160,4 +166,27 @@ which renders synthetic songs through every loudness preset and checks the resul
 - `docs/manual.md`, `docs/technical.md` - the user and technical manuals (and their PDFs); `docs/images/` - the
   manual's screenshots
 
-ASIO is a trademark and software of Steinberg Media Technologies GmbH.
+## Disclaimer
+
+DJAP is provided "as is", without warranty of any kind, and you use it at your own risk. It can make sound louder
+than its source: start with the volume low, and never set levels that can damage hearing, speakers or other
+equipment. The authors are not liable for any damage to hearing, equipment, recordings, data or settings, or for
+loss of income (for example from a dropout during a performance). The meters follow the published loudness
+standards but are not a certified measuring instrument. The code was written with an AI assistant and tested, but
+may still contain errors. Third-party software such as a virtual audio cable is used under its own licence and at
+your own responsibility. DJAP is not affiliated with, endorsed or sponsored by any company or product named here;
+such names only identify what DJAP works with.
+
+## Licence and trademarks
+
+DJAP is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later
+version. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied
+warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See `LICENSE`. The third-party parts and their
+licences are in `THIRD_PARTY.md`; the Steinberg ASIO SDK files a release was built with are attached to that
+release.
+
+VST is a registered trademark of Steinberg Media Technologies GmbH. ASIO is a registered trademark of Steinberg Media
+Technologies GmbH. Windows is a trademark of the Microsoft group of companies. Virtual Audio Cable is a registered
+trademark of its developer, Eugene Muzychenko; its logo is shown only to identify it. Other names are trademarks of their
+respective owners.

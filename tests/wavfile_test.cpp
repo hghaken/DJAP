@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // WAV files: float 32 and PCM 24 written and read back, RF64 (the form over 4 GB, forced here: a real 4 GB file is too
 // large for a test; the size rule is checked at its edge), the header's sizes byte for byte, non-finite samples, the
 // pad byte of an odd data size, no half file after a failed write, and broken or hostile RF64 sizes (outside review:

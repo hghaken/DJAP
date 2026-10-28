@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Program settings and presets, stored in a readable UTF-8 ini file (one comment line per value).
 #pragma once
 

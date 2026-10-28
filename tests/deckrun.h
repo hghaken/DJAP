@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Helpers to run one deck processor on test signals.
 #pragma once
 

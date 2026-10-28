@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // About (the right-click menus' About DJAP...): the wide logo (icon and name on a metal plate) on the brushed metal, the
 // version, what the program is, where the settings are kept, the licences, and the updates - Check now, Install
 // update and what the last check found, as in the Setup window (client, 2026-10-27). Modal to the main window; OK,
@@ -53,6 +54,7 @@ private:
     void setFonts();
     void loadLogo();
     void releaseLogo();
+    RECT badgeRect() const; // where the ASIO / VST Compatible logo stands (right of the licence lines)
     void paintTop(HDC dc);  // the logo (pulsing) or the credits, over the metal
     void animate();         // a timer tick of the pulse / the credits
     RECT topRect() const;   // the area they use
@@ -60,7 +62,7 @@ private:
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
 
     HWND hwnd_ = nullptr, owner_ = nullptr, text_ = nullptr, pathText_ = nullptr, legal_ = nullptr, ok_ = nullptr;
-    HWND checkNow_ = nullptr, install_ = nullptr, updateText_ = nullptr, link_ = nullptr;
+    HWND checkNow_ = nullptr, install_ = nullptr, updateText_ = nullptr, link_ = nullptr, disclaimer_ = nullptr;
     std::function<UpdateView()> view_;
     std::function<void()> checkNowDo_, installDo_;
     HFONT font_ = nullptr;
@@ -80,6 +82,10 @@ private:
     bool plugin_ = false; // setPlugin
     IStream* stream_ = nullptr;
     Gdiplus::Bitmap* logo_ = nullptr;
+    // Steinberg's Compatible logo of the SDK the module is built with (its usage guidelines: in the About box;
+    // licence reviews, 2026-10-28): ASIO in the program (ASIO is its default API), VST in the plug-in
+    IStream* badgeStream_ = nullptr;
+    Gdiplus::Bitmap* badge_ = nullptr;
     theme::Metal metal_;
 };
 

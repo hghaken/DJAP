@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The GUI's analysis (docs/design.md section 8): FFT against a plain DFT, spectrum levels of sines, stereo
 // correlation and width of known signals.
 #include "analysis.h"

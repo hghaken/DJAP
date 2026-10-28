@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // A deck input that runs on another clock than the output (docs/design.md section 6.1): a capture stream of a
 // Windows audio API (WASAPI / DirectSound / MME) writes into a ring; the ASIO buffer switch reads it at its own rate
 // through a windowed-sinc interpolator whose read speed follows the two clocks' drift. The read speed is steered by

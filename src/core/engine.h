@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The live audio path of both decks (docs/design.md section 6): one device period at a time, converted from the
 // device's sample format, in chunks of at most kChunk frames through fixed buffers, deck A then deck B, converted
 // back. Health counters for the Audio window (handbook 11.7). Platform-neutral: the ASIO host calls process() from

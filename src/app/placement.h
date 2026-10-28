@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Where the program's own windows and message boxes appear. A message box (and a small prompt) is centred on the
 // window it belongs to (the client), kept inside that window's monitor work area. A window remembers its place
 // (client, 2026-10-26: "when no position is known: centre it in the middle of the screen; after that remember every

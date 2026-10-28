@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Sample formats of a device buffer (the little-endian ASIO sample types) and conversion to and from float.
 // Platform-neutral: the ASIO host maps the driver's types onto these.
 #pragma once

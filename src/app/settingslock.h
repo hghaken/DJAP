@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // One writer of the settings file at a time across processes: the program and every plug-in instance read, merge and
 // write the same %APPDATA%\DJAP\DJAP.ini (Settings::saveMerged). Two of them saving at the same moment could each
 // merge against the file as it was before the other wrote, and the second write would drop the first one's change

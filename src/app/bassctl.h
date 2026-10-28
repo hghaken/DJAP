@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The four bass sliders (client, 2026-10-25; on the main window's strips until 2026-10-26, now in the spectrum
 // window - its sliders and its graph's bass point): bass level (the colour's bass shelf), bass enhancer
 // and bass width (the loudness preset), bass frequency (both). One rule: the trackbar's positions, the value text,

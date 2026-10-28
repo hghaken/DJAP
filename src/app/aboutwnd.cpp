@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include "aboutwnd.h"
 
 #include "appstate.h"
@@ -27,8 +28,21 @@ namespace {
 
 const wchar_t* const kClass = L"APAboutWindow";
 const int kLogoW = 520, kLogoH = 130; // the wide logo (assets/logo.png, 4:1) at 100 %
-const int kWidth = 560, kHeight = 430;
-enum { idCheckNow = 201, idInstall, idLink };
+const int kWidth = 560, kHeight = 484;
+enum { idCheckNow = 201, idInstall, idLink, idDisclaimer };
+
+// The disclaimer (client, 2026-10-28; the same in substance as the README's and the manuals')
+const wchar_t* const kDisclaimer =
+    L"DJAP is provided \"as is\", without warranty of any kind, and you use it at your own risk (GNU GPL, sections 15 "
+    L"and 16).\n\n"
+    L"It can make sound louder than its source: start with the volume low, and never set levels that can damage "
+    L"hearing, speakers or other equipment. The authors are not liable for any damage to hearing, equipment, "
+    L"recordings, data or settings, or for loss of income - for example from a dropout during a performance.\n\n"
+    L"Its meters follow the published loudness standards but are not a certified measuring instrument.\n\n"
+    L"The code was written with an AI assistant and tested, but it may still contain errors. Third-party software such "
+    L"as a virtual audio cable is used under its own licence and at your own responsibility.\n\n"
+    L"DJAP is not affiliated with, endorsed or sponsored by any company or product it names; such names only identify "
+    L"what DJAP works with.";
 const UINT_PTR kAnimTimer = 1;
 const UINT kAnimMs = 30;
 const UINT kCreditsMsg = WM_APP + 1;
@@ -183,11 +197,13 @@ void AboutWindow::unregisterClass() {
     g_registered = false;
 }
 
-// The wide logo from the module's resources (RCDATA, PNG), decoded by GDI+; its stream lives as long as the image.
-void AboutWindow::loadLogo() {
-    if (logo_) return;
+namespace {
+// A PNG from the module's resources (RCDATA), decoded by GDI+; its stream lives as long as the image. Nothing when the
+// module has no such resource (the plug-in has no ASIO logo).
+void loadPng(int id, IStream*& stream, Gdiplus::Bitmap*& image) {
+    if (image) return;
     HINSTANCE inst = moduleInstance();
-    HRSRC res = FindResourceW(inst, MAKEINTRESOURCEW(IDR_LOGO), RT_RCDATA);
+    HRSRC res = FindResourceW(inst, MAKEINTRESOURCEW(id), RT_RCDATA);
     HGLOBAL data = res ? LoadResource(inst, res) : nullptr;
     const DWORD size = res ? SizeofResource(inst, res) : 0;
     const void* bytes = data ? LockResource(data) : nullptr;
@@ -196,19 +212,43 @@ void AboutWindow::loadLogo() {
     if (!mem) return;
     std::memcpy(GlobalLock(mem), bytes, size);
     GlobalUnlock(mem);
-    if (FAILED(CreateStreamOnHGlobal(mem, TRUE, &stream_))) {
+    if (FAILED(CreateStreamOnHGlobal(mem, TRUE, &stream))) {
         GlobalFree(mem);
         return;
     }
-    logo_ = Gdiplus::Bitmap::FromStream(stream_);
-    if (logo_ && logo_->GetLastStatus() != Gdiplus::Ok) releaseLogo();
+    image = Gdiplus::Bitmap::FromStream(stream);
+    if (image && image->GetLastStatus() != Gdiplus::Ok) {
+        delete image;
+        image = nullptr;
+        stream->Release();
+        stream = nullptr;
+    }
+}
+
+void releasePng(IStream*& stream, Gdiplus::Bitmap*& image) {
+    delete image;
+    image = nullptr;
+    if (stream) stream->Release();
+    stream = nullptr;
+}
+} // namespace
+
+void AboutWindow::loadLogo() {
+    loadPng(IDR_LOGO, stream_, logo_);
+    loadPng(plugin_ ? IDR_VST_LOGO : IDR_ASIO_LOGO, badgeStream_, badge_);
 }
 
 void AboutWindow::releaseLogo() {
-    delete logo_;
-    logo_ = nullptr;
-    if (stream_) stream_->Release();
-    stream_ = nullptr;
+    releasePng(stream_, logo_);
+    releasePng(badgeStream_, badge_);
+}
+
+RECT AboutWindow::badgeRect() const {
+    // its own proportions (474 x 443), 80 px high (21 mm at 100 %: the VST guidelines' minimum is 20 x 18.7 mm), at
+    // the right edge beside the four licence lines
+    const int h = px(80), w = badge_ ? MulDiv(h, static_cast<int>(badge_->GetWidth()), static_cast<int>(badge_->GetHeight())) : 0;
+    const int top = px(20 + kLogoH + 16 + 102);
+    return RECT{px(kWidth - 20) - w, top, px(kWidth - 20), top + h};
 }
 
 void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
@@ -279,12 +319,21 @@ void AboutWindow::create() {
     };
     text_ = label(body_, 0, 0, 74);
     pathText_ = label(path_, SS_PATHELLIPSIS, 80, 18); // one line, shortened in the middle when long
-    legal_ = label(L"Licence: GPL-3.0; licences of components: THIRD_PARTY.md.\n"
-                   L"ASIO is a trademark and software of Steinberg Media Technologies GmbH.",
-                   0, 104, 36);
+    // the copyright, the licence and its "no warranty" (the GPL's "Appropriate Legal Notices"), and Steinberg's
+    // attribution beside its logo - ASIO in the program, VST in the plug-in (badgeRect; licence reviews, 2026-10-28)
+    legal_ = label(plugin_ ? L"Copyright (C) 2026 hghaken. Free software under the GPL-3.0\n"
+                             L"or later (LICENSE.txt), with ABSOLUTELY NO WARRANTY.\n"
+                             L"Components: THIRD_PARTY.md. VST is a registered trademark\n"
+                             L"of Steinberg Media Technologies GmbH."
+                           : L"Copyright (C) 2026 hghaken. Free software under the GPL-3.0\n"
+                             L"or later (LICENSE.txt), with ABSOLUTELY NO WARRANTY.\n"
+                             L"Components: THIRD_PARTY.md. ASIO is a registered trademark\n"
+                             L"of Steinberg Media Technologies GmbH.",
+                   0, 104, 72);
+    SetWindowPos(legal_, nullptr, 0, 0, w - px(100), px(72), SWP_NOMOVE | SWP_NOZORDER); // (the logo to its right)
     // the updates, as in the Setup window
     auto button = [&](const wchar_t* text, int id, int bx) {
-        HWND b = CreateWindowExW(0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, bx, top + px(148),
+        HWND b = CreateWindowExW(0, L"BUTTON", text, WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, bx, top + px(192),
                                  px(110), px(30), hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
         theme::makeButton(b);
         return b;
@@ -292,7 +341,7 @@ void AboutWindow::create() {
     checkNow_ = button(L"Check now", idCheckNow, x);
     install_ = button(plugin_ ? L"Download" : L"Install update", idInstall, x + px(118));
     updateText_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX | SS_NOTIFY,
-                                  x + px(240), top + px(146), w - px(240), px(36), hwnd_, nullptr, inst, nullptr);
+                                  x + px(240), top + px(190), w - px(240), px(36), hwnd_, nullptr, inst, nullptr);
     updateShown_.clear();
     // seventh outside review: the update buttons had no tooltips, and a long message was cut off (now whole in its own)
     tips_.create(hwnd_);
@@ -306,7 +355,7 @@ void AboutWindow::create() {
     // the program's GitHub page (client, 2026-10-28): opens in the default browser
     const std::wstring url = fromUtf8(Updater::kRepo);
     link_ = CreateWindowExW(0, WC_LINK, (L"Source, releases and manuals: <a href=\"" + url + L"\">" + url + L"</a>").c_str(),
-                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | LWS_TRANSPARENT, x, top + px(196), w, px(20), hwnd_,
+                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | LWS_TRANSPARENT, x, top + px(240), w, px(20), hwnd_,
                             reinterpret_cast<HMENU>(static_cast<INT_PTR>(idLink)), inst, nullptr);
     tips_.add(link_, L"Opens DJAP's page on GitHub in your web browser: the source code, every release with its setup "
                      L"program, and the manuals.");
@@ -314,6 +363,12 @@ void AboutWindow::create() {
                           px(kWidth - 20 - 96), px(kHeight - 20 - 30), px(96), px(30), hwnd_,
                           reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDOK)), inst, nullptr);
     theme::makeButton(ok_);
+    disclaimer_ = CreateWindowExW(0, L"BUTTON", L"Disclaimer", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW, x,
+                                  px(kHeight - 20 - 30), px(110), px(30), hwnd_,
+                                  reinterpret_cast<HMENU>(static_cast<INT_PTR>(idDisclaimer)), inst, nullptr);
+    theme::makeButton(disclaimer_);
+    tips_.add(disclaimer_, L"Shows the disclaimer: DJAP comes without warranty, you use it at your own risk - mind your "
+                           L"hearing and your equipment.");
 }
 
 void AboutWindow::setFonts() {
@@ -321,7 +376,7 @@ void AboutWindow::setFonts() {
     ncm.cbSize = sizeof ncm;
     SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0, dpi_);
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
-    for (HWND h : {text_, pathText_, legal_, updateText_, checkNow_, install_, link_, ok_})
+    for (HWND h : {text_, pathText_, legal_, updateText_, checkNow_, install_, link_, disclaimer_, ok_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -356,6 +411,14 @@ LRESULT AboutWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         PAINTSTRUCT ps;
         HDC dc = BeginPaint(hwnd_, &ps);
         paintTop(dc); // the logo over the metal (its rounded corners are transparent), drawn off screen
+        if (badge_) { // unchanged, at its own proportions
+            const RECT a = badgeRect();
+            Gdiplus::Graphics g(dc);
+            g.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+            g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+            g.DrawImage(badge_, static_cast<INT>(a.left), static_cast<INT>(a.top), static_cast<INT>(a.right - a.left),
+                        static_cast<INT>(a.bottom - a.top));
+        }
         EndPaint(hwnd_, &ps);
         return 0;
     }
@@ -394,6 +457,10 @@ LRESULT AboutWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         if ((LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL) && HIWORD(wp) == BN_CLICKED) close();
         if (LOWORD(wp) == idCheckNow && HIWORD(wp) == BN_CLICKED && checkNowDo_) checkNowDo_();
         if (LOWORD(wp) == idInstall && HIWORD(wp) == BN_CLICKED && installDo_) installDo_();
+        if (LOWORD(wp) == idDisclaimer && HIWORD(wp) == BN_CLICKED) {
+            placement::messageBox(hwnd_, kDisclaimer, L"DJAP - Disclaimer", MB_OK | MB_ICONINFORMATION);
+            return 0;
+        }
         refresh();
         return 0;
     case WM_CLOSE:

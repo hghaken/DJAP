@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Basic DSP building blocks: level conversions, one-pole smoothing and RBJ biquads.
 // Sources: R. Bristow-Johnson, Audio EQ Cookbook (biquads); handbook 10.1.
 #pragma once

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // DJAP.exe: the GUI program. Options (for tests): --ini <file> uses another settings file;
 // --simulate <file.wav> runs the file through both decks in real time with the output thrown away (no sound).
 // Without them only one instance runs; the first start (no audio device chosen) opens the Audio window.

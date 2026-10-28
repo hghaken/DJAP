@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Spectrum window (client, 2026-10-26: "all together in a separate, big spectrum graph"; a click on a deck's spectrum
 // in the meter panel opens it): one deck's input and output spectrum, the density stage's bands with their gains now -
 // a strip, a shade or lines, the user's choice (also in the meter panels) - and the deck's colour as an EQ curve: the

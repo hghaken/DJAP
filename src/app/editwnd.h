@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Preset window (docs/design.md 3, 3.1, 8): a tab per stage with its on / off switch first and a row per
 // parameter - name, slider, value (typed values are taken too), unit, a small reset button (back to its reset value)
 // and what it does. Save as, rename, delete, reset preset. Every change is heard at once on each deck using the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // plugin_test: loads the built DJAP.vst3 as a host does (the SDK's hosting classes) and checks that it sounds
 // exactly like the program's deck: bit-exact against a DeckProcessor with the same values, at odd block sizes,
 // after a parameter change, after a project's state is stored and loaded into a new instance, in Bypass; and that

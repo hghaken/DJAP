@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The update check's pure part (docs/design.md section 8, "Updates"): reading GitHub's "latest release" answer,
 // comparing versions, and SHA-256 to check a downloaded setup against the digest GitHub publishes for it. No
 // network and no Windows code here (src/app/updater.* does the downloads).

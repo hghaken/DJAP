@@ -14,7 +14,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-$private = @('AGENTS.md', 'CLAUDE.md', '.claude', 'docs/handover.md', 'docs/ip-licence-review.md')
+$private = @('AGENTS.md', 'CLAUDE.md', '.claude', 'docs/handover.md', 'docs/IP License Reports')
 
 if (git status --porcelain --untracked-files=no) { throw "commit or stash the changes first: the public commit is made from HEAD" }
 
@@ -46,6 +46,10 @@ if ($Release) {
         throw "the setup is older than build\DJAP.exe: run tools\make_installer.ps1 -NoBuild"
     }
 }
+$asioSdk = Join-Path $root "third_party\asiosdk"
+if ($Release -and -not (Test-Path (Join-Path $asioSdk "common\asio.cpp"))) {
+    throw "no ASIO SDK in third_party\asiosdk: a release attaches the SDK files it was built with"
+}
 
 # nothing personal: the blocklist against every public file and the message
 $block = Join-Path $PSScriptRoot "publish-blocklist.txt"
@@ -60,6 +64,12 @@ if ($Release) { # the setup is compressed: its programs are checked (ASCII and U
         $bytes = [IO.File]::ReadAllBytes("$root\build\$exe")
         $text = [Text.Encoding]::GetEncoding(28591).GetString($bytes) + [Text.Encoding]::Unicode.GetString($bytes)
         foreach ($w in $words) { if ($text.IndexOf($w, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $hits += "${exe}: $w" } }
+    }
+    # and the ASIO SDK files the release attaches
+    foreach ($f in Get-ChildItem -Recurse -File (Join-Path $root "third_party\asiosdk") -ErrorAction SilentlyContinue) {
+        if ($f.Name -eq "VERSION.txt") { continue } # (not attached: it may name a local folder)
+        $text = [IO.File]::ReadAllText($f.FullName)
+        foreach ($w in $words) { if ($text.IndexOf($w, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $hits += "asiosdk\$($f.Name): $w" } }
     }
 }
 if ($hits) { $hits | Select-Object -First 20 | ForEach-Object { Write-Output "  $_" }; throw "blocked words in the public version" }
@@ -98,8 +108,22 @@ function New-Release([string]$target) {
         $utf8 = New-Object Text.UTF8Encoding $false
         [IO.File]::WriteAllText($sum, "$hash  DJAP-Setup-$version.exe`n", $utf8)
         [IO.File]::WriteAllText($notesFile, $Notes, $utf8)
+        # the ASIO SDK files this build was compiled with, as they are (GPL v3 section 6: the corresponding source; they
+        # are not in the public tree, and Steinberg's download changes - licence reviews, 2026-10-28)
+        $sdkZip = Join-Path $dir "DJAP-$version-ASIO-SDK.zip"
+        $sdkDir = Join-Path $dir "ASIO-SDK"
+        New-Item -ItemType Directory $sdkDir | Out-Null
+        foreach ($item in "common", "host", "LICENSE.txt", "README.md", "changes.txt") {
+            $p = Join-Path $asioSdk $item
+            if (Test-Path $p) { Copy-Item -Recurse -Force $p $sdkDir }
+        }
+        [IO.File]::WriteAllText((Join-Path $sdkDir "DJAP-README.txt"),
+            "The Steinberg ASIO SDK files DJAP $version was built with, unchanged, used under the SDK's GPL v3 licence " +
+            "option (LICENSE.txt). DJAP's own source: https://github.com/hghaken/DJAP (tag v$version). ASIO is a " +
+            "registered trademark of Steinberg Media Technologies GmbH.`r`n", $utf8)
+        Compress-Archive -Path (Join-Path $sdkDir "*") -DestinationPath $sdkZip
         if ($DryRun) { Write-Output "dry run: release $tag on $target not made (setup sha256 $hash)"; return }
-        gh release create $tag $setup $sum --target $target --title "DJAP $version" --notes-file $notesFile
+        gh release create $tag $setup $sum $sdkZip --target $target --title "DJAP $version" --notes-file $notesFile
         if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }
     } finally {
         Remove-Item $dir -Recurse -ErrorAction SilentlyContinue

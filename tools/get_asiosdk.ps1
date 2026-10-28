@@ -30,6 +30,11 @@ function install($src, $note) {
     foreach ($need in "common\asio.cpp", "host\asiodrivers.cpp", "host\pc\asiolist.cpp") {
         if (-not (Test-Path (Join-Path $src $need))) { throw "not a usable ASIO SDK: $src has no $need" }
     }
+    # the GPL v3 option came with SDK 2.3.4: an older SDK may not be used in DJAP (licence reviews, 2026-10-28)
+    $lic = Join-Path $src "LICENSE.txt"
+    if (-not (Test-Path $lic) -or (Get-Content -Raw $lic) -notmatch 'General Public License \(GPL\) Version 3') {
+        throw "this ASIO SDK has no GPL v3 licence option (it came with version 2.3.4): DJAP cannot use it"
+    }
     if (Test-Path $Target) { Remove-Item -Recurse -Force $Target }
     New-Item -ItemType Directory -Force $Target | Out-Null
     foreach ($item in "common", "host", "LICENSE.txt", "README.md", "changes.txt") {

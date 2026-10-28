@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Settings and presets: ini round trip, shipped presets stored as differences, rename / delete / reset rules,
 // hand-edited and damaged files (docs/design.md 3.1, 8).
 #include "check.h"

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Look-ahead true-peak limiter (handbook 10.10; DAFX 2nd ed. ch. 4).
 //
 // Per sample: wanted gain w = min(1, ceiling / peak) -> sliding minimum over W -> moving average over W ->

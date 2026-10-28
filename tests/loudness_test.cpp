@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Loudness and true-peak measurement against EBU Tech 3341 / 3342 (cases synthesized at the test's rate,
 // handbook 3.4 / 4.3) and the K-weighting re-rating.
 #include "check.h"

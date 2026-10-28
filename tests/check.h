@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Tiny test harness: CHECK / CHECK_NEAR count failures; the program's exit code is the number of failures.
 #pragma once
 

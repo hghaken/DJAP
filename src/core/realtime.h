@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Lock-free hand-over between the GUI thread and the audio thread (handbook 11.3, 11.4, 5.3).
 #pragma once
 

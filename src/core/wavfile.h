@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Minimal WAV reader / writer: PCM 16 / 24 / 32-bit and IEEE float 32 / 64-bit in, float 32 or PCM 24 out. Files of
 // more than 4 GB are RF64 (EBU Tech 3306, the 64-bit form of WAV), in and out.
 #pragma once

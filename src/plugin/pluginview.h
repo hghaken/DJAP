@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The plug-in's window inside the host: one deck strip as in the program - preset and colour with their Edit
 // buttons (the program's preset window), look-ahead, Bypass, the four bass sliders and the meter panel (LED bars, the
 // gain of each stage, the spectrum; a click on a row opens its tab) - on the brushed metal; and About with the

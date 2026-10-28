@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // One deck's processing chain (docs/design.md section 2):
 // leveller gain + input gain -> colour (sub bass, tone, loudness) -> compressor -> density (1-7 bands) -> bass
 // enhancer -> exciter -> de-esser -> stereo width -> [leveller detector] -> soft clipper -> look-ahead true-peak

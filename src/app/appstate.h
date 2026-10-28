@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Program-wide helpers shared by the GUI and the command line: where the settings live, text conversion.
 #pragma once
 

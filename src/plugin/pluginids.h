@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The plug-in's identity and parameter ids. Never change them: a host stores them in its projects and automation.
 #pragma once
 

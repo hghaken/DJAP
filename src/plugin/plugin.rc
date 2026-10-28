@@ -6,6 +6,7 @@
 
 IDI_APP ICON "../../assets/DJAP.ico"
 IDR_LOGO RCDATA "../../assets/logo.png"
+IDR_VST_LOGO RCDATA "../../assets/vst-compatible-logo.png"
 
 VS_VERSION_INFO VERSIONINFO
  FILEVERSION AP_VERSION_MAJOR, AP_VERSION_MINOR, AP_BUILD_NUMBER, 0
@@ -23,7 +24,7 @@ BEGIN
             VALUE "FileDescription", "DJAP (DJ Audio Processor) - plug-in for DJ software"
             VALUE "FileVersion", AP_VERSION_STRING
             VALUE "InternalName", "DJAP"
-            VALUE "LegalCopyright", "GPL-3.0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 hghaken. GPL-3.0-or-later."
             VALUE "OriginalFilename", "DJAP.vst3"
             VALUE "ProductName", "DJAP (DJ Audio Processor)"
             VALUE "ProductVersion", AP_VERSION_STRING

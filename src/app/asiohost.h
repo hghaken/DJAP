@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // ASIO host (docs/design.md section 6, handbook 12). The driver is a COM object, loaded, set up and called on the
 // GUI thread (which has joined a single-threaded COM apartment); only the buffer switch runs on the driver's thread
 // and calls AudioEngine::process. One driver at a time: the ASIO SDK keeps it in a global, so there is one AsioHost.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Tooltips: one tooltip control per window, several lines wide, shown for 30 s while the mouse rests on a control
 // (or on a rectangle of a custom-drawn window). The texts say what a control does; they are copied when added.
 // One switch for all of them (client, 2026-10-26: "an option to turn all tooltips on or off", in Setup).

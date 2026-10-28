@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The spectrum graph, drawn the same way in the meter panel and in the spectrum window (client, 2026-10-26: "all
 // together in a separate, big spectrum graph"): the deck's input (orange) and output (turquoise) spectrum, the density
 // stage's bands with their gains now - a line per band (client, 2026-10-26: of strip, shade and lines only the lines

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // A deck's colour (docs/design.md 3.3): every tone section against its analog prototype, neutral = bit-exact again
 // after a glide back, the loudness contour, the auto tone's correction (and its hold), the sub bass an octave down.
 #include "check.h"

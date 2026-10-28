@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Analysis window (docs/design.md section 8; the Graphs button of a deck strip): for each deck a row of graphs - the signal
 // chain from input to output with a bar per step (what each step does to the level now), the compressor's curve with
 // its working point, the last 60 s of loudness (original and processed, LU to the target),

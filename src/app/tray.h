@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // The program's icon in the notification area (system tray): a tooltip with the decks' state, a click shows the
 // main window, a right click opens its menu (the owner window handles kMessage). Added again when Explorer restarts.
 #pragma once

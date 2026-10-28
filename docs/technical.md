@@ -6,8 +6,12 @@ and curious users. How to use the program is in the user manual (`DJAP-Manual.pd
 specification with every decision is `docs/design.md`; the code is in `src/core/` (the DSP, no Windows code),
 `src/app/` (the program) and `src/plugin/` (the plug-in for DJ software, chapter 18) - all on <https://github.com/hghaken/DJAP>.
 
-Numbers in square brackets, such as [1], refer to the sources in chapter 21, with links. All code was written for
-DJAP; no code or parameter values were taken from other products.
+Numbers in square brackets, such as [1], refer to the sources in chapter 21, with links. DJAP's code was written for
+DJAP, with the AI assistant Claude (Anthropic), from these public standards and papers and the project's own
+measurements; no code, presets or parameter values were taken from commercial products. The one adapted routine is
+the halfband coefficient designer, which follows the public hiir library (WTFPL licence; [25], `THIRD_PARTY.md`).
+Where no source is cited (the leveller, the density gain law, the auto tone, the drift loop's tuning), the design is
+DJAP's own, with its measurements in this manual and in `docs/design.md`.
 
 ## Contents
 
@@ -60,7 +64,7 @@ input (stereo)
 output
 ```
 
-Two decks run the same code independently; with ASIO both are processed in one buffer callback, deck A then deck B,
+Two decks run the same code independently; with ASIO® both are processed in one buffer callback, deck A then deck B,
 so they share the same latency (they are mixed after DJAP, and a difference would comb-filter).
 
 ### 1.2 Principles
@@ -344,7 +348,8 @@ Adds the octave below the bass, which many records of the 1960s and 1970s lack:
    only its fundamental remains.
 
 Measured: a 60 Hz tone gets 30 Hz at -2.3 dB (amount 100 %) or -8.3 dB (50 %); silence stays silent. This is the
-classic octave-divider principle of analogue sub-harmonic synthesisers.
+classic octave-divider principle of analogue sub-harmonic synthesisers, decades old; the implementation is DJAP's
+own (no source is cited for it).
 
 ### 5.4 Contour
 
@@ -572,7 +577,7 @@ the DAFX book [7]; DJAP's version (`src/core/limiter.h`) works per sample:
 1. **Wanted gain** `w = min(1, ceiling / peak)`, with the peak from the 8x true-peak detector (2.6) - or the sample
    peak when the look-ahead is shorter than the detector's delay.
 2. **Sliding minimum** of w over a window of W samples (a monotonic deque in fixed arrays: O(1) amortised, no
-   allocation).
+   allocation - the streaming minimum filter of [27]).
 3. **Moving average** of those minima over the same W samples: the gain reaches its value *before* the peak arrives,
    along a smooth curve without a step.
 4. **Release**: when the average is below the current gain it is taken at once; otherwise the gain rises with a
@@ -793,7 +798,7 @@ float, which holds 24 bits without loss.
   as described by Smith [11]. Position 0 is a unit impulse, so at a read speed of exactly 1 the output is the input,
   bit-exact. Measured: flat within 0.001 dB to 18 kHz, residual below -90 dB to 10 kHz.
 - **Drift loop.** The read speed is 1 plus a PI controller on the buffer's fill, at most +-0.2 % (3.5 cents,
-  inaudible). The fill is estimated at the moment of reading (the last block's end plus the time since it came), so
+  inaudible) - a second-order loop of the kind [28] describes for filtering audio time stamps. The fill is estimated at the moment of reading (the last block's end plus the time since it came), so
   the sawtooth of the capture blocks does not modulate the speed; smoothed over 0.5 s, the error corrected over 4 s,
   the drift estimate following over 16 s (critically damped). With simulated clocks at -500..+500 ppm and late
   callbacks: drift found within 2 ppm, fill within 0.5 ms of its target, read-speed wobble about 15 ppm, no xruns.
@@ -977,6 +982,24 @@ need a membership or a purchase for the full text.
 | [24] | Steinberg Media Technologies, plug-in SDK v3.8.1 (MIT licence; the plug-in interfaces, base classes, validator and test hosts) - <https://github.com/steinbergmedia/vst3sdk> | the plug-in (18) |
 | [25] | R. A. Valenzuela, A. G. Constantinides, *Digital signal processing schemes for efficient interpolation and decimation*, IEE Proceedings G 130(6), 1983, pp. 225-235 - doi:10.1049/ip-g-1.1983.0039 (added 2026-10-26, link not checked); the closed-form design as in L. de Soras' public hiir library | polyphase IIR halfbands of the oversampler (12.1) |
 | [26] | S. P. Lipshitz, R. A. Wannamaker, J. Vanderkooy, *Quantization and Dither: A Theoretical Survey*, J. Audio Eng. Soc. 40(5), 1992, pp. 355-375 (added 2026-10-26, link not checked) | TPDF dither (14.1a) |
+| [27] | D. Lemire, *Streaming Maximum-Minimum Filter Using No More than Three Comparisons per Element*, Nordic Journal of Computing 13(4), 2006 - arXiv:cs/0610046 (added 2026-10-28, link not checked) | the limiter's sliding minimum (13) |
+| [28] | F. Adriaensen, *Using a DLL to filter time*, Linux Audio Conference 2005 (added 2026-10-28, link not checked) | the drift loop (17) |
 
 Besides these sources the design draws on the project's own measurements, recorded with each decision in
-`docs/design.md`.
+`docs/design.md`. Its design notes also refer to the developer's own audio-processing handbook (not public): a
+knowledge base built from the public standards and papers above and from measurements, which rules out taking
+presets, values or layouts from commercial products.
+
+---
+
+**Disclaimer.** This manual and DJAP are provided "as is", without warranty of any kind (GNU GPL, sections 15 and
+16); the measurements describe the builds and test signals named, not every system or piece of music. DJAP's meters
+are not a certified measuring instrument. The authors are not liable for any damage from using the program or this
+information. DJAP is not affiliated with, endorsed or sponsored by any company, product or author named here; such
+names identify sources, standards and the systems DJAP works with.
+
+<img src="images/vst-compatible-logo.png" width="90" alt="VST compatible"> <img src="images/asio-compatible-logo.png" width="90" alt="ASIO compatible">
+
+VST is a registered trademark of Steinberg Media Technologies GmbH. ASIO is a registered trademark of Steinberg Media
+Technologies GmbH. Windows is a trademark of the Microsoft group of companies. Other names are trademarks of their
+respective owners.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // A deck's colour (docs/design.md 3.3): tone EQ (bass shelf, low-mid bell, presence bell, treble shelf), the auto
 // tone that pulls each song's balance towards a reference, a sub bass an octave under the bass, and a loudness
 // contour for quiet listening. Right after the leveller and input gain, before the compressor: the dynamics take

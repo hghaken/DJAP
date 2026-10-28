@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // What a deck's meters and graphs show, read from its meter and tap rings on the GUI thread: loudness (EBU M / S /
 // I / LRA), true peak, the gain of each stage, the signal-chain levels, spectra, stereo statistics and the last 60 s
 // of loudness and gains. Shared by the program (AudioIO, both decks) and the plug-in (one deck). Not real-time

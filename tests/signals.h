@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Test signals with known answers (handbook 16.2).
 #pragma once
 
