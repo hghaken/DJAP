@@ -324,6 +324,7 @@ void AsioHost::bufferSwitch(long index) {
     if (!e || index < 0 || index > 1) return;
     const void* in[4] = {bufs_[index][0], bufs_[index][1], bufs_[index][2], bufs_[index][3]};
     void* out[4] = {bufs_[index][4], bufs_[index][5], bufs_[index][6], bufs_[index][7]};
+    e->noteCore(static_cast<int>(GetCurrentProcessorNumber())); // for the status bar (a few cycles)
     e->process(in, &state_.formats[0], out, &state_.formats[4], static_cast<int>(state_.bufferSize));
     if (postOutput_) ASIOOutputReady();
 }

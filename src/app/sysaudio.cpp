@@ -107,6 +107,8 @@ struct DeckStream {
     // health, written by the stream's thread
     std::atomic<long long> blocks{0}, overHalf{0}, late{0};
     std::atomic<uint32_t> heaviest{0}, last{0};
+    std::atomic<long long> busyNs{0};
+    std::atomic<int> core{-1};
     std::atomic<bool> resetHealth{false}, stopping{false}, failed{false};
     SysStreamInfo info;
 };
@@ -121,7 +123,12 @@ namespace {
 
 // The period's health (processing time against the period, blocks counted).
 void account(DeckStream* s, std::chrono::steady_clock::time_point t0, ma_uint32 frames) {
-    const double used = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    const auto spent = std::chrono::steady_clock::now() - t0;
+    s->busyNs.store(s->busyNs.load(std::memory_order_relaxed) +
+                        std::chrono::duration_cast<std::chrono::nanoseconds>(spent).count(),
+                    std::memory_order_relaxed);
+    s->core.store(static_cast<int>(GetCurrentProcessorNumber()), std::memory_order_relaxed);
+    const double used = std::chrono::duration<double>(spent).count();
     const uint32_t permille = static_cast<uint32_t>(std::min(1e9, used / (frames / s->rate) * 1000.0));
     s->last.store(permille, std::memory_order_relaxed);
     if (permille > s->heaviest.load(std::memory_order_relaxed)) s->heaviest.store(permille, std::memory_order_relaxed);
@@ -635,6 +642,8 @@ EngineHealth SysAudio::health() const {
         h.late += s->late.load(std::memory_order_relaxed);
         h.heaviestPercent = std::max(h.heaviestPercent, s->heaviest.load(std::memory_order_relaxed) / 10.0);
         h.lastPercent = std::max(h.lastPercent, s->last.load(std::memory_order_relaxed) / 10.0);
+        h.busySeconds += s->busyNs.load(std::memory_order_relaxed) * 1e-9;
+        if (h.core < 0) h.core = s->core.load(std::memory_order_relaxed); // (each deck has a thread: deck A's)
     }
     return h;
 }

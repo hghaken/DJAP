@@ -21,6 +21,9 @@ struct EngineHealth {
     long long refused = 0;      // periods answered with silence (engine not prepared for this call)
     double heaviestPercent = 0; // longest processing time in % of its period
     double lastPercent = 0;
+    double busySeconds = 0;     // processing time in all, since the stream started (not reset): the GUI takes its
+                                // growth per second as the audio thread's use of its core
+    int core = -1;              // the logical processor the last period ran on (-1: not known)
 };
 
 class AudioEngine {
@@ -46,6 +49,8 @@ public:
     void process(const void* const* in, const SampleFormat* inFormat, void* const* out, const SampleFormat* outFormat,
                  int frames, double nowSeconds = -1.0);
 
+    // Audio thread (the host, which knows the platform): the logical processor this period runs on.
+    void noteCore(int core) { core_.store(core, std::memory_order_relaxed); }
     // GUI thread.
     EngineHealth health() const;
     void resetHealth() { resetRequest_.store(true, std::memory_order_release); }
@@ -58,6 +63,8 @@ private:
     // written by the audio thread only (plain stores), read by the GUI
     std::atomic<long long> blocks_{0}, overHalf_{0}, late_{0}, refused_{0};
     std::atomic<uint32_t> heaviestPermille_{0}, lastPermille_{0};
+    std::atomic<long long> busyNs_{0};
+    std::atomic<int> core_{-1};
     std::atomic<bool> resetRequest_{false};
 };
 

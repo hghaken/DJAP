@@ -37,6 +37,35 @@ enum MenuId { mAudio = 100, mAbout, mExit, mAnalysis, mOpen, mSpectrum }; // 103
 
 std::wstring deckName(int d) { return d == 0 ? L"Deck A" : L"Deck B"; }
 
+// " (P-core)" / " (E-core)" for a logical processor of a processor with both kinds (Windows' efficiency class: the
+// higher, the faster), else "".
+const wchar_t* coreKind(int core) {
+    static std::vector<BYTE> cls; // by logical processor index (group 0)
+    static bool read = false;
+    if (!read) {
+        read = true;
+        ULONG len = 0;
+        GetSystemCpuSetInformation(nullptr, 0, &len, GetCurrentProcess(), 0);
+        std::vector<char> buf(len);
+        if (len && GetSystemCpuSetInformation(reinterpret_cast<SYSTEM_CPU_SET_INFORMATION*>(buf.data()), len, &len,
+                                              GetCurrentProcess(), 0)) {
+            for (ULONG at = 0; at < len;) {
+                const auto* i = reinterpret_cast<const SYSTEM_CPU_SET_INFORMATION*>(buf.data() + at);
+                if (i->Type == CpuSetInformation && i->CpuSet.Group == 0) {
+                    const size_t k = i->CpuSet.LogicalProcessorIndex;
+                    if (cls.size() <= k) cls.resize(k + 1, 0);
+                    cls[k] = i->CpuSet.EfficiencyClass;
+                }
+                at += i->Size ? i->Size : static_cast<ULONG>(sizeof(SYSTEM_CPU_SET_INFORMATION));
+            }
+        }
+    }
+    if (core < 0 || static_cast<size_t>(core) >= cls.size()) return L"";
+    const BYTE lo = *std::min_element(cls.begin(), cls.end()), hi = *std::max_element(cls.begin(), cls.end());
+    if (lo == hi) return L"";
+    return cls[static_cast<size_t>(core)] == hi ? L" (P-core)" : L" (E-core)";
+}
+
 // the size of a text in a font, in pixels (a line's height for an empty text)
 SIZE textSize(HWND h, HFONT font, const std::wstring& text) {
     SIZE sz{0, 0};
@@ -643,6 +672,16 @@ void MainWindow::measureCpu() {
     auto u64 = [](const FILETIME& f) { return (static_cast<unsigned long long>(f.dwHighDateTime) << 32) | f.dwLowDateTime; };
     const unsigned long long busy = u64(kernel) + u64(user), wall = u64(now);
     if (cpuLastWall_ != 0 && wall - cpuLastWall_ < 10000000ull) return; // 100 ns units: a second at least
+    // the audio thread on its own (client, 2026-10-28: "can you show the core DJAP runs on"): its processing time
+    // against the wall time - the share of the one core it runs on - and that core (it may move between cores)
+    const bool running = audio_.deviceRunning() || audio_.systemRunning();
+    const EngineHealth h = audio_.health();
+    if (running && cpuLastWall_ != 0 && wall > cpuLastWall_ && audioLastBusy_ >= 0.0 && h.busySeconds >= audioLastBusy_)
+        audioPercent_ = 100.0 * (h.busySeconds - audioLastBusy_) / (static_cast<double>(wall - cpuLastWall_) * 1e-7);
+    else if (!running)
+        audioPercent_ = -1.0;
+    audioLastBusy_ = running ? h.busySeconds : -1.0;
+    audioCore_ = running ? h.core : -1;
     if (cpuLastWall_ != 0 && wall > cpuLastWall_) {
         const DWORD cpus = std::max<DWORD>(1, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
         cpuPercent_ = 100.0 * static_cast<double>(busy - cpuLastBusy_) / static_cast<double>(wall - cpuLastWall_) / cpus;
@@ -668,6 +707,10 @@ void MainWindow::updateStatus() {
     std::wstring line = b;
     if (cpuPercent_ >= 0.0) {
         swprintf(b, 160, L"   |   CPU %.1f %%", cpuPercent_);
+        line += b;
+    }
+    if (audioPercent_ >= 0.0 && audioCore_ >= 0) { // the audio thread: its share of the core it runs on
+        swprintf(b, 160, L"   |   audio %.1f %% of core %d%s", audioPercent_, audioCore_, coreKind(audioCore_));
         line += b;
     }
     if (!audio_.deviceError().empty()) line += L"   |   " + fromUtf8(audio_.deviceError());

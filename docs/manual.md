@@ -342,7 +342,12 @@ window (8.2).
 ### 4.4 The status bar
 
 The Windows volume (or "muted") and DJAP's CPU use, as a share of the whole computer as Task Manager shows it (two
-decks take a few percent of one processor core, so well under 1 % on a computer with many cores). After them, only
+decks take a few percent of one processor core, so well under 1 % on a computer with many cores). While the audio
+runs, then *audio X % of core N*: the processing's share of the one core the audio thread runs on, averaged over a
+second, and which core that is - with "(P-core)" or "(E-core)" on a processor with both kinds (Windows may move the
+thread between cores; the number is where the last period ran). With WASAPI each deck has its own thread: the share
+is that of both together, the core deck A's. This share against 100 % is the room left; the Health section's
+*heaviest* shows the worst single period. After them, only
 when there is one: an error, a start that is being retried, a settings file that could not be saved, a new version.
 The audio's state - devices, sample rate, buffer size, latency, drift, the health counters - is in the Setup window
 (chapter 5).

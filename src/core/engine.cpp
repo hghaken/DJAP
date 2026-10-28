@@ -66,7 +66,11 @@ void AudioEngine::process(const void* const* in, const SampleFormat* inFormat, v
         for (int c = 0; c < kChannels; ++c)
             if (out[c]) fromFloat(buf_[c], outFormat[c], out[c], off, n);
     }
-    const double used = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    const auto spent = std::chrono::steady_clock::now() - t0;
+    busyNs_.store(busyNs_.load(std::memory_order_relaxed) +
+                      std::chrono::duration_cast<std::chrono::nanoseconds>(spent).count(),
+                  std::memory_order_relaxed);
+    const double used = std::chrono::duration<double>(spent).count();
     const double period = frames / fs_;
     const uint32_t permille = static_cast<uint32_t>(std::min(1e9, used / period * 1000.0));
     lastPermille_.store(permille, std::memory_order_relaxed);
@@ -85,6 +89,8 @@ EngineHealth AudioEngine::health() const {
     h.refused = refused_.load(std::memory_order_relaxed);
     h.heaviestPercent = heaviestPermille_.load(std::memory_order_relaxed) / 10.0;
     h.lastPercent = lastPermille_.load(std::memory_order_relaxed) / 10.0;
+    h.busySeconds = busyNs_.load(std::memory_order_relaxed) * 1e-9;
+    h.core = core_.load(std::memory_order_relaxed);
     return h;
 }
 

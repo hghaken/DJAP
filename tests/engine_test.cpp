@@ -429,6 +429,15 @@ void healthAndSafety() {
     dev.run(e, signals(64));
     h = e.health();
     CHECK(h.blocks == 1 && h.overHalf <= 1);
+    // the processing time in all (the status bar's share of a core) grows and is not reset; the core as noted
+    const double busy = h.busySeconds;
+    e.noteCore(3);
+    dev.run(e, signals(6400));
+    h = e.health();
+    std::printf("   processing time so far %.1f ms, core %d\n", h.busySeconds * 1000.0, h.core);
+    CHECK(busy > 0.0 && h.busySeconds > busy);
+    CHECK(h.core == 3);
+    CHECK(AudioEngine().health().core == -1 && AudioEngine().health().busySeconds == 0.0);
 }
 
 // A device period in the decks' frames (AsyncInput's burst cap; eighth outside review: untested, the null devices run
