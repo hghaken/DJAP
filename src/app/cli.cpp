@@ -55,7 +55,8 @@ const char* const kUsage =
     "  --measure <file.wav> [more files]\n"
     "        Integrated loudness, loudness range, max momentary / short-term, sample peak and true peak (16x),\n"
     "        per deck for 4-channel files.\n"
-    "  --devices            lists the ASIO drivers (from the registry) and the WASAPI / DirectSound / MME devices\n"
+    "  --devices            lists the ASIO drivers (from the registry) and the WASAPI / DirectSound / MME devices,\n"
+    "                       with the shared periods each WASAPI input allows\n"
     "                       (lists only: no driver or device is opened)\n"
     "  --ini <file>         use this settings file instead of DJAP.ini (read only)\n"
     "  --version, --help\n"
@@ -276,7 +277,19 @@ int devices() {
             std::printf("  not available: %s\n", err.c_str());
             continue;
         }
-        for (const SysDevice& d : ins) std::printf("  in   %s%s\n", d.name.c_str(), d.isDefault ? "  (default)" : "");
+        for (const SysDevice& d : ins) {
+            std::printf("  in   %s%s\n", d.name.c_str(), d.isDefault ? "  (default)" : "");
+            if (api != AudioApi::Wasapi) continue;
+            // the periods of Windows' shared low-latency mode (asked only; no stream is opened)
+            const SysAudio::EnginePeriods p = SysAudio::inputPeriods(d.name);
+            if (p.known)
+                std::printf("         shared periods at %u Hz: default %u, step %u, shortest %u, longest %u frames "
+                            "(%.2f .. %.2f ms)\n",
+                            p.rate, p.defaultFrames, p.stepFrames, p.minFrames, p.maxFrames,
+                            1000.0 * p.minFrames / p.rate, 1000.0 * p.maxFrames / p.rate);
+            else
+                std::printf("         shared periods: not given (no low-latency mode)\n");
+        }
         for (const SysDevice& d : outs) std::printf("  out  %s%s\n", d.name.c_str(), d.isDefault ? "  (default)" : "");
     }
     return 0;

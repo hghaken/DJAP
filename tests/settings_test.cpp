@@ -49,7 +49,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK(a.oversampling == b.oversampling);
     CHECK(a.bufferSize == b.bufferSize && a.startAudio == b.startAudio);
     CHECK(a.api == b.api && a.exclusive == b.exclusive && a.driftCorrection == b.driftCorrection);
-    CHECK(a.shortInputPeriod == b.shortInputPeriod);
+    CHECK(a.inputPeriodMs == b.inputPeriodMs);
     for (int d = 0; d < 2; ++d) CHECK(a.inDevice[d] == b.inDevice[d] && a.outDevice[d] == b.outDevice[d]);
     CHECK(a.asioInputs == b.asioInputs && a.decks == b.decks);
     CHECK(a.followVolume[0] == b.followVolume[0] && a.followVolume[1] == b.followVolume[1]);
@@ -173,7 +173,7 @@ Settings busy() {
     s.api = "WASAPI";
     s.exclusive = true;
     s.driftCorrection = Settings::kDriftAlways; // not the default
-    s.shortInputPeriod = true;                  // not the default
+    s.inputPeriodMs = 4;                        // not the default
     s.inDevice[0] = "FOC-Analogue 1 + 2 (2- Focusrite USB Audio)"; // device names with + ( ) - and UTF-8
     s.outDevice[0] = "ROD-Headphones (R\xC3\x98" "DE PodMic USB)";
     s.inDevice[1] = s.outDevice[1] = "";
@@ -432,6 +432,17 @@ void handEdited() {
         dc.driftCorrection = mode;
         back.fromText(dc.toText());
         CHECK(back.driftCorrection == mode);
+    }
+
+    // [Audio] InputPeriodMs: 0, 8, 6, 5, 4; anything else 10 ms (0) - 3 and 2 ms clicked through a virtual cable even
+    // at its fastest timer; the former ShortInputPeriod=1 (the device's shortest period, distorted) is not taken over
+    for (const auto& [line, ms] : std::vector<std::pair<std::string, int>>{
+             {"InputPeriodMs=8", 8}, {"InputPeriodMs=6", 6}, {"InputPeriodMs=5", 5}, {"InputPeriodMs=4", 4},
+             {"InputPeriodMs=3", 0}, {"InputPeriodMs=2", 0}, {"InputPeriodMs=7", 0}, {"InputPeriodMs=x", 0},
+             {"ShortInputPeriod=1", 0}}) {
+        Settings ip;
+        ip.fromText("[Audio]\r\n" + line + "\r\n");
+        CHECK(ip.inputPeriodMs == ms);
     }
 
     // linked presets: deck B follows deck A, also when a hand edit set them apart; survives a round trip

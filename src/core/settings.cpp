@@ -293,9 +293,9 @@ std::string Settings::toText() const {
     o << "; ASIO: where the decks' inputs come from - ASIO (the input pairs above), or WASAPI, DirectSound or MME (a\n"
          "; device of that API per deck, drift-corrected; adds a buffer of about 10-20 ms)\nAsioInputs="
       << asioInputs << "\n";
-    o << "; ASIO with WASAPI inputs: 1 = ask them for periods as short as the ASIO buffer (when the device allows), 0 =\n"
-         "; Windows' 10 ms default\nShortInputPeriod="
-      << (shortInputPeriod ? 1 : 0) << "\n";
+    o << "; ASIO with WASAPI inputs: their period in ms - 0 = Windows' 10 ms default, or 8, 6, 5 or 4 (Windows'\n"
+         "; low-latency mode, when the device has it)\nInputPeriodMs="
+      << inputPeriodMs << "\n";
     o << "; ... the input device of each deck then (empty = the deck's ASIO input pair)\n";
     o << "AsioInputDeviceA=" << asioInputDevice[0] << "\nAsioInputDeviceB=" << asioInputDevice[1] << "\n";
     o << "; Limiter look-ahead in ms (0..5), the same for both decks; the only delay the processing adds\n";
@@ -417,7 +417,11 @@ void Settings::fromText(const std::string& text) {
     }
     if (auto v = get("Audio", "AsioInputs"))
         if (*v == "ASIO" || *v == "WASAPI" || *v == "DirectSound" || *v == "MME") asioInputs = *v;
-    if (auto v = get("Audio", "ShortInputPeriod")) shortInputPeriod = toInt(*v, 0) != 0;
+    // (the former ShortInputPeriod=1 asked for the device's shortest period and is not taken over: back to 10 ms)
+    if (auto v = get("Audio", "InputPeriodMs")) {
+        const int ms = toInt(*v, 0);
+        inputPeriodMs = ms == 8 || ms == 6 || ms == 5 || ms == 4 ? ms : 0;
+    }
     if (auto v = get("Audio", "AsioInputDeviceA")) asioInputDevice[0] = *v;
     if (auto v = get("Audio", "AsioInputDeviceB")) asioInputDevice[1] = *v;
     if (auto v = get("Audio", "SampleRate")) sampleRate = toInt(*v, sampleRate);

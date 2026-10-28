@@ -5,6 +5,7 @@
 
 #include <windows.h>
 #include <mmdeviceapi.h>
+#include <audioclient.h>
 
 #pragma warning(push, 0)
 #include "miniaudio.h"
@@ -231,6 +232,40 @@ bool oneClock(AudioApi api, const ma_device_id& in, const ma_device_id& out) {
     return same;
 }
 
+// The shared-mode periods of a WASAPI endpoint, at its mix format (COM on the calling thread).
+SysAudio::EnginePeriods periodsOf(const wchar_t* id) {
+    SysAudio::EnginePeriods p;
+    const HRESULT co = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    IMMDeviceEnumerator* e = nullptr;
+    if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                   reinterpret_cast<void**>(&e)))) {
+        IMMDevice* dev = nullptr;
+        if (SUCCEEDED(e->GetDevice(id, &dev))) {
+            IAudioClient3* client = nullptr;
+            if (SUCCEEDED(dev->Activate(__uuidof(IAudioClient3), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&client)))) {
+                WAVEFORMATEX* mix = nullptr;
+                if (SUCCEEDED(client->GetMixFormat(&mix)) && mix) {
+                    UINT32 def = 0, step = 0, lo = 0, hi = 0;
+                    if (SUCCEEDED(client->GetSharedModeEnginePeriod(mix, &def, &step, &lo, &hi)) && step > 0) {
+                        p.known = true;
+                        p.rate = mix->nSamplesPerSec;
+                        p.defaultFrames = def;
+                        p.stepFrames = step;
+                        p.minFrames = lo;
+                        p.maxFrames = hi;
+                    }
+                    CoTaskMemFree(mix);
+                }
+                client->Release(); // never initialised: no stream, the device is not taken
+            }
+            dev->Release();
+        }
+        e->Release();
+    }
+    if (SUCCEEDED(co)) CoUninitialize();
+    return p;
+}
+
 const ma_device_id* findDevice(AudioApi api, const ma_device_info* list, ma_uint32 count, const std::string& name) {
     for (ma_uint32 i = 0; i < count; ++i)
         if (name == nameOf(api, list[i].name)) return &list[i].id;
@@ -278,6 +313,32 @@ bool SysAudio::devices(AudioApi api, std::vector<SysDevice>& inputs, std::vector
         ma_context_uninit(&ctx);
     });
     return ok;
+}
+
+// (the mode converts no rate: the device must run at the decks' rate in Windows; live, 2026-10-28: the device's
+// shortest period of a virtual cable, 1 ms, was shorter than the cable's own 3 ms timer and the sound came out
+// distorted - hence a choice of 5 / 3 / 2 ms in Setup, not "the shortest")
+unsigned SysAudio::onStep(const EnginePeriods& p, unsigned frames, double rate) {
+    if (!p.known || std::fabs(p.rate - rate) > 0.5 || frames == 0) return 0;
+    const unsigned up = (std::max(frames, p.minFrames) + p.stepFrames - 1) / p.stepFrames * p.stepFrames;
+    return up <= p.maxFrames ? up : 0;
+}
+
+SysAudio::EnginePeriods SysAudio::inputPeriods(const std::string& device) {
+    EnginePeriods p;
+    if (g_nullBackend.load()) return p;
+    onHelper([&] {
+        ma_context ctx;
+        const ma_backend b = ma_backend_wasapi;
+        if (ma_context_init(&b, 1, nullptr, &ctx) != MA_SUCCESS) return;
+        ma_device_info* play = nullptr;
+        ma_device_info* cap = nullptr;
+        ma_uint32 nPlay = 0, nCap = 0;
+        if (ma_context_get_devices(&ctx, &play, &nPlay, &cap, &nCap) == MA_SUCCESS)
+            if (const ma_device_id* id = findDevice(AudioApi::Wasapi, cap, nCap, device)) p = periodsOf(id->wasapi);
+        ma_context_uninit(&ctx);
+    });
+    return p;
 }
 
 bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, unsigned periodFrames, bool exclusive,
@@ -488,9 +549,13 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
             auto s = std::make_unique<DeckStream>();
             s->capture = targets[d];
             s->rate = sampleRate;
+            // shared WASAPI: a period asked for goes on the device's step (else Windows' default)
+            unsigned asked = periodFrames;
+            if (periodFrames > 0 && api == AudioApi::Wasapi && !exclusive && !g_nullBackend.load())
+                asked = onStep(periodsOf(inId->wasapi), periodFrames, sampleRate);
             ma_device_config c = ma_device_config_init(ma_device_type_capture);
             c.sampleRate = static_cast<ma_uint32>(sampleRate);
-            c.periodSizeInFrames = periodFrames;
+            c.periodSizeInFrames = asked;
             c.performanceProfile = ma_performance_profile_low_latency;
             c.wasapi.usage = ma_wasapi_usage_pro_audio;
             c.capture.pDeviceID = inId;
@@ -514,7 +579,7 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
                 deckFrames(s->dev.capture.internalPeriodSizeInFrames, s->dev.capture.internalSampleRate, sampleRate));
             SysStreamInfo& in = s->info;
             in.input = devices[d];
-            in.askedFrames = periodFrames;
+            in.askedFrames = asked;
             in.deviceRate = s->dev.capture.internalSampleRate;
             in.periodFrames = s->dev.capture.internalPeriodSizeInFrames;
             in.periods = s->dev.capture.internalPeriods;

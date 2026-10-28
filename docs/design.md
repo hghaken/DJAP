@@ -307,13 +307,17 @@ input pair (e.g. a player's output through a virtual cable), while its output st
 the Audio window: ASIO input pairs, or the devices of one other API; per deck a device or its ASIO pair. Saved as
 `AsioInputs` and `AsioInputDeviceA / B`; WASAPI exclusive applies to these inputs too. Input period (2026-10-28,
 seventh outside review: the WASAPI input's 10 ms default period is the largest part of the latency left - about
-14 ms of a measured 31.9): `[Audio] ShortInputPeriod` 0 (default: Windows' 10 ms) / 1 (shared WASAPI: 1 frame asked, which
-Windows' low-latency mode, IAudioClient3, clamps up to the device's shortest period - eighth review: a request of the
-ASIO buffer's length was rounded down to the device's step, came out under the request and miniaudio then kept
-10 ms; exclusive: the ASIO buffer's length, 32 frames to 10 ms). The mode needs a device that has it, running at the
-ASIO rate in Windows; else 10 ms, and the Setup window says so from the measured input blocks (`AsyncInputState::
-blockMs`, also the input's latency shown - the device's reported period can be shorter than its packets). Off by
-default: untried on real devices, and more callbacks. WASAPI only (DirectSound / MME have no such mode); in the
+14 ms of a measured 31.9): `[Audio] InputPeriodMs` 0 (default: Windows' 10 ms) / 8 / 6 / 5 / 4. A shared request goes on the
+device's step within its shortest and longest (`SysAudio::onStep`, from IAudioClient3's GetSharedModeEnginePeriod;
+eighth review: a request off the step was rounded down under itself and miniaudio kept 10 ms). The mode needs a
+device that has it, running at the ASIO rate in Windows; else 10 ms, and the Setup window says so from the measured
+input blocks (`AsyncInputState::blockMs`, also the input's latency shown - the device's reported period can be
+shorter than its packets). Why a choice and not "the shortest" (2026-10-28, live): the virtual cable allows 1.02 ..
+10 ms; "the shortest" took 1 ms and the sound came out distorted. Measured with a 1 kHz tone through the cable's
+unused second line (15-30 s per period; residual against a fitted sine per 50 ms): with the cable's timer at 3 ms,
+1-2 ms gave duplicated data (-7 .. -10 dB), 3 ms -29 dB, 5 ms 33 of 280 windows bad, 6-7 ms one click, 8-10 ms
+clean (-139 dB); with its timer at 1 ms, 2-3 ms 10-20 bad windows, 4-8 ms clean (twice 30 s at 4 ms). So the period
+must be 3-4 timer ticks; 2 and 3 ms are not offered. Off by default. WASAPI only (DirectSound / MME have no such mode); in the
 Setup window in the drift choice's place, which ASIO does not use.
 
 The two devices run on their own crystals, so their rates differ by tens of ppm (typically up to +-100 ppm): read at

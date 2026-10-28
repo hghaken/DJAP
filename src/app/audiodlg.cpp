@@ -227,11 +227,13 @@ void AudioWindow::createControls() {
                       L"device (one clock): one stream, no buffer. Always: corrected also then (if a device glitches "
                       L"now and then on Auto). Off: always one stream from input to output, no buffer.");
     tips_.add(inPeriod_, L"With ASIO and WASAPI inputs: how often Windows hands over the input's sound. Default: every "
-                         L"10 ms - the largest part of the latency (the drift buffer holds a whole period). Short: the "
-                         L"shortest period the device allows, through Windows' low-latency mode - about 14-17 ms less "
-                         L"latency at ASIO buffers of 64-128 frames. It needs a device that has the mode, set in "
-                         L"Windows' sound settings to the same sample rate as the ASIO interface; otherwise the input "
-                         L"keeps 10 ms (Health then says so). Try it while you listen, and watch the underruns.");
+                         L"10 ms - the largest part of the latency (it counts twice: the input's own and in the drift "
+                         L"buffer). 8, 6, 5 or 4 ms through Windows' low-latency mode save about 4, 8, 10 or 12 ms. It "
+                         L"needs a device that has the mode, set in Windows' sound settings to the same sample rate as "
+                         L"the ASIO interface; otherwise the input keeps 10 ms (Health then says so). A virtual cable's "
+                         L"own timer must tick at least 3-4 times per period (measured: its timer at 3 ms - 8 ms or "
+                         L"more; at 1 ms - 4 ms or more); shorter gives clicks and distorted sound. Try it while you "
+                         L"listen, and watch the underruns.");
     tips_.add(inputs_, L"With ASIO: where the decks' inputs come from - the interface's ASIO input pairs, or per "
                        L"deck an input device of WASAPI, DirectSound or MME (for example a player sending into a "
                        L"virtual cable). The outputs stay ASIO.\nSuch an input runs on its own clock: the program "
@@ -468,8 +470,8 @@ void AudioWindow::fillAll() {
     // ASIO: one clock, its inputs of other APIs always corrected - the drift choice's place holds the input period
     SendMessageW(inPeriod_, CB_RESETCONTENT, 0, 0);
     addItem(inPeriod_, L"Input period: Windows' default (10 ms)", 0);
-    addItem(inPeriod_, L"Input period: short (the shortest the device allows)", 1);
-    selectData(inPeriod_, settings_.shortInputPeriod ? 1 : 0);
+    for (int ms : {8, 6, 5, 4}) addItem(inPeriod_, L"Input period: " + std::to_wstring(ms) + L" ms", ms);
+    selectData(inPeriod_, settings_.inputPeriodMs);
     ShowWindow(drift_, current != AudioApi::Asio ? SW_SHOW : SW_HIDE);
     ShowWindow(inPeriod_, current == AudioApi::Asio ? SW_SHOW : SW_HIDE);
     EnableWindow(inPeriod_, inApi == AudioApi::Wasapi);
@@ -620,7 +622,7 @@ void AudioWindow::readChoices() {
     // the API is read in command(): the device / pair lists still belong to the API they were filled for
     settings_.exclusive = SendMessageW(exclusive_, BM_GETCHECK, 0, 0) == BST_CHECKED;
     settings_.driftCorrection = static_cast<int>(selectedData(drift_, settings_.driftCorrection));
-    settings_.shortInputPeriod = selectedData(inPeriod_, settings_.shortInputPeriod ? 1 : 0) == 1;
+    settings_.inputPeriodMs = static_cast<int>(selectedData(inPeriod_, settings_.inputPeriodMs));
     const LRESULT d = SendMessageW(driver_, CB_GETCURSEL, 0, 0);
     if (d >= 0) {
         const int n = static_cast<int>(SendMessageW(driver_, CB_GETLBTEXTLEN, static_cast<WPARAM>(d), 0));
@@ -921,7 +923,7 @@ void AudioWindow::refresh() {
                              look, a.driftPpm, a.active ? L"" : L" (filling up)", a.underruns, a.overruns);
                     // a short input period asked for (Setup) but the input still comes in Windows' 10 ms blocks: say
                     // what that mode needs
-                    if (settings_.shortInputPeriod && a.blockMs >= 9.0) {
+                    if (settings_.inputPeriodMs > 0 && a.blockMs >= 9.0) {
                         state += b;
                         swprintf(b, 480, L"; the input still comes in %.0f ms blocks - Windows' short periods need a "
                                          L"device that has them, set to %s in Windows' sound settings",

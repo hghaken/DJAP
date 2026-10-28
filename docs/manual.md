@@ -267,7 +267,7 @@ use - stop DJAP's audio and the player first):
 | **Volume control** | off | the samples pass unchanged and it costs no CPU |
 | **Clock corr ratio** | 100 % | DJAP corrects the drift between the cable and the output itself; two corrections would work against each other |
 | **Channel mixing** | on | the standard channel conversion |
-| **Ms per int** | 3 | the cable adds about one such period; 2 saves about 1 ms but gives the system more timer load, 1 is not advised |
+| **Ms per int** | 3; 1 with a short input period | the cable's timer. With DJAP's *Input period* at Windows' 10 ms, 3 is enough. A shorter input period needs a timer that ticks 3-4 times per period: 8 ms works at 3, 4-5 ms only at 1 (measured). 1 gives the system more timer load - use it only for a short input period |
 
 A new format takes effect when the cable opens again: stop the player and DJAP's audio and start them again. The
 cable's list then shows the format in use under *Current format* - for example `ExtPCM/44100/24/2` - and its
@@ -370,7 +370,7 @@ the audio again (a short fade-out and fade-in).
 | **Audio API** | ASIO, WASAPI, DirectSound or MME (see 3.3). Choosing another API stops the audio. **Exclusive** (WASAPI only): lower latency, but the devices are taken from other programs while the audio runs. |
 | **Drift correction** (WASAPI, DirectSound, MME) | *Auto* (default): each deck's input is read a little faster or slower so that an input and output device on different clocks never drift apart; adds a buffer of about 8-23 ms (smaller with a smaller buffer size). WASAPI leaves an input and output of the same device as one stream without it. *Always*: also those. *Off*: no buffer, but a glitch now and then unless input and output are the same device (see 3.3). Changing it while the audio runs starts the audio again. |
 | **Deck inputs** / **Input from** (ASIO only) | Where the decks' inputs come from: *ASIO input pairs*, or devices of WASAPI, DirectSound or MME (drift-corrected; adds a buffer of about 15-20 ms with a 10 ms input). The outputs stay ASIO. |
-| **Input period** (ASIO with WASAPI inputs; in the place of Drift correction) | How often Windows hands over the input's sound. *Windows' default (10 ms)*, the default. *Short (the shortest the device allows)*: through Windows' low-latency mode - the input's 10 ms and part of the drift buffer go, about 14-17 ms less latency at ASIO buffers of 64-128 frames (less at larger buffers). It needs a device that has that mode, set in Windows' sound settings (*Advanced*) to the same sample rate as the ASIO interface. Otherwise the input keeps 10 ms, and the Health section then says "the input still comes in 10 ms blocks". The input's latency in Health is the block size measured as it arrives. Try it while you listen and watch the underruns; changing it while the audio runs starts the audio again. |
+| **Input period** (ASIO with WASAPI inputs; in the place of Drift correction) | How often Windows hands over the input's sound. *Windows' default (10 ms)*, the default. *8, 6, 5 or 4 ms*: through Windows' low-latency mode - the period counts twice (the input's own latency and the drift buffer), so they save about 4, 8, 10 or 12 ms. It needs a device that has that mode, set in Windows' sound settings (*Advanced*) to the same sample rate as the ASIO interface; otherwise the input keeps 10 ms, and the Health section then says "the input still comes in 10 ms blocks". A virtual cable's own timer must tick at least 3-4 times per period - measured with a tone through the cable: with its timer at 3 ms (VAC: *Ms per int*) clean from 8 ms, at 1 ms clean from 4 ms; shorter periods give clicks and distorted sound (see 3.5). The input's latency in Health is the block size measured as it arrives. `DJAPCmd --devices` lists the periods Windows allows each input. Try it while you listen and watch the underruns; changing it while the audio runs starts the audio again. |
 | **ASIO driver** | The installed ASIO drivers. **Open driver** opens it (DJAP asks first: it may take the interface from other programs); **Close driver** releases it; **Control panel** opens the driver's own settings (buffer size, clock source). Under it: the driver's state. |
 | **Deck A / B input**, **output** | ASIO: a channel pair per deck, with the driver's channel names once it is open. Other APIs: an input and an output device per deck; *(none)* = the deck does not run. A saved device that is not connected shows "(not found)". |
 | **Sample rate** | 44.1, 48, 88.2 or 96 kHz. ASIO uses this rate if the driver accepts it, else the interface's own rate. Other APIs convert when a device runs at another rate. |
@@ -878,7 +878,8 @@ DJAPCmd --version | --help
   peak and true peak of WAV files (per deck for 4-channel files).
 - **--tone** prints each file's long-term tone balance (60 Hz, 250 Hz, 3 kHz and 10 kHz against 1 kHz) and what the
   auto tone would correct at 100 %.
-- **--devices** lists the ASIO drivers and the WASAPI / DirectSound / MME devices without opening any of them.
+- **--devices** lists the ASIO drivers and the WASAPI / DirectSound / MME devices without opening any of them; for
+  each WASAPI input also the periods Windows' low-latency mode allows it (for Setup's *Input period*).
 
 Example - process a song with the Loud loudness preset and the Oldies colour into a 24-bit file:
 

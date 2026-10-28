@@ -60,6 +60,17 @@ public:
     // The input and output devices of an API (opens nothing).
     static bool devices(AudioApi api, std::vector<SysDevice>& inputs, std::vector<SysDevice>& outputs,
                         std::string& error);
+    // The periods Windows' shared mode allows a WASAPI input device (IAudioClient3; asks, opens no stream).
+    struct EnginePeriods {
+        bool known = false;   // false: the device (or Windows) does not say - no low-latency mode
+        unsigned rate = 0;    // the device's rate in Windows (its mix format); the periods are at this rate
+        unsigned defaultFrames = 0, stepFrames = 0, minFrames = 0, maxFrames = 0;
+    };
+    static EnginePeriods inputPeriods(const std::string& device);
+    // A shared request of `frames` put on the device's step, within its shortest and longest (Windows' low-latency
+    // mode is used only for such a request - eighth outside review: a request off the step fell back to 10 ms);
+    // 0 (Windows' default) when the device has no such mode or runs at another rate in Windows than `rate`.
+    static unsigned onStep(const EnginePeriods& p, unsigned frames, double rate);
 
     // GUI thread. Prepares the engine at `sampleRate`, calls beforeStart(rate) (publish the decks' configurations),
     // opens and starts one duplex stream per deck that has devices. periodFrames 0 = the API's low-latency default.

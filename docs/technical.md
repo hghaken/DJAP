@@ -756,11 +756,13 @@ into a virtual cable; with those APIs as output too, Drift correction (Auto by d
 deck's input and output device (16.3). The two devices run on their own crystals, so their sample rates differ by tens of ppm
 (typically up to +-100 ppm); a buffer read at the nominal rate would run dry or overflow within minutes.
 With ASIO output the input's period counts twice: once as the input's own latency and once in the drift buffer
-(which holds a whole input block). Shared WASAPI hands over 10 ms by default; Setup's *Input period: short* asks for
-the device's shortest period through Windows' low-latency shared mode (IAudioClient3; a request is rounded down to
-the device's step and falls back to 10 ms when that comes out under it, so 1 frame is asked and clamped up to the
-minimum). The mode needs a device that has it, running at the same rate in Windows as the ASIO interface. The input
-latency shown is the measured block size, not the device's reported period.
+(which holds a whole input block). Shared WASAPI hands over 10 ms by default; Setup's *Input period* (8, 6, 5 or 4 ms) asks
+Windows' low-latency shared mode (IAudioClient3) for that period, put on the device's step between its shortest and
+longest (a request off the step is rounded down under itself and falls back to 10 ms). The mode needs a device that
+has it, running at the same rate in Windows as the ASIO interface. The input latency shown is the measured block
+size, not the device's reported period. A virtual cable fills its buffer on a timer of its own: measured with a
+1 kHz tone through one, the period must span 3-4 of its ticks - with a 3 ms timer clean from 8 ms, with 1 ms from
+4 ms; shorter periods clicked or read the same data twice.
 
 **The input's format.** The sample rate sets the highest frequency that can pass, half the rate (Nyquist): 22.05 kHz
 at 44.1 kHz, 24 kHz at 48 kHz - both above hearing, so the rate itself makes no audible difference. A *change* of
