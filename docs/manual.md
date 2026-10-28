@@ -254,25 +254,100 @@ about -65 dB, audible in quiet passages, fades and breaks. With 24 bits it start
 under hearing. DJAP itself computes in 32-bit floating point and asks Windows for 32-bit floating-point samples;
 nothing is lost there. The virtual cable carries no floating-point formats: 24 bits is its best.
 
-**The virtual cable's settings** (VAC: its Control Panel, a cable selected, then **Set**; the cable must not be in
-use - stop DJAP's audio and the player first):
+The virtual cable's settings, step by step and with pictures, are in 3.6.
+
+### 3.6 Setting up the virtual cable (VAC), step by step
+
+A virtual cable brings sound from one program to another inside the computer: what a player or Windows plays into
+the cable's **playback** device comes out of its **recording** device, where DJAP picks it up. VAC (Virtual Audio
+Cable) adds one or more such cables, called *Line 1*, *Line 2* and so on. The Lite version has one cable; the full
+version more - two decks from one DJ program that sends each deck to its own output need two.
+
+The settings below were measured with DJAP: a 1 kHz tone through the cable, recorded at each setting (chapter 10
+and the technical manual, 17).
+
+**Step 1 - VAC's Control Panel.** Start *VAC Control Panel* from the Start menu (*Virtual Audio Cable*), as
+administrator (right-click: *Run as administrator*) - a change of the number of cables restarts the driver, which
+needs it. Stop DJAP's audio and the player first: most cable settings cannot change while the cable is in use. Click
+the cable in the list (for example cable 1), set the values in the *Cable* group as in the table, and click **Set**
+in that group.
+
+![VAC's Control Panel: cable 1 selected and in use at 44100 Hz / 24 bits, both cables at Ms per int 1 (for a 4 ms input period in DJAP)](images/vac-control-panel.png)
 
 | Setting | Choose | Why |
 |---|---|---|
-| **SR** (format range) | your music's rate at both ends, for example 44100 .. 44100 | one rate, no conversion in the cable |
-| **BPS** (format range) | up to 24, for example 16 .. 24 | the cable may carry 24 bits |
-| Windows **Sound** settings, the cable's device under **Playback** and under **Recording**, *Advanced* | 24 bit, the same rate | the format Windows uses for the cable in shared mode |
-| **Capture / Render port** | Auto (shows WR: WaveRT) | the most efficient kind |
-| **Packet mode** | off | on helps only in rare cases and can cause clicks of its own when the margin is short |
-| **Min RT buf** | No | it does not affect programs that use WASAPI, such as DJAP |
-| **Volume control** | off | the samples pass unchanged and it costs no CPU |
-| **Clock corr ratio** | 100 % | DJAP corrects the drift between the cable and the output itself; two corrections would work against each other |
-| **Channel mixing** | on | the standard channel conversion |
-| **Ms per int** | 3; 1 with a short input period | the cable's timer. With DJAP's *Input period* at Windows' 10 ms, 3 is enough. A shorter input period needs a timer that ticks 3-4 times per period: 8 ms works at 3, 4-5 ms only at 1 (measured). 1 gives the system more timer load - use it only for a short input period |
+| **Cables** (Driver group) | as many as you need, usually 1 or 2 | each cable is a pair of Windows devices; more than needed only slows Windows' device lists |
+| **SR** (format range) | your music's rate at both ends, for example 44100 .. 44100 | one rate, so nothing in the cable or in Windows has to convert (3.5) |
+| **BPS** (format range) | 16 .. 24 | the cable may carry 24 bits; it has no floating-point formats, so 24 is its best (3.5) |
+| **NC** (format range) | 1 .. 2 | stereo |
+| **Ms per int** | **3** with DJAP's *Input period* at Windows' 10 ms or 8 ms; **1** for 6, 5 or 4 ms | the cable's own timer: it fills its buffer this often. DJAP's input period must span 3-4 ticks of it - measured: at 3 ms an 8 ms period or longer is clean, at 1 ms 4 ms or longer; shorter periods click or sound distorted. 1 gives the system more timer work: use it only for a short input period |
+| **Max inst** | leave it (20) | how many programs may open the cable at once |
+| **Capture port / Render port** | Auto (it shows **WR**: WaveRT) | the most efficient kind, with notification events - what Windows' low-latency mode needs |
+| **Min RT buf** | No | a minimum buffer for programs that talk to the driver directly; it does not affect Windows' audio engine, which DJAP uses |
+| **Packet mode** | off (both) | on, it guards against lost data but makes the driver report false over- and underflows when the margin is short, and the resynchronisation clicks |
+| **Stream fmt limit** | Cable range | streams may use only the formats set above |
+| **Clock corr ratio** | 100.0000000 | DJAP measures and corrects the drift between the cable and the output itself; a second correction would work against it |
+| **Volume control** | off | the samples pass unchanged (bit for bit) and it costs no CPU |
+| **Channel mixing** | on | the standard conversion when a program plays mono into a stereo cable |
+| **Enable spk pin**, **Use PortCls** | off | not needed |
+| **Worker threads**: Up to, Prio (Driver group) | Auto, Auto | the driver's own choice per processor |
 
-A new format takes effect when the cable opens again: stop the player and DJAP's audio and start them again. The
-cable's list then shows the format in use under *Current format* - for example `ExtPCM/44100/24/2` - and its
-*Oflows* / *Uflows* columns stay empty while all runs well.
+**Step 2 - Windows' Sound settings.** Open *Sound settings* (the button in VAC's panel, or right-click the speaker
+in the taskbar) and then *More sound settings* for the classic Sound dialog.
+
+- On the **Playback** tab, double-click the cable (*Line 1 (Virtual Audio Cable)*), tab **Advanced**: *Default
+  Format* **24 bit, 44100 Hz (Studio Quality)** - or the rate of your music. Leave the two *Exclusive Mode* boxes on.
+  On the tab *Enhancements* (if it is there): all off.
+
+![The cable's playback device, Advanced tab: 2 channel, 24 bit, 44100 Hz (here the cable was renamed "VAC-Line 1" in Windows; the name does not matter)](images/windows-line-playback.png)
+
+- On the **Recording** tab, double-click the same cable, tab **Advanced**: the same format, **24 bit, 44100 Hz**.
+  Tab **Listen**: *Listen to this device* **off** - on, Windows plays the cable to the speakers itself as well, and
+  you hear everything twice (once without DJAP's processing).
+
+![The cable's recording device, Advanced tab: the same format (the Listen tab next to it: "Listen to this device" off)](images/windows-line-recording.png)
+
+- For **Windows' own sound** through DJAP (one channel, 3.2): make the cable's playback device the **default
+  playback device** (right-click it: *Set as Default Device*). For a **player or DJ software**: choose the cable as
+  that program's output instead, and keep your normal default device.
+
+**Step 3 - DJAP's Setup window.** With an ASIO interface for the output:
+
+![DJAP's Setup: ASIO output, WASAPI input from the cable](images/setup-wasapi-input.png)
+
+1. **Audio API: ASIO**, the interface's driver.
+2. **Deck inputs: WASAPI devices (drift-corrected)**; as each deck's input the cable's recording device (*Line 1
+   (Virtual Audio Cable)*; with two cables deck B on *Line 2*).
+3. **Input period**: *Windows' default (10 ms)* is always safe. With **Ms per int 1** in VAC, **4 ms** saves about
+   12 ms of latency; with **Ms per int 3**, at most **8 ms** (saves about 4 ms).
+4. **Sample rate**: the same as in steps 1 and 2. **Buffer size**: the interface's preferred one, 64 or 128 frames
+   for low latency.
+5. **Start audio**.
+
+Without an ASIO interface (WASAPI as the whole route): **Audio API: WASAPI**, each deck's input the cable's
+recording device and its output the speakers; *Drift correction* on *Auto* (3.3).
+
+**Step 4 - Check.**
+
+- In VAC's panel the cable's row shows *Current format* **ExtPCM/44100/24/2** (the format in use), *Rc stms* and
+  *Pb stms* 1 or more (DJAP recording, the player playing), and empty **Oflows / Uflows** columns. Counts there mean
+  the cable was not served in time.
+- In DJAP's Setup, **Health**: per deck the latency, *input* about the chosen period (4.0, 8.0 or 10.0 ms), the drift
+  in ppm (tens of ppm are normal: the cable and the interface run on clocks of their own), and **underruns 0**. Two
+  messages can appear: "the input still comes in 10 ms blocks" (Windows' short periods need the cable at the same
+  rate in Windows as the interface) and "N input blocks came twice" (the cable's timer is too slow for the period:
+  choose a longer period, or Ms per int 1).
+- Press **Reset counters** and let it run while you listen; after half an hour *underruns* and *late* should still be 0.
+
+**When something is wrong**
+
+| What you notice | Cause | What to do |
+|---|---|---|
+| Distorted or crackling sound right after choosing a short input period | the cable's timer is slower than the period needs | Ms per int 1 in VAC, or a longer input period (8 or 10 ms) |
+| Everything twice, once unprocessed | *Listen to this device* is on for the cable's recording device | turn it off (step 2) |
+| DJAP's input shows "(not found)" | the cable was renamed, reinstalled, or chosen under another API | choose it again in Setup |
+| Muffled highs, or noise in quiet passages | the cable at 16 bits, or another rate than the music | steps 1 and 2: 24 bits, the music's rate everywhere |
+| Counts in VAC's *Oflows* / *Uflows* | a program did not keep up with the cable | they may appear when a stream starts or stops; growing counts while playing: a longer input period |
 
 ## 4. The main window
 
