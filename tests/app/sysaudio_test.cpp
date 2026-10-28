@@ -125,6 +125,36 @@ void oneDevice(const SysRoute& route) {
     SysAudio::assumeOneDevice(false);
 }
 
+// Capture streams only (the decks' inputs when the output is ASIO): the period asked for reaches the device - the
+// default, or a short one (Setup's input period, seventh outside review) - and the blocks reach the AsyncInput.
+void captureOnly(const std::string& input) {
+    std::printf("-- capture only (ASIO output): the input period asked for\n");
+    for (const unsigned asked : {0u, 64u}) {
+        AsyncInput async;
+        async.reset(48000.0);
+        AsyncInput* targets[2] = {&async, nullptr};
+        const std::string devices[2] = {input, std::string()};
+        SysAudio sys;
+        std::string err;
+        const bool ok = sys.startCapture(AudioApi::Wasapi, devices, 48000.0, asked, false, targets, err);
+        CHECK(ok);
+        if (!ok) {
+            std::printf("   start failed: %s\n", err.c_str());
+            continue;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        const SysStreamInfo info = sys.info(0);
+        std::printf("   asked %u frames: the device runs %u frames (%.2f ms), %lld blocks in the AsyncInput\n", asked,
+                    info.periodFrames, info.latencyMs, async.state().writes);
+        CHECK(info.running && info.askedFrames == asked);
+        CHECK(async.state().writes > 0);
+        if (asked) CHECK(info.periodFrames == asked); // the null device takes any size
+        else CHECK(info.periodFrames >= 240);         // the default: about 10 ms
+        sys.stop();
+        CHECK(!sys.running());
+    }
+}
+
 // The settings lock: a second taker waits until the first lets go (the program and a plug-in saving at once).
 void settingsLock() {
     std::printf("-- the settings lock: one writer at a time\n");
@@ -170,6 +200,7 @@ int main() {
     run(true, route);
     failures(route);
     oneDevice(route);
+    captureOnly(inputs[0].name);
     settingsLock();
     return test::finish("sysaudio_test");
 }

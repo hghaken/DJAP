@@ -38,6 +38,7 @@ struct SysInputs {
     std::string device[2]; // capture device of each deck; empty = the deck's ASIO input pair
     bool exclusive = false; // WASAPI exclusive
     unsigned periodFrames = 0; // 0 = the API's low-latency default
+    bool shortPeriod = false;  // WASAPI: ask for periods of the ASIO buffer's length (Settings::shortInputPeriod)
     bool any() const { return !device[0].empty() || !device[1].empty(); }
 };
 // The settings' choice (AsioInputs, AsioInputDeviceA / B, Exclusive); no devices when the inputs are ASIO pairs.

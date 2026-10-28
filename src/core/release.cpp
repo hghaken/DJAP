@@ -284,16 +284,16 @@ bool parseLatestRelease(const std::string& json, ReleaseInfo& out, std::string& 
     return true;
 }
 
-bool releaseFromTagUrl(const std::string& url, ReleaseInfo& out) {
+bool releaseFromTagUrl(const std::string& url, const std::string& repo, ReleaseInfo& out) {
     out = ReleaseInfo();
     const std::string mark = "/releases/tag/";
-    const size_t at = url.find(mark);
-    if (url.compare(0, 19, "https://github.com/") != 0 || at == std::string::npos) return false;
-    std::string tag = url.substr(at + mark.size());
+    // this repository's tag, "v" and a version (the releases are tagged so; another form 404s at the download anyway)
+    const std::string start = repo + mark + "v";
+    if (repo.compare(0, 19, "https://github.com/") != 0 || url.compare(0, start.size(), start) != 0) return false;
+    std::string tag = url.substr(start.size());
     const size_t end = tag.find_first_of("?#/");
     if (end != std::string::npos) tag.erase(end);
-    const std::string base = url.substr(0, at); // https://github.com/<owner>/<repo>
-    if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) tag.erase(0, 1);
+    const std::string& base = repo;
     // a version and nothing else (it goes into a file name and an address)
     if (tag.empty() || tag.size() > 40 || !std::isdigit(static_cast<unsigned char>(tag[0])) ||
         tag.find_first_not_of("0123456789.-+abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ") != std::string::npos)

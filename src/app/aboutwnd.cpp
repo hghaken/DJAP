@@ -131,8 +131,15 @@ void AboutWindow::create() {
     };
     checkNow_ = button(L"Check now", idCheckNow, x);
     install_ = button(L"Install update", idInstall, x + px(118));
-    updateText_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX, x + px(240),
-                                  top + px(146), w - px(240), px(36), hwnd_, nullptr, inst, nullptr);
+    updateText_ = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_LEFT | SS_NOPREFIX | SS_NOTIFY,
+                                  x + px(240), top + px(146), w - px(240), px(36), hwnd_, nullptr, inst, nullptr);
+    updateShown_.clear();
+    // seventh outside review: the update buttons had no tooltips, and a long message was cut off (now whole in its own)
+    tips_.create(hwnd_);
+    tips_.setDpi(dpi_);
+    tips_.add(checkNow_, L"Asks GitHub now whether a newer DJAP is there. Nothing is downloaded or installed.");
+    tips_.add(install_, L"Downloads the newer DJAP, checks it against GitHub's checksum and installs it. DJAP closes "
+                        L"for this and starts again by itself; running audio starts again too.");
     ok_ = CreateWindowExW(0, L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                           px(kWidth - 20 - 96), px(kHeight - 20 - 30), px(96), px(30), hwnd_,
                           reinterpret_cast<HMENU>(static_cast<INT_PTR>(IDOK)), inst, nullptr);
@@ -151,9 +158,11 @@ void AboutWindow::setFonts() {
 void AboutWindow::refresh() {
     if (!hwnd_ || !view_) return;
     const UpdateView u = view_();
-    wchar_t old[512] = {};
-    GetWindowTextW(updateText_, old, 512);
-    if (u.text != old) SetWindowTextW(updateText_, u.text.c_str());
+    if (u.text != updateShown_) {
+        updateShown_ = u.text;
+        SetWindowTextW(updateText_, u.text.c_str());
+        tips_.add(updateText_, u.text.empty() ? L"What the last update check found." : u.text.c_str());
+    }
     EnableWindow(checkNow_, u.canCheck);
     EnableWindow(install_, u.canInstall);
 }

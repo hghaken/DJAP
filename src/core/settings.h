@@ -44,6 +44,10 @@ public:
     std::string driver;          // ASIO driver name; empty = none chosen
     std::string inDevice[2], outDevice[2]; // WASAPI / DirectSound / MME: each deck's devices (empty = deck unused)
     bool exclusive = false;      // WASAPI exclusive mode
+    // ASIO with WASAPI deck inputs: ask the inputs for periods as short as the ASIO buffer (Windows' low-latency
+    // shared mode, when the device has it) instead of Windows' 10 ms default - up to ~14 ms less latency (seventh
+    // outside review). Off by default: a device without that mode keeps 10 ms, and shorter periods mean more callbacks.
+    bool shortInputPeriod = false;
     // WASAPI / DirectSound / MME: each deck's input read with drift correction (a capture and a playback stream with
     // the deck's AsyncInput between them: the input and output device may run on different clocks; adds a buffer of
     // about 8-23 ms). kDriftAuto: so unless WASAPI finds input and output on one device (one clock: one duplex

@@ -49,6 +49,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK(a.oversampling == b.oversampling);
     CHECK(a.bufferSize == b.bufferSize && a.startAudio == b.startAudio);
     CHECK(a.api == b.api && a.exclusive == b.exclusive && a.driftCorrection == b.driftCorrection);
+    CHECK(a.shortInputPeriod == b.shortInputPeriod);
     for (int d = 0; d < 2; ++d) CHECK(a.inDevice[d] == b.inDevice[d] && a.outDevice[d] == b.outDevice[d]);
     CHECK(a.asioInputs == b.asioInputs && a.decks == b.decks);
     CHECK(a.followVolume[0] == b.followVolume[0] && a.followVolume[1] == b.followVolume[1]);
@@ -172,6 +173,7 @@ Settings busy() {
     s.api = "WASAPI";
     s.exclusive = true;
     s.driftCorrection = Settings::kDriftAlways; // not the default
+    s.shortInputPeriod = true;                  // not the default
     s.inDevice[0] = "FOC-Analogue 1 + 2 (2- Focusrite USB Audio)"; // device names with + ( ) - and UTF-8
     s.outDevice[0] = "ROD-Headphones (R\xC3\x98" "DE PodMic USB)";
     s.inDevice[1] = s.outDevice[1] = "";
@@ -418,10 +420,18 @@ void handEdited() {
     // (a hand edit) the default
     for (const auto& [value, mode] : std::vector<std::pair<std::string, int>>{
              {"0", Settings::kDriftOff}, {"1", Settings::kDriftAuto}, {"2", Settings::kDriftAlways},
-             {"7", Settings::kDriftAuto}, {"-3", Settings::kDriftAuto}, {"x", Settings::kDriftAuto}}) {
+             {"7", Settings::kDriftAuto}, {"-3", Settings::kDriftAuto}, {"x", Settings::kDriftAuto},
+             // the values just outside (seventh outside review: bounds moved by one were not caught)
+             {"3", Settings::kDriftAuto}, {"-1", Settings::kDriftAuto}}) {
         Settings dc;
         dc.fromText("[Audio]\r\nDriftCorrection=" + value + "\r\n");
         CHECK(dc.driftCorrection == mode);
+    }
+    for (const int mode : {Settings::kDriftOff, Settings::kDriftAuto, Settings::kDriftAlways}) { // each survives saving
+        Settings dc, back;
+        dc.driftCorrection = mode;
+        back.fromText(dc.toText());
+        CHECK(back.driftCorrection == mode);
     }
 
     // linked presets: deck B follows deck A, also when a hand edit set them apart; survives a round trip

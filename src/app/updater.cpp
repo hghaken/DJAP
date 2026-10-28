@@ -134,7 +134,7 @@ Got get(const std::string& url, const std::string& api, const wchar_t* accept, s
     if (code == 404) return Got::NotFound;
     if (code != 200) {
         error = code == 403 || code == 429 ? "GitHub refused (" + std::to_string(code) +
-                                                 "): its limit of questions an hour from this network is used up"
+                                                 "): most likely its limit of questions an hour from this network is used up"
                                            : "the server answered " + std::to_string(code);
         return Got::Failed;
     }
@@ -259,9 +259,9 @@ void Updater::check(HWND notify, const std::string& url, const std::string& curr
             // router counts. Its web page of the latest release has no such limit: it redirects to the release's
             // tag, and the setup and its .sha256 sit at fixed addresses under it (the checksum is still required)
             std::string page, landed, err2;
-            if (get(kLatestPage, api, L"text/html", &page, nullptr, nullptr, nullptr, 0, quit_, err2, nullptr, &landed) ==
-                    Got::Ok &&
-                releaseFromTagUrl(landed, r)) {
+            const Got pageGot =
+                get(kLatestPage, api, L"text/html", &page, nullptr, nullptr, nullptr, 0, quit_, err2, nullptr, &landed);
+            if (pageGot == Got::Ok && releaseFromTagUrl(landed, kRepo, r)) {
                 {
                     std::lock_guard<std::mutex> lock(mutex_);
                     release_ = r;
@@ -270,6 +270,11 @@ void Updater::check(HWND notify, const std::string& url, const std::string& curr
                 finish(notify, 0, compareVersions(r.version, current) > 0 ? State::Available : State::UpToDate);
                 return;
             }
+            // both failed: say both (seventh outside review: only the API's answer was shown)
+            finish(notify, 0, State::Failed,
+                   err + "; the release page did not help either: " +
+                       (pageGot == Got::Ok ? "it did not lead to a release" : err2.empty() ? "not found" : err2));
+            return;
         }
         if (got == Got::Failed) {
             finish(notify, 0, State::Failed, err);

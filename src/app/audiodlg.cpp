@@ -20,7 +20,7 @@ namespace {
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
           idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
-          idCheckUpdates, idTooltips, idDrift };
+          idCheckUpdates, idTooltips, idDrift, idInPeriod };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 // limiter look-ahead choices (ms; 1.5 the default). Nothing between 0 and 1.5: below about 1.3 ms the true-peak
@@ -168,6 +168,7 @@ void AudioWindow::createControls() {
     exclusive_ = make(L"BUTTON", L"Exclusive (WASAPI: lower latency)",
                       BS_AUTOCHECKBOX | WS_TABSTOP, idExclusive);
     drift_ = make(WC_COMBOBOXW, L"", combo, idDrift);
+    inPeriod_ = make(WC_COMBOBOXW, L"", combo, idInPeriod);
     driver_ = make(WC_COMBOBOXW, L"", combo, idDriver);
     open_ = make(L"BUTTON", L"Open driver", BS_OWNERDRAW | WS_TABSTOP, idOpen);
     close_ = make(L"BUTTON", L"Close driver", BS_OWNERDRAW | WS_TABSTOP, idClose);
@@ -186,6 +187,7 @@ void AudioWindow::createControls() {
     start_ = make(L"BUTTON", L"Start audio", BS_OWNERDRAW | WS_TABSTOP, idStart);
     stop_ = make(L"BUTTON", L"Stop audio", BS_OWNERDRAW | WS_TABSTOP, idStop);
     state_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY, 0);
+    stateShown_.clear();
     health_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY, 0);
     resetHealth_ = make(L"BUTTON", L"Reset counters", BS_OWNERDRAW | WS_TABSTOP, idResetHealth);
     look_ = make(WC_COMBOBOXW, L"", combo, idLook);
@@ -205,7 +207,7 @@ void AudioWindow::createControls() {
                  SS_LEFT, 0);
 
     for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_}) theme::makeButton(b);
-    for (HWND c : {decks_, api_, inputs_, drift_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
+    for (HWND c : {decks_, api_, inputs_, drift_, inPeriod_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
                       L"players or a mixer's channels).\nOne channel: one stereo processor, for example for everything "
@@ -224,6 +226,11 @@ void AudioWindow::createControls() {
                       L"periods), shown while running - except for an input and output that WASAPI finds on one "
                       L"device (one clock): one stream, no buffer. Always: corrected also then (if a device glitches "
                       L"now and then on Auto). Off: always one stream from input to output, no buffer.");
+    tips_.add(inPeriod_, L"With ASIO and WASAPI inputs: how often Windows hands over the input's sound. Default: every "
+                         L"10 ms - the largest part of the latency (the drift buffer holds a whole period). Short: as "
+                         L"often as the ASIO buffer, when the device has Windows' low-latency mode - up to about 14 ms "
+                         L"less latency; a device without that mode keeps 10 ms (Health then says so). Try it while "
+                         L"you listen, and watch the underruns.");
     tips_.add(inputs_, L"With ASIO: where the decks' inputs come from - the interface's ASIO input pairs, or per "
                        L"deck an input device of WASAPI, DirectSound or MME (for example a player sending into a "
                        L"virtual cable). The outputs stay ASIO.\nSuch an input runs on its own clock: the program "
@@ -299,7 +306,7 @@ void AudioWindow::setFonts() {
     SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof ncm, &ncm, 0, dpi_);
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
-    for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
+    for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, inPeriod_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
                    start_, stop_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
@@ -329,6 +336,7 @@ void AudioWindow::layout() {
     MoveWindow(labels_[9], m, y, labelW, h, TRUE);
     MoveWindow(inputs_, m + labelW + g, y, px(300), px(200), TRUE);
     MoveWindow(drift_, m + labelW + px(300) + 2 * g, y, W - labelW - px(300) - 2 * g, px(200), TRUE);
+    MoveWindow(inPeriod_, m + labelW + px(300) + 2 * g, y, W - labelW - px(300) - 2 * g, px(200), TRUE); // (one shows)
     y += h + g;
     MoveWindow(labels_[0], m, y, labelW, h, TRUE);
     const int comboW = W - labelW - 3 * (bw + g) - g;
@@ -456,7 +464,14 @@ void AudioWindow::fillAll() {
         if (kApis[i] == inApi) SendMessageW(inputs_, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
     }
     EnableWindow(inputs_, current == AudioApi::Asio);
-    EnableWindow(drift_, current != AudioApi::Asio); // ASIO: one clock; its inputs of other APIs always correct
+    // ASIO: one clock, its inputs of other APIs always corrected - the drift choice's place holds the input period
+    SendMessageW(inPeriod_, CB_RESETCONTENT, 0, 0);
+    addItem(inPeriod_, L"Input period: Windows' default (10 ms)", 0);
+    addItem(inPeriod_, L"Input period: short, as the ASIO buffer (when the device allows)", 1);
+    selectData(inPeriod_, settings_.shortInputPeriod ? 1 : 0);
+    ShowWindow(drift_, current != AudioApi::Asio ? SW_SHOW : SW_HIDE);
+    ShowWindow(inPeriod_, current == AudioApi::Asio ? SW_SHOW : SW_HIDE);
+    EnableWindow(inPeriod_, inApi == AudioApi::Wasapi);
     EnableWindow(exclusive_, current == AudioApi::Wasapi || (current == AudioApi::Asio && inApi == AudioApi::Wasapi));
     // devices of an API (lists only; nothing is opened); the saved one stays listed when it is not there
     auto devices = [&](HWND combo, std::vector<SysDevice>& list, size_t listed, const std::string& value,
@@ -604,6 +619,7 @@ void AudioWindow::readChoices() {
     // the API is read in command(): the device / pair lists still belong to the API they were filled for
     settings_.exclusive = SendMessageW(exclusive_, BM_GETCHECK, 0, 0) == BST_CHECKED;
     settings_.driftCorrection = static_cast<int>(selectedData(drift_, settings_.driftCorrection));
+    settings_.shortInputPeriod = selectedData(inPeriod_, settings_.shortInputPeriod ? 1 : 0) == 1;
     const LRESULT d = SendMessageW(driver_, CB_GETCURSEL, 0, 0);
     if (d >= 0) {
         const int n = static_cast<int>(SendMessageW(driver_, CB_GETLBTEXTLEN, static_cast<WPARAM>(d), 0));
@@ -900,6 +916,13 @@ void AudioWindow::refresh() {
                              in.latencyMs + a.targetMs + s.outputLatency * ms + look, in.latencyMs, a.targetMs,
                              s.outputLatency * ms, look, a.driftPpm, a.active ? L"" : L" (filling up)", a.underruns,
                              a.overruns);
+                    // a short input period asked for (Setup): whether Windows took it
+                    const double asked = in.deviceRate > 0 ? in.askedFrames * in.deviceRate / s.sampleRate : in.askedFrames;
+                    if (in.askedFrames && in.periodFrames > asked + 1.0) {
+                        state += b;
+                        swprintf(b, 480, L"; the input device has no periods this short (Windows runs %u frames, "
+                                         L"not the %u asked for)", in.periodFrames, in.askedFrames);
+                    }
                 } else {
                     swprintf(b, 480, L"\n%s: ASIO \x2192 ASIO. Latency %.2f ms (input %.2f + output %.2f + processing %.2f)",
                              deck, (s.inputLatency + s.outputLatency) * ms + look, s.inputLatency * ms,
@@ -971,9 +994,8 @@ void AudioWindow::refresh() {
              running ? h.blocks : 0LL, running ? h.heaviestPercent : 0.0, running ? h.lastPercent : 0.0,
              running ? h.overHalf : 0LL, running ? h.late : 0LL, running ? h.refused : 0LL, resyncs, overloads);
     SetWindowTextW(info_, info.c_str());
-    wchar_t shown[2048] = {};
-    GetWindowTextW(state_, shown, 2048);
-    if (state != shown) {
+    if (state != stateShown_) {
+        stateShown_ = state;
         SetWindowTextW(state_, state.c_str());
         // the counters right under the text: lay out again when it takes another number of lines
         RECT sr;

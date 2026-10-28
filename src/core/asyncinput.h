@@ -45,8 +45,8 @@ public:
     // period cut into short callbacks arrives at once, and the fill must hold all of it. The largest burst of the last
     // kBurstWindowS .. 2 x kBurstWindowS seconds counts, at most kBurstCapMs or 1.5 device periods (setDevicePeriod):
     // the catch-up after a stall is one burst too, and it must not raise the buffer for the rest of the session (fifth
-    // outside review). Output callbacks before any input came are not merged: a stream fills its buffer at the start
-    // with callbacks straight after each other (sixth review: +20 ms for 20-40 s after every start).
+    // outside review). The output's callbacks before its first real gap are not merged: a stream fills its buffer at
+    // the start with callbacks straight after each other (sixth review: +20 ms for 20-40 s after every start).
     static constexpr double kBurstGap = 0.5;
     static constexpr double kBurstWindowS = 20.0;
     static constexpr double kBurstCapMs = 50.0;
@@ -64,9 +64,10 @@ public:
     void reset(double fs);
     // Test aid: 0 = the loop steers the read speed (normal); > 0 = this fixed read speed.
     void setFixedRatio(double ratio) { fixedRatio_ = ratio; }
-    // Neither thread running (after reset): the devices' own period in frames - a burst may be 1.5 of it, also over
+    // Any thread, after reset (the ASIO + capture route sets it while the output already reads - seventh outside
+    // review): the devices' own period in frames at this object's rate - a burst may be 1.5 of it, also over
     // kBurstCapMs (a 3072-frame packet in callbacks of 512 underran at every period with the cap alone).
-    void setDevicePeriod(int frames) { devicePeriod_ = frames > 0 ? frames : 0; }
+    void setDevicePeriod(int frames) { devicePeriod_.store(frames > 0 ? frames : 0, std::memory_order_relaxed); }
 
     // Writer (capture thread): `frames` interleaved stereo frames, received at `nowSeconds` (steady clock).
     void write(const float* interleaved, int frames, double nowSeconds);
@@ -82,7 +83,7 @@ public:
 private:
     void interpolate(float* left, float* right, int frames);
 
-    // The largest burst (see kBurstWindowS) of one side: blocks closer than a quarter of the last one's length.
+    // The largest burst (see kBurstWindowS) of one side: blocks closer than kBurstGap of the last one's length.
     struct Bursts {
         int burst = 0, lastFrames = 0, now = 0, before = 0;
         double lastTime = -1.0, windowStart = -1.0;
@@ -117,9 +118,10 @@ private:
     int fadeRing_ = 0;                   // ... the first of them still in the ring, the rest the last frame held
     float lastL_ = 0.0f, lastR_ = 0.0f;  // the last frame read (before the fade-out's gain)
     double targetS_ = 0.0;               // the target, going down at most kTargetFallMsPerS (frames)
-    int devicePeriod_ = 0;               // setDevicePeriod
+    std::atomic<int> devicePeriod_{0};   // setDevicePeriod
     double fade_ = 1.0;     // fade-in position 0..1 (1: done)
     bool active_ = false, periodOk_ = false, haveAvg_ = false;
+    int playGaps_ = 0; // the output's real gaps since reset, up to 2: merge from the first, read from the second
     // reader -> display
     std::atomic<bool> activeShown_{false};
     std::atomic<double> targetShown_{0}, fillShown_{0}, driftShown_{0}, corrShown_{0};

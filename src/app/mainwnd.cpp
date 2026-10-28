@@ -760,6 +760,10 @@ void MainWindow::updateEvent(WPARAM what) {
         placement::messageBox(about_.hwnd() ? about_.hwnd() : hwnd_, fromUtf8(err).c_str(), L"Update",
                               MB_OK | MB_ICONWARNING);
     }
+    // a download that failed while About was closed: said in a balloon (seventh outside review: nothing showed it)
+    if (what == 1 && updater_.state() == Updater::State::Failed && !about_.hwnd())
+        tray_.balloon(L"The DJAP update could not be downloaded",
+                      fromUtf8(updater_.error()) + L"\nRight-click the window: About DJAP to try again.");
 }
 
 // The main window's right-click menu (client, 2026-10-25: no menu bar; "Exit and Setup"; 2026-10-26: Exit is

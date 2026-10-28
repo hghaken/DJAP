@@ -14,6 +14,7 @@ SysInputs sysInputsFrom(const Settings& s) {
         in.device[1] = s.decks == 2 ? s.asioInputDevice[1] : std::string();
     }
     in.exclusive = s.exclusive;
+    in.shortPeriod = s.shortInputPeriod && in.api == AudioApi::Wasapi; // DirectSound / MME: no such mode
     return in;
 }
 
@@ -123,8 +124,14 @@ bool AudioIO::startDevice(double sampleRate, long bufferSize, const AsioChannels
         // the capture streams at the rate the driver runs (silence on those decks until they have filled up)
         AsyncInput* const targets[2] = {inputs_.device[0].empty() ? nullptr : &async_[0],
                                         inputs_.device[1].empty() ? nullptr : &async_[1]};
-        if (!sys_.startCapture(inputs_.api, inputs_.device, host_.state().sampleRate, inputs_.periodFrames,
-                               inputs_.exclusive, targets, error)) {
+        // a short input period: the ASIO buffer's length (at least 32 frames); Windows takes the nearest size its
+        // low-latency mode allows, or keeps its default when the device has no such mode (seventh outside review:
+        // the 10 ms default is the largest part of the latency left)
+        const unsigned capFrames = inputs_.shortPeriod
+                                       ? static_cast<unsigned>(std::max(32L, host_.state().bufferSize))
+                                       : inputs_.periodFrames;
+        if (!sys_.startCapture(inputs_.api, inputs_.device, host_.state().sampleRate, capFrames, inputs_.exclusive,
+                               targets, error)) {
             host_.stop();
             ok = false;
         }

@@ -125,28 +125,41 @@ void release() {
     CHECK(y.version == "0.1.96" && y.sha256.empty() && y.setupUrl == "u");
 }
 
-// The .sha256 file: the hash on the setup's own line, or the only hash; never a guess between several.
 // When GitHub's API refuses (its hourly limit per network), the web page of the latest release redirects to its tag:
 // the version and the fixed download addresses come from there.
 void fromTagUrl() {
     std::printf("-- the release from the web page's redirect\n");
     ReleaseInfo r;
-    CHECK(releaseFromTagUrl("https://github.com/hghaken/DJAP/releases/tag/v0.1.154", r));
+    const std::string repo = "https://github.com/hghaken/DJAP";
+    CHECK(releaseFromTagUrl(repo + "/releases/tag/v0.1.154", repo, r));
     CHECK(r.version == "0.1.154");
     CHECK(r.setupName == "DJAP-Setup-0.1.154.exe");
     CHECK(r.setupUrl == "https://github.com/hghaken/DJAP/releases/download/v0.1.154/DJAP-Setup-0.1.154.exe");
     CHECK(r.sha256Url == r.setupUrl + ".sha256");
     CHECK(r.sha256.empty() && r.setupSize == 0); // the checksum comes from the .sha256 file
-    CHECK(releaseFromTagUrl("https://github.com/hghaken/DJAP/releases/tag/v1.0.0-rc.1?x=1", r) && r.version == "1.0.0-rc.1");
+    CHECK(releaseFromTagUrl(repo + "/releases/tag/v1.0.0-rc.1?x=1", repo, r) && r.version == "1.0.0-rc.1");
+    CHECK(releaseFromTagUrl(repo + "/releases/tag/v1.2#notes", repo, r) && r.version == "1.2");
+    // the longest tag taken: 40 characters (it goes into a file name)
+    CHECK(releaseFromTagUrl(repo + "/releases/tag/v" + std::string(40, '1'), repo, r));
+    CHECK(!releaseFromTagUrl(repo + "/releases/tag/v" + std::string(41, '1'), repo, r));
     // not a release tag, or a tag that is not a plain version: refused
-    CHECK(!releaseFromTagUrl("https://github.com/hghaken/DJAP/releases", r));
-    CHECK(!releaseFromTagUrl("https://github.com/hghaken/DJAP/releases/tag/", r));
-    CHECK(!releaseFromTagUrl("https://github.com/hghaken/DJAP/releases/tag/latest", r));
-    CHECK(!releaseFromTagUrl("https://github.com/hghaken/DJAP/releases/tag/v1.0%2F..%2Fx", r));
-    CHECK(!releaseFromTagUrl("http://github.com/hghaken/DJAP/releases/tag/v1.0", r));
-    CHECK(!releaseFromTagUrl("https://example.com/hghaken/DJAP/releases/tag/v1.0", r));
+    CHECK(!releaseFromTagUrl(repo + "/releases", repo, r));
+    CHECK(!releaseFromTagUrl(repo + "/releases/tag/", repo, r));
+    CHECK(!releaseFromTagUrl(repo + "/releases/tag/latest", repo, r));
+    CHECK(!releaseFromTagUrl(repo + "/releases/tag/v1.0%2F..%2Fx", repo, r));
+    CHECK(!releaseFromTagUrl("http://github.com/hghaken/DJAP/releases/tag/v1.0", repo, r));
+    CHECK(!releaseFromTagUrl("https://example.com/hghaken/DJAP/releases/tag/v1.0", repo, r));
+    // seventh outside review: another owner or repository, a path around it, a tag without "v"
+    CHECK(!releaseFromTagUrl("https://github.com/x/y/releases/tag/v1.0", repo, r));
+    CHECK(!releaseFromTagUrl("https://github.com/hghaken/DJAP2/releases/tag/v1.0", repo, r));
+    CHECK(!releaseFromTagUrl("https://github.com/hghaken/DJAP/../x/releases/tag/v1.0", repo, r));
+    CHECK(!releaseFromTagUrl("https://github.com//hghaken/DJAP/releases/tag/v1.0", repo, r));
+    CHECK(!releaseFromTagUrl(repo + "/releases/tag/1.0", repo, r));
+    CHECK(!releaseFromTagUrl(repo + "/releases/tag/V1.0", repo, r));
+    CHECK(!releaseFromTagUrl(repo + "/releases/tag/v1.0", "https://example.com/hghaken/DJAP", r));
 }
 
+// The .sha256 file: the hash on the setup's own line, or the only hash; never a guess between several.
 void checksumFile() {
     const std::string a(64, 'a'), b(64, 'b');
     CHECK(checksumFor(a + "  DJAP-Setup-0.1.96.exe\n", "DJAP-Setup-0.1.96.exe") == a);

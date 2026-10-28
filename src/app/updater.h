@@ -27,7 +27,9 @@ class Updater {
 public:
     enum class State { Idle, Checking, UpToDate, Available, Downloading, Ready, Failed };
     static constexpr const char* kLatestUrl = "https://api.github.com/repos/hghaken/DJAP/releases/latest";
-    // the same release's web page: asked when the API refuses (its hourly limit per network used up)
+    // the same release's web page: asked when the API refuses (its hourly limit per network used up); it must lead to a
+    // release tag of this repository
+    static constexpr const char* kRepo = "https://github.com/hghaken/DJAP";
     static constexpr const char* kLatestPage = "https://github.com/hghaken/DJAP/releases/latest";
 
     Updater() = default;

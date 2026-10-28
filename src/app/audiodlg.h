@@ -62,6 +62,7 @@ private:
     HWND hwnd_ = nullptr, owner_ = nullptr;
     HWND labels_[14] = {};
     HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, drift_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
+    HWND inPeriod_ = nullptr; // ASIO with WASAPI inputs: their period (in drift_'s place, which ASIO does not use)
     HWND driver_ = nullptr, open_ = nullptr, close_ = nullptr, panel_ = nullptr, info_ = nullptr;
     HWND inA_ = nullptr, outA_ = nullptr, inB_ = nullptr, outB_ = nullptr, rate_ = nullptr, buffer_ = nullptr;
     HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, health_ = nullptr, resetHealth_ = nullptr,
@@ -72,6 +73,7 @@ private:
     HWND checkUpdates_ = nullptr; // the daily update check
     std::wstring notes_;
     int stateLines_ = 1; // the lines the state text takes now (the Health section is as high as its text)
+    std::wstring stateShown_; // the state text as set (compared whole: a text over 2048 was set again at every tick)
     const Updater* updater_ = nullptr;
     bool testRun_ = false;
     HFONT font_ = nullptr;

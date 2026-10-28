@@ -305,7 +305,13 @@ refill, fade in (9.4).
 Client, 2026-10-25: with ASIO, a deck's input may come from a WASAPI, DirectSound or MME device instead of an ASIO
 input pair (e.g. a player's output through a virtual cable), while its output stays an ASIO pair. "Deck inputs" in
 the Audio window: ASIO input pairs, or the devices of one other API; per deck a device or its ASIO pair. Saved as
-`AsioInputs` and `AsioInputDeviceA / B`; WASAPI exclusive applies to these inputs too.
+`AsioInputs` and `AsioInputDeviceA / B`; WASAPI exclusive applies to these inputs too. Input period (2026-10-28,
+seventh outside review: the WASAPI input's 10 ms default period is the largest part of the latency left - about
+14 ms of a measured 31.9): `[Audio] ShortInputPeriod` 0 (default: Windows' 10 ms) / 1 (ask for periods of the ASIO
+buffer's length, at least 32 frames; shared WASAPI takes it through Windows' low-latency mode, IAudioClient3, at the
+nearest size the device allows, or keeps 10 ms when the device has no such mode - the Setup window says so). Off by
+default: untried on real devices, and more callbacks. WASAPI only (DirectSound / MME have no such mode); in the
+Setup window in the drift choice's place, which ASIO does not use.
 
 The two devices run on their own crystals, so their rates differ by tens of ppm (typically up to +-100 ppm): read at
 the nominal rate, a buffer between them runs dry or overflows within minutes. `AsyncInput` (`src/core/asyncinput.*`):
@@ -323,8 +329,10 @@ the nominal rate, a buffer between them runs dry or overflows within minutes. `A
   Measured with simulated clocks at -500..+500 ppm and late callbacks (capture up to 2 ms, output up to 0.5 ms):
   drift found within 2 ppm, fill on target within 0.5 ms, read-speed wobble about 15 ppm (0.03 cent), no xruns.
 - Target fill = largest capture burst + output burst + 17 frames (half the taps + 1) + margin 3 ms; a burst =
-  callbacks within a quarter of the last one's length, the largest of the last 20-40 s, at most 50 ms (2026-10-27,
-  fourth and fifth outside reviews: underruns after the start; a stall's catch-up kept the buffer up). The PI loop's
+  callbacks within half the last one's length, the largest of the last 20-40 s, at most 50 ms or 1.5 device periods
+  (2026-10-27, fourth to sixth outside reviews: underruns after the start; a stall's catch-up kept the buffer up); the
+  output's callbacks merge from its first real gap and reading starts after its second (seventh review: the start's
+  priming counted as a burst when it came after the first capture block). The target falls at most 0.3 ms/s. The PI loop's
   integral learns only while the read speed is inside its limits. An underrun fades out what is left (up to 3 ms).
   (Each underrun adds
   2 ms up to 20; each minute without one takes 0.5 ms back - 2026-10-26, after an outside review: the margin only
@@ -368,8 +376,9 @@ tone's correction at 100 %; calibrates the reference, 3.3), `--ca` / `--cb <colo
 `--render`), `--ini <file>` (other settings, read only). Exit code 0 / 1 wrong command line / 2 file error.
 
 GUI main window (`mainwnd`, `meterview`): two deck strips side by side. Each strip (client, 2026-10-25): on the
-title row the route (inputs / outputs, each side with its API, e.g. "WASAPI: Line 1 (virtual cable) -> ASIO: outputs 7-8") and a
-Bypass button at the right (lit = bypassed; saved as `Processing`);
+title row the route on two lines (client, 2026-10-27: "in and out on 2 lines, on a small screen it does not fit"):
+"In: WASAPI: Line 1 (virtual cable)" above "Out: ASIO: outputs 7-8", each side with its API, each line ending in "..."
+when too long, right after the deck's name; the Graphs and Bypass buttons at the right (Bypass lit = bypassed; saved as `Processing`);
 then the preset choice with its "Edit..." button and the colour choice (3.3) with its "Edit..." button; and a meter panel without buttons (its R - reset meters - and F - freeze leveller - buttons were removed,
 client 2026-10-25: "not needed"). With linked presets there is one
 set of controls (client, 2026-10-25): deck A's preset and colour, Edit and Bypass
@@ -401,7 +410,8 @@ window, which also shows the retried start and a failed save. Per-monitor DPI aw
 saved at once.
 
 Graphs (client, 2026-10-25). In each meter panel, under the stage rows: the spectrum of the deck's input
-(original, orange) and output (processed, turquoise), 20 Hz - 20 kHz on a log scale, 0 .. -96 dB, with the
+(original, orange) and output (processed, turquoise), 20 Hz - 20 kHz on a log scale, 0 .. -96 dB (quieter is not drawn: the line leaves the graph at the bottom - client,
+2026-10-27, asked about the highs of a dull recording, kept it so rather than -120 dB or a bent scale), with the
 density splits and band numbers and each band's gain now (client, 2026-10-26: the density row went into the
 spectrum, which got its room; the band lines in the density colour, like its label, splits and numbers - client,
 2026-10-27; first lifted blue, turned down red; a line per band at its gain - of the strip, shade and lines first offered, the client kept only the lines;

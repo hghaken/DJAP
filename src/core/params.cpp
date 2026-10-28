@@ -339,6 +339,10 @@ void enforceSplits(PresetValues& v, int changed) {
     }
 }
 
+double attackFromFastDown(double fastDown, double speed) {
+    return 10.0 / (fastDown > 0.0 ? fastDown : std::max(0.1, speed));
+}
+
 void normaliseValues(PresetValues& v) {
     for (int i = 0; i < kParamCount; ++i) {
         const ParamInfo& info = kInfo[i];

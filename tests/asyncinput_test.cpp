@@ -59,6 +59,7 @@ struct Sim {
     int period = 256;         // output frames per period
     int playSplit = 1;        // ... asked for as this many callbacks straight after each other
     int primeCalls = 0;       // the output's first callbacks all at once (a stream filling its buffer at the start)
+    double outStart = 0.0;    // s: the output starts this late (its priming after the first capture blocks)
     int devicePeriod = 0;     // AsyncInput::setDevicePeriod (0: not set)
     bool catchUp = false;     // the capture blocks of a capPause come all at once after it (else they are lost)
     double capJitter = 0.0;   // s: capture callbacks come up to this late
@@ -82,8 +83,8 @@ struct Sim {
         float l[256], r[256];
         auto capTime = [&] { return t0 + static_cast<double>(k + 1) * block / capRate + capJitter * rng.uniform(); };
         auto outTime = [&] {
-            if (m < primeCalls) return t0 + 2e-5 * static_cast<double>(m);
-            return t0 + static_cast<double>(m - primeCalls + 1) * period / fs + outJitter * rng.uniform();
+            if (m < primeCalls) return t0 + outStart + 2e-5 * static_cast<double>(m);
+            return t0 + outStart + static_cast<double>(m - primeCalls + 1) * period / fs + outJitter * rng.uniform();
         };
         if (devicePeriod > 0) ai.setDevicePeriod(devicePeriod);
         double tc = capTime(), to = outTime();
@@ -507,26 +508,59 @@ void fadeOut() {
         CHECK(underruns >= 30);
         CHECK(worst < 1.25 * sineStep);
     }
-}
-
-// A stream fills its buffer at the start with callbacks straight after each other: not a burst (sixth outside
-// review: the buffer stood 20 ms higher for 20-40 s after every start).
-void priming() {
-    std::printf("-- the output's first callbacks all at once (filling its buffer) do not raise the buffer\n");
-    double t[2] = {0.0, 0.0};
-    for (int i = 0; i < 2; ++i) {
+    // the fade's length and both channels (seventh outside review: the right channel's hold and the fade's length were
+    // not checked): a steady level, unequal in L and R, fades as one raised cosine over kFadeOutMs
+    for (const int period : {64, 480}) {
         AsyncInput ai;
         ai.reset(48000);
         Sim s;
-        s.primeCalls = i == 0 ? 0 : 3;
-        s.signal = sine(440.0, 0.5, 48000);
-        s.probeAt = 10.0;
-        s.run(ai, 11.0);
-        t[i] = s.probed;
-        CHECK(ai.state().underruns == 0);
+        s.period = period;
+        s.capPause[0] = 3.0;
+        s.capPause[1] = 3.2;
+        s.signal = [](int64_t, float& l, float& r) {
+            l = 0.5f;
+            r = -0.25f;
+        };
+        s.run(ai, 3.5);
+        size_t from = 0, to = 0; // the fade: the first frame under the level after 1 s, the last one not silent
+        for (size_t i = 48000; i < s.outL.size() && !from; ++i)
+            if (s.outL[i] < 0.4999f) from = i;
+        for (size_t i = from; from && i < s.outL.size() && s.outL[i] != 0.0f; ++i) to = i;
+        double worstLR = 0.0;
+        for (size_t i = from; from && i <= to; ++i)
+            worstLR = std::max(worstLR, static_cast<double>(std::fabs(s.outR[i] + 0.5f * s.outL[i])));
+        const double ms = from ? static_cast<double>(to - from + 2) / 48.0 : 0.0;
+        std::printf("   output period %4d: fade-out over %.2f ms (%.1f ms set), R follows L within %.1e\n", period, ms,
+                    AsyncInput::kFadeOutMs, worstLR);
+        CHECK(from > 0 && ai.state().underruns >= 1);
+        CHECK_NEAR(ms, 3.0, 0.1); // the design's 3 ms (not the constant itself: a changed constant must show)
+        CHECK(worstLR < 1e-5);
     }
-    std::printf("   buffer at 10 s: %.2f ms, with 3 periods at once at the start %.2f ms\n", t[0], t[1]);
-    CHECK_NEAR(t[1], t[0], 0.1);
+}
+
+// A stream fills its buffer at the start with callbacks straight after each other: not a burst (sixth outside
+// review: the buffer stood 20 ms higher for 20-40 s after every start), whether the output starts before the first
+// capture block or after it (seventh review: "no input yet" held only in the first order).
+void priming() {
+    std::printf("-- the output's first callbacks all at once (filling its buffer) do not raise the buffer\n");
+    for (const double start : {0.0, 0.0125, 0.025}) { // before the first capture block (at 10 ms), 2.5 ms after, 15 ms after
+        double t[2] = {0.0, 0.0};
+        for (int i = 0; i < 2; ++i) {
+            AsyncInput ai;
+            ai.reset(48000);
+            Sim s;
+            s.primeCalls = i == 0 ? 0 : 3;
+            s.outStart = start;
+            s.signal = sine(440.0, 0.5, 48000);
+            s.probeAt = 10.0;
+            s.run(ai, 11.0);
+            t[i] = s.probed;
+            CHECK(ai.state().underruns == 0);
+        }
+        std::printf("   output starting at %4.1f ms: buffer at 10 s %.2f ms, with 3 periods at once at the start %.2f ms\n",
+                    start * 1000.0, t[0], t[1]);
+        CHECK_NEAR(t[1], t[0], 0.1);
+    }
 }
 
 void throughEngine() {

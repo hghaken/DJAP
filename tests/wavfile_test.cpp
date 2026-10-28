@@ -129,9 +129,11 @@ void oddAndBad(const fs::path& dir) {
 void headers(const fs::path& dir) {
     std::printf("-- the header's sizes: RIFF, RF64's ds64, the 4 GB rule\n");
     std::string err;
+    // mono and stereo (seventh outside review: with mono alone a sample count of frames x channels was not caught)
     for (const bool rf64 : {false, true})
+        for (const int channels : {1, 2})
         for (const bool pcm24 : {false, true}) {
-            const WavData w = tone(1, pcm24 ? 5 : 4); // PCM 24: 15 bytes of data, a pad byte
+            const WavData w = tone(channels, pcm24 ? 5 : 4); // PCM 24 mono: 15 bytes of data, a pad byte
             const fs::path f = dir / "sizes.wav";
             CHECK(writeWav(f, w, pcm24, err, rf64));
             const std::string b = whole(f);

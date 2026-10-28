@@ -34,9 +34,8 @@ const double kFastDownDoneDb = 0.5;
 //   floor) is levelled like any music; fades, pauses and the first seconds of a breakdown keep the hold;
 // - warm restart only after a real pause (at least 1 s of silence), not after a quiet passage;
 // - clearly too soft (the gain more than kFastUpDb under what the 3 s level needs, not falling): up at the preset's
-//   Release (the shipped values keep the speeds this had as a fixed rule - Gentle and DAB+: 2 dB/s; Light, Medium,
-//   Web Stream, Loud: 3; FM Station: 4 - 3 dB/s for all brought the quiet endings of three songs up too eagerly in
-//   Gentle and DAB+, 2 dB/s left the spoken verses 1 LU more uneven in the 1 dB/s presets), until within
+//   Release (shipped: 1.5 s per 10 dB, 6.7 dB/s, chosen on soft-to-loud songs; Gentle and DAB+ 5 s, 2 dB/s - before
+//   the sliders a fixed 3 dB/s brought the quiet endings of three songs up too eagerly in Gentle and DAB+), until within
 //   kFastUpDoneDb - the counterpart of fast down; meanwhile a gap between two phrases does not stop it (only a fall does).
 // Attack, Release and Quiet wait are sliders since 2026-10-27 (client: "a soft intro sometimes takes too long to get
 // to level, and then it is as if someone turns the volume knob quickly"); the catch-up after a pause (20 dB/s, a
@@ -437,6 +436,10 @@ void DeckProcessor::applyConfig(const DeckConfig& c) {
         outGain_ = c.outputGain;
         compMakeupS_ = c.compMakeup;
         bassGainS_ = c.bassGain;
+        // the clipper's drive and bend too: resetStates ran before this configuration (cfg_ still the old one), and
+        // the first 5 ms glided from it - a peak 1 dB over the curve with the limiter off (seventh outside review)
+        clipDriveS_ = c.clipDrive;
+        clipBendS_ = c.clipBend;
         widthS_ = c.width;
         bassWidthS_ = c.bassWidth;
         colour_.reset(c.colour);

@@ -629,15 +629,28 @@ void colour() {
                 "peak %.3f dBFS (ceiling -1)\n", -worstOff, linToDb(peakOff));
     CHECK(worstOff < -45.0);
     CHECK(peakOff <= dbToLin(-1.0) + 1e-6);
-    // the bend itself: a low tone clipped with the limiter off stays clear of the ceiling (the curve 1.5 dB under it,
-    // the band-limited square wave's overshoot about 1 dB back up), not held at it (sixth outside review: taking the
-    // 1.5 dB away was not caught - the fold-back above stays low on 10-15 kHz either way); without the bend: -1.00
+    // the bend itself: a low tone clipped with the limiter off stays clear of the ceiling (the curve 1.5 dB under it),
+    // not held at it (sixth outside review: taking the 1.5 dB away was not caught - the fold-back above stays low on
+    // 10-15 kHz either way). Seventh review: measured from the start the peak was the first 5 ms' glide (-1.52 dBFS),
+    // which let a bend of 1-3 dB pass; now the steady peak, from the start on (the first configuration is taken at
+    // once), and with the limiter on the bend must be off (the clipper up to the ceiling, the limiter after it)
+    auto peakFrom = [](const Buffer& b, size_t at) {
+        float p = 0.0f;
+        for (size_t i = at; i < b.size(); ++i) p = std::max(p, std::fabs(b[i]));
+        return linToDb(p);
+    };
     Buffer low = sig::sine(fs, 100, -1, 1.0);
     o = run(fs, v, low, low);
-    const double lowPeak = linToDb(sig::peak(o.l));
-    std::printf("   soft clipper, limiter off, 100 Hz driven 9 dB in: peak %.2f dBFS (ceiling -1, the curve 1.5 dB under it)\n",
-                lowPeak);
-    CHECK_RANGE(lowPeak, -2.8, -1.3);
+    const double lowStart = peakFrom(o.l, 0), lowSteady = peakFrom(o.l, static_cast<size_t>(fs / 2));
+    v[pLimOn] = 1;
+    o = run(fs, v, low, low);
+    const double lowLim = peakFrom(o.l, static_cast<size_t>(fs / 2));
+    v[pLimOn] = 0;
+    std::printf("   soft clipper, 100 Hz driven 9 dB in: limiter off peak %.2f dBFS (from the start %.2f; ceiling -1, the "
+                "curve 1.5 dB under it), limiter on %.2f dBFS\n", lowSteady, lowStart, lowLim);
+    CHECK_NEAR(lowSteady, -2.50, 0.05);
+    CHECK_NEAR(lowStart, lowSteady, 0.05);
+    CHECK(lowLim > -1.6);
 
     // the exciter's saturation runs at twice the rate too: a 10 kHz tone's 3rd overtone (30 kHz) folded back to
     // 18 kHz at the base rate (-20.6 dBc in the outside review)

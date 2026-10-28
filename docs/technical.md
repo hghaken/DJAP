@@ -755,6 +755,10 @@ With ASIO output, a deck's input may come from a WASAPI, DirectSound or MME devi
 into a virtual cable; with those APIs as output too, Drift correction (Auto by default) puts the same buffer between a
 deck's input and output device (16.3). The two devices run on their own crystals, so their sample rates differ by tens of ppm
 (typically up to +-100 ppm); a buffer read at the nominal rate would run dry or overflow within minutes.
+With ASIO output the input's period counts twice: once as the input's own latency and once in the drift buffer
+(which holds a whole input block). Shared WASAPI hands over 10 ms by default; Setup's *Input period: short* asks for
+the ASIO buffer's length, which Windows' low-latency shared mode (IAudioClient3) grants in steps of the device's own
+period between its minimum and 10 ms - if the device has that mode at all.
 `AsyncInput` (`src/core/asyncinput.*`) solves this:
 
 - **Ring.** The capture stream writes stereo blocks with a time stamp into a lock-free ring of 32768 frames.
@@ -770,14 +774,18 @@ deck's input and output device (16.3). The two devices run on their own crystals
 - **Target fill** = the largest capture block + the output period + half the interpolator + a 3 ms margin: about
   19 ms for 10 ms capture blocks and 256-frame periods at 48 kHz. "Block" and "period" are bursts: callbacks that come
   within half the last one's length after it count as one (a device period cut into short callbacks arrives at once;
-  counting only the callback gave underruns after each start). Output callbacks before any input came are not merged
-  (a stream fills its buffer at the start that way). The largest burst of the last 20-40 s counts, at most 50 ms or
+  counting only the callback gave underruns after each start). The output's callbacks are merged only from its first
+  real gap on, and reading starts after its second (a stream fills its buffer at the start with callbacks straight
+  after each other, and that is no burst; seventh review: whether the first capture block came before or after that
+  must not matter; and an output period cut in two is counted whole before reading starts - at the cost of one
+  output period more at the start). The largest burst of the last 20-40 s counts, at most 50 ms or
   1.5 device periods, whichever is more: the catch-up after a stall is a burst too, and it must not raise the buffer
   for good (a fifth outside review measured 125 ms after a 100 ms stall). The target goes up at once but down by at
   most 0.3 ms per second - a read speed of 300 ppm (0.5 cent): a forgotten burst dropped it 40 ms at once and the
-  read speed jumped to +2000 ppm, a pitch step (sixth review). So the burst's part is gone 40 s after a stall and
-  the buffer is back at its base after about 4 minutes, when the 2 ms of margin the stall's underrun added have
-  decayed. The price of that: a stall of 70-80 ms or more that comes back every minute or so gives a dropout each
+  read speed jumped to +2000 ppm, a pitch step (sixth review). So after a 100 ms stall the burst stays counted for
+  20-40 s and then comes down at 0.3 ms per second: the target is within 1 ms of its base after about 3 minutes
+  (seventh review: 65 ms until 25-60 s, 38 ms at 150 s, 24 ms at 200 s), and the 2 ms of margin the stall's underrun
+  added decay after that (0.5 ms per quiet minute). The price of that: a stall of 70-80 ms or more that comes back every minute or so gives a dropout each
   time, where a buffer that only grew would have swallowed the later ones. The drift estimate learns only
   while the read speed is inside its limits (anti-windup): a fill far over the target ran it into the limit, and it
   then overshot into an underrun. Each underrun adds 2 ms of margin (up to 20 ms), and

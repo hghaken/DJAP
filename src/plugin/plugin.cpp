@@ -453,8 +453,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     }
     // a project of the versions before Attack / Release: its "Fast down" (dB/s; 0 = Speed) is the Attack in seconds
     // per 10 dB (as Settings does for a saved preset)
-    if (!haveAttack && oldFastDown >= 0.0)
-        v[pLevAttack] = 10.0 / (oldFastDown > 0.0 ? oldFastDown : std::max(0.1, v[pLevSpeed]));
+    if (!haveAttack && oldFastDown >= 0.0) v[pLevAttack] = attackFromFastDown(oldFastDown, v[pLevSpeed]);
     normaliseValues(v);
     int32 oversampling = kOversamplingDefault;
     if (version >= 2 && s.readInt32(oversampling)) oversampling = snapOversampling(oversampling);

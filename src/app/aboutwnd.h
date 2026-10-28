@@ -5,6 +5,7 @@
 #pragma once
 
 #include "theme.h"
+#include "tooltips.h"
 #include "updater.h"
 
 #include <windows.h>
@@ -52,6 +53,8 @@ private:
     HFONT font_ = nullptr;
     UINT dpi_ = 96;
     std::wstring body_, path_;
+    std::wstring updateShown_; // the update line as set (compared whole: a long error was set again at every tick)
+    Tooltips tips_;
     IStream* stream_ = nullptr;
     Gdiplus::Bitmap* logo_ = nullptr;
     theme::Metal metal_;

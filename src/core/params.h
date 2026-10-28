@@ -150,6 +150,10 @@ extern const double kToneReference[kToneBands];
 
 // Clamps every value to its range, rounds counts and switches, and enforces the split rules for the band count.
 void normaliseValues(PresetValues& v);
+
+// The versions before Attack / Release (2026-10-27) had "LevellerFastDown" in dB/s (0 = the preset's Speed): the
+// Attack in seconds per 10 dB it stands for. Saved presets (Settings) and plug-in projects use this one rule.
+double attackFromFastDown(double fastDownDbPerS, double speedDbPerS);
 // Default split frequencies for a band count (1..7) into split slots 1..6.
 void loadDefaultSplits(PresetValues& v, int bands);
 // Moves the other splits when one split was changed, so splits keep rising and >= 1.25x apart.

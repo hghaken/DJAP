@@ -319,6 +319,7 @@ the audio again (a short fade-out and fade-in).
 | **Audio API** | ASIO, WASAPI, DirectSound or MME (see 3.3). Choosing another API stops the audio. **Exclusive** (WASAPI only): lower latency, but the devices are taken from other programs while the audio runs. |
 | **Drift correction** (WASAPI, DirectSound, MME) | *Auto* (default): each deck's input is read a little faster or slower so that an input and output device on different clocks never drift apart; adds a buffer of about 8-23 ms (smaller with a smaller buffer size). WASAPI leaves an input and output of the same device as one stream without it. *Always*: also those. *Off*: no buffer, but a glitch now and then unless input and output are the same device (see 3.3). Changing it while the audio runs starts the audio again. |
 | **Deck inputs** / **Input from** (ASIO only) | Where the decks' inputs come from: *ASIO input pairs*, or devices of WASAPI, DirectSound or MME (drift-corrected; adds a buffer of about 15-20 ms with a 10 ms input). The outputs stay ASIO. |
+| **Input period** (ASIO with WASAPI inputs; in the place of Drift correction) | How often Windows hands over the input's sound. *Windows' default (10 ms)*, the default. *Short, as the ASIO buffer*: as often as the ASIO buffer, when the device has Windows' low-latency mode - the input's 10 ms and part of the drift buffer go, up to about 14 ms less latency. A device without that mode keeps 10 ms, and the Health section then says "the input device has no periods this short". Try it while you listen and watch the underruns; changing it while the audio runs starts the audio again. |
 | **ASIO driver** | The installed ASIO drivers. **Open driver** opens it (DJAP asks first: it may take the interface from other programs); **Close driver** releases it; **Control panel** opens the driver's own settings (buffer size, clock source). Under it: the driver's state. |
 | **Deck A / B input**, **output** | ASIO: a channel pair per deck, with the driver's channel names once it is open. Other APIs: an input and an output device per deck; *(none)* = the deck does not run. A saved device that is not connected shows "(not found)". |
 | **Sample rate** | 44.1, 48, 88.2 or 96 kHz. ASIO uses this rate if the driver accepts it, else the interface's own rate. Other APIs convert when a device runs at another rate. |
@@ -630,7 +631,10 @@ Click **Graphs** on a deck strip. The window has a row per deck with five panels
    the source) or the *output* (turquoise), and for the time across.
 6. **Stereo** - a goniometer of the output (mono is the vertical line, left and right the diagonals), with bars for
    the output's correlation (+1 = mono, 0 = unrelated, negative = out of phase) and the stereo width of input and
-   output (0 % = mono).
+   output (0 % = mono). They do not depend on the level: two decks with the same music show nearly the same values
+   whatever their loudness presets. Only the Stereo width stage changes the width on purpose, and at Width 100 % (the
+   default, "as recorded") it leaves it as it is - Width out then lies a percent or so under Width in, from the
+   dynamics.
 
 The history is cleared at every start of the audio.
 
@@ -640,7 +644,8 @@ The history is cleared at every start of the audio.
 
 Click the **spectrum** in a deck's meter panel. The big graph shows, for one deck:
 
-- The **spectrum** of the input (orange) and the output (turquoise), with its dB scale on the left.
+- The **spectrum** of the input (orange) and the output (turquoise), with its dB scale on the left. It reaches down
+  to -96 dB; what is quieter is not drawn, so where a song has (almost) no highs the line drops out at the bottom.
 - The **density bands** and their gains now: a purple line per band at its gain on the right-hand scale (above the
   0 dB line = lifted, under it = turned down), with the gain in dB.
 - The deck's **colour as an EQ curve** (yellow, the right-hand scale in dB): thick - what the colour does now,
@@ -741,7 +746,8 @@ Windows starts.
   DirectSound / MME with Drift correction): the drift buffer - the input's block plus the output's period plus
   3 ms, so about 8 ms at 128 frames and 23 ms at 10 ms periods. After a dropout of the input it grows by 2 ms (up to
   20 ms more) and shrinks again by 0.5 ms per quiet minute; the burst of sound a device sends after a hiccup can raise
-  it for up to a minute, and it comes down slowly (0.3 ms a second, a speed change too small to hear). A device that
+  it for 20-40 seconds, and it then comes down slowly (0.3 ms a second, a speed change too small to hear) - after a
+  long hiccup (100 ms) the buffer is back at its usual size after about 3 minutes. A device that
   hiccups again and again for 70 ms or more gives a dropout each time. With WASAPI Windows may run longer periods than the buffer size asked for (its low-latency mode
   takes only some sizes, at the device's own rate): the Setup window then says so, and the latency shown follows.
 

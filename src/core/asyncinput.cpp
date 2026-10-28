@@ -77,7 +77,7 @@ void AsyncInput::reset(double fs) {
     fadeOut_ = fadeRing_ = 0;
     lastL_ = lastR_ = 0.0f;
     targetS_ = 0.0;
-    devicePeriod_ = 0;
+    devicePeriod_.store(0, std::memory_order_relaxed);
     oldestNeeded_.store(0, std::memory_order_relaxed);
     pos_ = 0;
     frac_ = 0.0;
@@ -90,6 +90,7 @@ void AsyncInput::reset(double fs) {
     period_ = 0;
     fade_ = 1.0;
     active_ = periodOk_ = haveAvg_ = false;
+    playGaps_ = 0;
     activeShown_.store(false, std::memory_order_relaxed);
     targetShown_.store(0, std::memory_order_relaxed);
     fillShown_.store(0, std::memory_order_relaxed);
@@ -118,7 +119,8 @@ int AsyncInput::Bursts::add(int frames, double time, double fs, int cap, bool me
 }
 
 int AsyncInput::burstCap(int frames) const {
-    return std::max({frames, static_cast<int>(kBurstCapMs * fs_ / 1000.0), devicePeriod_ + devicePeriod_ / 2});
+    const int dp = devicePeriod_.load(std::memory_order_relaxed);
+    return std::max({frames, static_cast<int>(kBurstCapMs * fs_ / 1000.0), dp + dp / 2});
 }
 
 void AsyncInput::write(const float* in, int frames, double now) {
@@ -149,7 +151,14 @@ void AsyncInput::write(const float* in, int frames, double now) {
 void AsyncInput::beginPeriod(int frames, double now) {
     // the output side's bursts as the input's: an output period cut into short callbacks (fifth outside review)
     const int64_t w = written_.load(std::memory_order_acquire);
-    period_ = playBursts_.add(frames, now, fs_, burstCap(frames), w > 0); // (no merge while priming: no input yet)
+    // no merge while priming: the output's callbacks merge from its first real gap on, and reading starts after the
+    // second, when one whole burst has been seen (seventh outside review: "no input yet" missed a priming that came
+    // after the first capture block - the target stood 20 ms higher for 20-45 s; started at once, the priming then
+    // read three periods at once and underran; an output cut in two needs its whole burst counted before reading)
+    if (playGaps_ < 2 && playBursts_.lastTime >= 0.0 &&
+        now - playBursts_.lastTime >= kBurstGap * playBursts_.lastFrames / fs_)
+        ++playGaps_;
+    period_ = playBursts_.add(frames, now, fs_, burstCap(frames), playGaps_ >= 1);
     const double written = static_cast<double>(w);
     const int block = maxBlock_.load(std::memory_order_relaxed);
     // the input's position now: the last block's end, moved on by the time since it came (at most one block), so
@@ -161,7 +170,7 @@ void AsyncInput::beginPeriod(int frames, double now) {
     const double target = targetS_;
     periodOk_ = false;
     if (!active_) {
-        if (block > 0 && written - static_cast<double>(pos_) >= target) { // filled up: start at the target
+        if (block > 0 && playGaps_ >= 2 && written - static_cast<double>(pos_) >= target) { // filled: start at the target
             pos_ = std::max(pos_, static_cast<int64_t>(std::floor(est - target)));
             frac_ = 0.0;
             active_ = true;

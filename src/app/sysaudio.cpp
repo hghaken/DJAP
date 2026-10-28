@@ -42,6 +42,12 @@ void onHelper(F&& f) {
 
 std::string maError(const char* what, ma_result r) { return std::string(what) + ": " + ma_result_description(r); }
 
+// A device's period (in its own rate's frames) in the decks' frames, for AsyncInput::setDevicePeriod: a device at
+// 96 kHz under decks at 48 kHz made the burst cap twice too large (seventh outside review).
+int deckFrames(ma_uint32 frames, ma_uint32 deviceRate, double deckRate) {
+    return deviceRate ? static_cast<int>(std::llround(frames * deckRate / deviceRate)) : static_cast<int>(frames);
+}
+
 // Device names as UTF-8: WASAPI reports UTF-8, DirectSound and MME the ANSI code page (handbook 12).
 std::string nameOf(AudioApi api, const char* raw) {
     if (api == AudioApi::Wasapi) return raw;
@@ -369,8 +375,10 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
                 }
                 s->playInited = true;
                 // the devices' own periods: a burst may be 1.5 of them (asyncinput.h; neither stream runs yet)
-                drift[d]->setDevicePeriod(static_cast<int>(std::max(s->dev.capture.internalPeriodSizeInFrames,
-                                                                    s->play.playback.internalPeriodSizeInFrames)));
+                drift[d]->setDevicePeriod(std::max(
+                    deckFrames(s->dev.capture.internalPeriodSizeInFrames, s->dev.capture.internalSampleRate, sampleRate),
+                    deckFrames(s->play.playback.internalPeriodSizeInFrames, s->play.playback.internalSampleRate,
+                               sampleRate)));
                 SysStreamInfo& in = s->info;
                 in.input = routes[d].input;
                 in.output = routes[d].output;
@@ -502,9 +510,12 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
                 return;
             }
             s->inited = true;
-            targets[d]->setDevicePeriod(static_cast<int>(s->dev.capture.internalPeriodSizeInFrames)); // as above
+            // as above; the output (ASIO) already reads here - setDevicePeriod is atomic for that
+            targets[d]->setDevicePeriod(
+                deckFrames(s->dev.capture.internalPeriodSizeInFrames, s->dev.capture.internalSampleRate, sampleRate));
             SysStreamInfo& in = s->info;
             in.input = devices[d];
+            in.askedFrames = periodFrames;
             in.deviceRate = s->dev.capture.internalSampleRate;
             in.periodFrames = s->dev.capture.internalPeriodSizeInFrames;
             in.periods = s->dev.capture.internalPeriods;
