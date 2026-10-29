@@ -528,9 +528,9 @@ The main values (`DJAPCmd --presets` lists them for the loudness presets on your
 |---|---|---|---|---|---|---|
 | DAB+ | -23 | 15 dB / 0.5 dB/s | +5 LU / 2.0 | off | off | -1.0 |
 | Gentle | -18 | 12 dB / 0.5 dB/s | +6 LU / 1.5 | 3 | off | -1.0 |
-| Light | -16 | 9 dB / 1.0 dB/s | +4 LU / 1.8 | 4 | 1 dB | -1.0 |
-| Web Stream | -16 | 9 dB / 1.0 dB/s | +4 LU / 1.8 | 4 | off | -2.0 |
-| Medium | -14 | 9 dB / 1.0 dB/s | +2 LU / 2.0 | 5 | 2 dB | -1.0 |
+| Light | -16 | 12 dB / 1.0 dB/s | +4 LU / 1.8 | 4 | 1 dB | -1.0 |
+| Web Stream | -16 | 12 dB / 1.0 dB/s | +4 LU / 1.8 | 4 | off | -2.0 |
+| Medium | -14 | 12 dB / 1.0 dB/s | +2 LU / 2.0 | 5 | 2 dB | -1.0 |
 | FM Station | -9 (out -4 dB) | 12 dB / 2.0 dB/s | -3 LU / 3.5 | 5 | 6 dB | -1.0 |
 | Loud | -12 | 12 dB / 1.5 dB/s | 0 LU / 2.5 | 6 | 3 dB | -1.0 |
 | Very Loud | -10 | 12 dB / 1.5 dB/s | -2 LU / 3.0 | 7 | 4.5 dB | -1.0 |
@@ -582,7 +582,7 @@ Defaults below are those of Medium (the general defaults of a new own preset).
 | Value | Unit | Range | Default | What it does |
 |---|---|---|---|---|
 | On | | | on | |
-| Range | dB | 0 .. 15 | 9 | The largest boost or cut. Larger evens out bigger differences between songs. |
+| Range | dB | 0 .. 15 | 12 | The largest boost or cut. Larger evens out bigger differences between songs. |
 | Speed | dB/s | 0.1 .. 6 | 1.0 | How fast the gain may move. Higher reaches a new song's level sooner but can be heard as the volume drifting within a song. |
 | Attack | s per 10 dB | 0.2 .. 20 | 1.0 | How fast the gain comes down when a song comes in clearly too loud (after a quiet intro or a break). Shorter: the loud part is down sooner; longer: a gentler turn of the knob. |
 | Release | s per 10 dB | 0.2 .. 20 | 1.5 (Gentle, DAB+: 5) | How fast the gain goes up when the music is clearly too soft (a soft intro, a quiet song after a loud one), and to a new song after a pause. Shorter: on level sooner, but the rise is easier to hear; longer: a gentler turn of the knob. |
@@ -852,7 +852,9 @@ installation for all users (the normal one): the plug-in goes into the computer'
 plug-ins. If the DJ software does not
 list "DJAP" yet, let it scan its plug-ins again (its settings usually have a button for that) and restart it.
 
-Put one plug-in on each deck (as an effect of that deck or channel), or one on the master. The plug-in tells the
+Put one plug-in on each deck (as an effect of that deck or channel), or one on the master. When the DJ software sends each deck to an output of its own (into the
+mixer of a controller or an external mixer), a plug-in on its master does not reach what you hear: put it on the
+decks. The plug-in tells the
 DJ software its delay (the look-ahead, 1.5 ms by default), so the DJ software can keep the decks in time.
 
 The program and the plug-in can be installed and used together or apart.

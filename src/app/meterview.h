@@ -17,7 +17,7 @@ namespace ap {
 
 struct MeterViewData {
     DeckMeters m;
-    double target = -14, ceiling = -1, levRange = 9; // of the deck's preset
+    double target = -14, ceiling = -1, levRange = 12; // of the deck's preset
     double inputGain = 0; // the preset's input gain (0 when bypassed): the In bars show the input after it
     bool stageOn[kStageCount] = {};
     bool processing = true;

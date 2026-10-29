@@ -19,7 +19,7 @@ const ParamInfo kInfo[kParamCount] = {
      "Last trim after the limiter; only down, so the ceiling holds"},
 
     {"LevellerOn", "Leveller", "On", "", 0, 1, 1, 1, 0, true, "Slow automatic gain that brings each song to the target"},
-    {"LevellerRange", "Leveller", "Range", "dB", 0, 15, 9, 0.5, 1, false, "Largest boost or cut of the leveller"},
+    {"LevellerRange", "Leveller", "Range", "dB", 0, 15, 12, 0.5, 1, false, "Largest boost or cut of the leveller"},
     {"LevellerSpeed", "Leveller", "Speed", "dB/s", 0.1, 6, 1.0, 0.1, 1, false,
      "How fast the leveller gain may move"},
     {"LevellerAttack", "Leveller", "Attack", "s", 0.2, 20, 1.0, 0.1, 1, false,
@@ -181,13 +181,13 @@ PresetValues shippedPresetValues(int i) {
     };
     static const Row rows[kShippedPresetCount] = {
         {-18, 12, 0.5, 6, 1.5, 20, 300, 3, 20, 3, 0, 0, false, 0, 120},
-        {-16, 9, 1.0, 4, 1.8, 15, 250, 4, 30, 4, 0, 0, true, 1, 100},
-        {-14, 9, 1.0, 2, 2.0, 10, 200, 5, 40, 6, 0, 15, true, 2, 80},
+        {-16, 12, 1.0, 4, 1.8, 15, 250, 4, 30, 4, 0, 0, true, 1, 100},
+        {-14, 12, 1.0, 2, 2.0, 10, 200, 5, 40, 6, 0, 15, true, 2, 80},
         {-12, 12, 1.5, 0, 2.5, 10, 200, 6, 55, 6, 20, 20, true, 3, 60},
         {-10, 12, 1.5, -2, 3.0, 5, 150, 7, 70, 8, 30, 25, true, 4.5, 50},
         {-9, 12, 2.0, -3, 3.5, 5, 120, 5, 80, 10, 40, 10, true, 6, 40},   // FM Station (more below)
         {-23, 15, 0.5, 5, 2.0, 20, 300, 3, 0, 0, 0, 0, true, 0, 150},     // DAB+ (more below)
-        {-16, 9, 1.0, 4, 1.8, 15, 250, 4, 30, 4, 0, 0, true, 0, 100},     // Web Stream (more below)
+        {-16, 12, 1.0, 4, 1.8, 15, 250, 4, 30, 4, 0, 0, true, 0, 100},     // Web Stream (more below)
     };
     if (i < 0 || i >= kShippedPresetCount) return v;
     const Row& r = rows[i];

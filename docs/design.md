@@ -79,7 +79,7 @@ analysis.
 |---|---|---|---|---|---|
 | Global | target loudness T | LUFS | **-14** (per preset, see 3.1) | -24..-8 | **DJ**: dance masters sit at -6..-9 LUFS; -14 leaves 13 dB to a -1 dBTP ceiling and needs little extra mixer gain |
 | Gains | input / output | dB | 0 / 0 | -15..+18 / -15..0 | output only down: ceiling holds (9.2) |
-| Leveller | range | dB | **9** | 0..15 | **DJ**: no per-song gain in front, the leveller does the equalising (songs differ ~-6..-14 LUFS) |
+| Leveller | range | dB | **12** | 0..15 | **DJ**: no per-song gain in front, the leveller does the equalising (songs differ ~-6..-14 LUFS; hot streamed masters in DJ software need more than 9 dB of cut - client, 2026-10-29: 12 dB in every preset, DAB+ 15) |
 | | speed | dB/s | **1.0** | 0.1..6 | **DJ**: faster than 0.5 because nothing levels ahead; still slow enough not to follow phrases |
 | | attack | s per 10 dB | **1.0** (10 dB/s, all shipped presets) | 0.2..20 (never slower than the speed) | was "fast down" in dB/s until 2026-10-27 (client: attack and release as sliders). Client, 2026-10-25, after the real-music survey: a song that comes in loud after a quiet intro or a break played up to 9 LU over the target for 30 s at 0.5 dB/s (Gentle, DAB+) and went into the limiter (12.7 dB). When the gain is more than 3 dB above what the 3 s level needs, it comes down at this speed, following the 0.4 s level (the 3 s average lags a loud entry), only down, until within 0.5 dB; then the 3 s level starts from the level reached. Judged on the 3 s level, so a chorus 4 LU over the verse is not touched (`dynamics_test`: identical). Measured (`dynamics_test`, 16 dB entry after a 6 s intro): 4-10 s after the entry -6.0 LUFS without, -17.9 with (target -18); 6 dB/s left +1.9 dB in the first 2 s, 10 dB/s +0.3 |
 | | hold below | LU under T | 10 | 5..20 | never pump a fade or a pause (principle 9); a quiet passage that stays under it for the quiet wait without falling (and not more than 12 LU under it) is levelled like any music (client, 2026-10-26: spoken verses 10 LU under the chorus stayed 6-8 LU too soft for 10-19 s) |
@@ -120,15 +120,16 @@ compresses a little earlier and harder, and uses more bands and more density.
 | Preset | Target | Leveller range / speed | Compressor thr / ratio / attack / release | Density bands / amount / max lift | Bass / exciter / de-esser | Clipper drive | Limiter ceiling / release |
 |---|---|---|---|---|---|---|---|
 | **Gentle** | -18 LUFS | 12 dB / 0.5 dB/s | +6 LU / 1.5 / 20 ms / 300 ms | 3 / 20 % / 3 dB | off / off / off | off | -1.0 dBTP / 120 ms |
-| **Light** | -16 LUFS | 9 dB / 1.0 dB/s | +4 LU / 1.8 / 15 ms / 250 ms | 4 / 30 % / 4 dB | off / off / on | 1 dB | -1.0 dBTP / 100 ms |
-| **Medium** | -14 LUFS | 9 dB / 1.0 dB/s | +2 LU / 2.0 / 10 ms / 200 ms | 5 / 40 % / 6 dB | off / 15 % / on | 2 dB | -1.0 dBTP / 80 ms |
+| **Light** | -16 LUFS | 12 dB / 1.0 dB/s | +4 LU / 1.8 / 15 ms / 250 ms | 4 / 30 % / 4 dB | off / off / on | 1 dB | -1.0 dBTP / 100 ms |
+| **Medium** | -14 LUFS | 12 dB / 1.0 dB/s | +2 LU / 2.0 / 10 ms / 200 ms | 5 / 40 % / 6 dB | off / 15 % / on | 2 dB | -1.0 dBTP / 80 ms |
 | **Loud** | -12 LUFS | 12 dB / 1.5 dB/s | 0 LU / 2.5 / 10 ms / 200 ms | 6 / 55 % / 6 dB | 20 % / 20 % / on | 3 dB | -1.0 dBTP / 60 ms |
 | **Very Loud** | -10 LUFS | 12 dB / 1.5 dB/s | -2 LU / 3.0 / 5 ms / 150 ms | 7 / 70 % / 8 dB | 30 % / 25 % / on | 4.5 dB | -1.0 dBTP / 50 ms |
 
 Reasons: Gentle sits at the low end of the AES playback range (-16..-20 LUFS) and keeps the music's dynamics (a slow
 leveller and a high, gentle compressor). Its leveller range is 12 dB (client, 2026-10-24; was 6): club tracks of
 -6..-9 LUFS must come down to -18 LUFS, else a loud track came out louder than in Light (measured with 6 dB: -9 LUFS
-in -> -15.3 LUFS out, Light -16.0). At 0.5 dB/s a large cut takes its time during a song; after a pause the
+in -> -15.3 LUFS out, Light -16.0). Light, Medium and Web Stream have 12 dB too (client, 2026-10-29; was 9): a hot
+streamed master played through DJ software held Medium's leveller at -9 dB and still came out above the target. At 0.5 dB/s a large cut takes its time during a song; after a pause the
 catch-up (20 dB/s) does it within about half a second. Very Loud approaches modern club masters (-8..-9 LUFS) but keeps 1 dB
 of margin so the limiter does not have to carry everything; its release stays at 50 ms or more so a 50 Hz bass
 (20 ms period) is not distorted by the limiter's gain following the waveform. Compressor thresholds sit at or near
@@ -145,7 +146,7 @@ The preset lists show every preset from the quietest output to the loudest (targ
 |---|---|---|---|---|---|---|---|
 | **FM Station** | -9 LUFS processed, output gain -4 dB: about -13 LUFS out | 12 dB / 2.0 dB/s | -3 LU / 3.5 / 5 ms / 120 ms | 5 / 80 % / lift 8, max 10 dB, 10 / 200 ms | 40 % / 10 % / -14 LU, max 9 dB | 6 dB | -1.0 dBTP (-5 after the gain) / 40 ms |
 | **DAB+** | -23 LUFS | 15 dB / 0.5 dB/s | +5 LU / 2.0 / 20 ms / 300 ms | off | off / off / -12 LU | off | -1.0 dBTP / 150 ms |
-| **Web Stream** | -16 LUFS | 9 dB / 1.0 dB/s | +4 LU / 1.8 / 15 ms / 250 ms | 4 / 30 % / 4 dB | off / off / on | off | -2.0 dBTP / 100 ms |
+| **Web Stream** | -16 LUFS | 12 dB / 1.0 dB/s | +4 LU / 1.8 / 15 ms / 250 ms | 4 / 30 % / 4 dB | off / off / on | off | -2.0 dBTP / 100 ms |
 
 Reasons. FM: stations measure about -12 .. -15 LUFS - the multiplex power limit (ITU-R BS.412, average over
 60 s) caps the level - while their processing (multiband AGC, limiters, clippers) makes the sound very dense; so the

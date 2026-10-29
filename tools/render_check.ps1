@@ -41,9 +41,9 @@ foreach ($l in $levels) { "  in$l.wav: I {0:N2} LUFS, true peak {1:N2} dBTP" -f 
 # presets: target, leveller range, ceiling, output gain, extra lift (docs/design.md 3.1). The output gain comes after
 # the limiter; FM Station's dense 5-band lifts quiet material up to about 2 dB beyond the leveller's range.
 $presets = [ordered]@{
-    "Gentle" = @(-18, 12, -1, 0, 0); "Light" = @(-16, 9, -1, 0, 0); "Medium" = @(-14, 9, -1, 0, 0)
+    "Gentle" = @(-18, 12, -1, 0, 0); "Light" = @(-16, 12, -1, 0, 0); "Medium" = @(-14, 12, -1, 0, 0)
     "Loud" = @(-12, 12, -1, 0, 0); "Very Loud" = @(-10, 12, -1, 0, 0); "FM Station" = @(-9, 12, -1, -4, 2); "DAB+" = @(-23, 15, -1, 0, 0)
-    "Web Stream" = @(-16, 9, -2, 0, 0)
+    "Web Stream" = @(-16, 12, -2, 0, 0)
 }
 $ceiling = -1.0 # Medium (44.1 kHz check)
 

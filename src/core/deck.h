@@ -87,7 +87,7 @@ struct DeckConfig {
     double inputGain = 1.0, outputGain = 1.0;
     double switchStep = 0.0, gainSmooth = 0.0;
     // leveller (control rate)
-    double aim = -14.0, levRange = 9.0, levStep = 0.0, levFastStep = 0.0, levFastUpStep = 0.0, holdLufs = -24.0,
+    double aim = -14.0, levRange = 12.0, levStep = 0.0, levFastStep = 0.0, levFastUpStep = 0.0, holdLufs = -24.0,
            catchStep = 0.0, quietWait = 3.0;
     double levDetMax = 1e30; // the most power one control block may add to the leveller detector
     double aFast = 0.0, aMid = 0.0, aSlow = 0.0;

@@ -243,7 +243,7 @@ wanted = clamp(T - L_slow, -Range, +Range)        (dB; L_slow = the 3 s post lev
 gain   = gain moved towards wanted by at most Speed / control rate
 ```
 
-Range (default 9 dB) is the largest boost or cut; Speed (default 1 dB/s) limits how fast the gain may move, slow
+Range (default 12 dB) is the largest boost or cut; Speed (default 1 dB/s) limits how fast the gain may move, slow
 enough not to follow the phrases of a song.
 
 ### 4.3 Rules

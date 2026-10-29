@@ -71,7 +71,7 @@ void compressorTimes() {
 }
 
 void leveller() {
-    std::printf("-- leveller (target -14 LUFS, range 9 dB, 1 dB/s, catch-up after a pause at Release 0.5 s)\n");
+    std::printf("-- leveller (target -14 LUFS, range 12 dB, 1 dB/s, catch-up after a pause at Release 0.5 s)\n");
     PresetValues v = allOff();
     v[pLevOn] = 1;
     v[pLevRelease] = 0.5; // 20 dB/s: the catch-up after a pause as it was before Release (a fixed 20 dB/s)
