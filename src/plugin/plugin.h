@@ -131,6 +131,20 @@ private:
 
     // controller side
     bool loading_ = false; // setState / a preset load in progress: no preset reloads from setParamNormalized
+    // A preset or colour chosen in the window: the values it changes are told to the host too (tellHost)
+    bool fromWindow_ = false;
+    // Tells the host a value the controller changed by itself (beginEdit / performEdit / endEdit), so a host that keeps
+    // the parameters' values for its set (and restores them one by one at the next start, never calling setState: the
+    // client's DJ program) keeps the new one - not the value before a preset was chosen or changed in the window.
+    void tellHost(ParamID id);
+    // The stamp (kStampId) of the preset's and colour's values as last taken over (applied_): a host that restores a
+    // set's parameters one by one restores it too; a stamp that is not the one of the preset in the settings file now
+    // means the preset was changed since the set was saved - its values are loaded again (checkStamp, at activation
+    // and when the window opens). A value changed in the set itself stays as long as its preset did not change.
+    static double stampOf(const PresetValues& v);
+    void updateStamp(bool tell);
+    void checkStamp();
+    bool stampRestored_ = false; // the host set the stamp (a restore)
     // the chain values exactly (a preset's 800 Hz split, not the 810 Hz of the nearest host step); a host or the
     // window moving a parameter to another step replaces the value with that step's
     PresetValues exact_{};

@@ -515,6 +515,62 @@ int main(int argc, char** argv) {
             CHECK(o.values[ap::pWidthOn] == 1.0 && o.values[ap::pLimCeiling] == -1.0);
             c.close();
         }
+        // 4e. a host that keeps a set's parameter values and restores them one by one after initialize - only the
+        // ones that differ - and never calls setState (the client's DJ program, seen in a log 2026-10-29)
+        {
+            using Stored = std::vector<std::pair<ParamID, ParamValue>>;
+            auto keep = [](Instance& i) { // what such a host keeps for its set
+                Stored s;
+                for (int32 k = 0; k < i.controller->getParameterCount(); ++k) {
+                    ParameterInfo info{};
+                    i.controller->getParameterInfo(k, info);
+                    s.push_back({info.id, i.controller->getParamNormalized(info.id)});
+                }
+                return s;
+            };
+            auto restore = [](Instance& i, const Stored& s) {
+                for (const auto& [id, v] : s)
+                    if (i.controller->getParamNormalized(id) != v) i.controller->setParamNormalized(id, v);
+            };
+            auto writeIni = [&ini](bool noise) {
+                std::ofstream f(ini);
+                f << "[Preset Medium]\nWidthOn=1\nWidth=200\nBassWidth=0\nNoiseOn=" << (noise ? 1 : 0) << "\n";
+            };
+            const double ceiling2 = static_cast<double>(ap::paramPositionOf(ap::pLimCeiling, -2.0)) /
+                                    ap::paramPositions(ap::pLimCeiling);
+            // a set saved with Medium (Noise off) and a ceiling of its own; then Noise switched on in the preset
+            writeIni(false);
+            Instance s1;
+            CHECK(s1.open(module, &host));
+            s1.controller->setParamNormalized(ap::plugin::paramId(ap::pLimCeiling), ceiling2);
+            const Stored set1 = keep(s1);
+            s1.close();
+            writeIni(true);
+            Instance s2;
+            CHECK(s2.open(module, &host));
+            restore(s2, set1);
+            s2.start();
+            const State r2 = s2.state();
+            std::printf("-- a host restoring parameters, the preset changed since: noise %s, width %s (the preset's now), "
+                        "ceiling %.1f\n",
+                        r2.values[ap::pNoiseOn] >= 0.5 ? "on" : "OFF", r2.values[ap::pWidthOn] >= 0.5 ? "on" : "OFF",
+                        r2.values[ap::pLimCeiling]);
+            CHECK(r2.values[ap::pNoiseOn] == 1.0 && r2.values[ap::pWidthOn] == 1.0);
+            // the same set saved again (now with the new preset) and a ceiling of its own: the preset unchanged, the
+            // set's own value stays
+            s2.controller->setParamNormalized(ap::plugin::paramId(ap::pLimCeiling), ceiling2);
+            const Stored set2 = keep(s2);
+            s2.close();
+            Instance s3;
+            CHECK(s3.open(module, &host));
+            restore(s3, set2);
+            s3.start();
+            const State r3 = s3.state();
+            std::printf("-- the preset unchanged: noise %s, the set's own ceiling %.1f dBTP\n",
+                        r3.values[ap::pNoiseOn] >= 0.5 ? "on" : "OFF", r3.values[ap::pLimCeiling]);
+            CHECK(r3.values[ap::pNoiseOn] == 1.0 && r3.values[ap::pLimCeiling] == -2.0);
+            s3.close();
+        }
         SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
         std::filesystem::remove(ini, ec);
         a.close();

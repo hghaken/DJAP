@@ -821,7 +821,16 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   over (`applied_`), and a load merges three-way as the preset window's edits do: a value the project left as that
   base takes the preset's or colour's value in the settings file now, a value changed in the project stays. A project
   without the base (before 0.1.251) takes the named preset's and colour's values now; a preset or colour that is not
-  in the file leaves the stored values (`plugin_test` 4d).
+  in the file leaves the stored values (`plugin_test` 4d). The client's DJ program never calls `setState` (a log of
+  0.1.251, 2026-10-29): it keeps the parameters' values for its set and, right after `initialize`, sets back each one
+  that differs - so it restored the values of before the preset was chosen or changed in the plug-in's window, which
+  the plug-in had changed without telling it. Since 0.1.253: (1) a preset or colour chosen in the window, and a change
+  in the preset window, tell the host each value they change (`tellHost`: beginEdit / performEdit / endEdit); (2) a
+  parameter "Preset state" (id 7, not automatable) holds a 16-bit stamp of the preset's and colour's values as last
+  taken over; such a host restores it with the set, and at activation (or when the window opens) a stamp that is not
+  the one of the preset in the file now - the preset changed since - loads the preset's and colour's values again,
+  told to the host; with the stamp unchanged the set's own values stay (`plugin_test` 4e copies such a host). A set
+  kept before 0.1.253 has no stamp: choose its preset once again.
 - **Window** (`pluginview.*`, 600 px wide at 96 DPI and as high as the program's smallest one-channel window without its status bar (client, 2026-10-29; was 820 x 640), scaled to the host window's DPI): the program's deck strip -
   DJAP and the version, oversampling, look-ahead, Graphs, Bypass, About; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same

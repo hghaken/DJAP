@@ -20,6 +20,7 @@ enum ExtraId : Steinberg::Vst::ParamID {
     kLookId = 4,   // the limiter look-ahead in ms: the plug-in's latency
     kOversamplingId = 5, // the soft clipper's and the exciter's oversampling: 2x, 4x or 8x (since 0.1.145)
     kMonoId = 6,         // mono: left and right mixed from the input on (since 0.1.245; DeckControl::mono)
+    kStampId = 7,        // "Preset state": a stamp of the preset and colour values last taken over (since 0.1.253)
 };
 
 // The id of a chain value: a hash of its ini key, so values can be added or reordered in params.h without breaking a

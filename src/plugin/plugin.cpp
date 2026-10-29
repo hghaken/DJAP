@@ -264,6 +264,8 @@ void Plugin::addParameters() {
     parameters.addParameter(new LookParameter(lookMs_));
     parameters.addParameter(new OversamplingParameter());
     parameters.addParameter(STR16("Mono"), nullptr, 1, 0.0, ParameterInfo::kCanAutomate, kMonoId); // 0 stereo, 1 mono
+    // not automatable: only for a host that keeps parameter values for its set (client, 2026-10-29)
+    parameters.addParameter(STR16("Preset state"), nullptr, 0, stampOf(applied_), 0, kStampId);
     for (int p = 0; p < kParamCount; ++p) {
         auto* param = new ChainParameter(p, unitOf(p));
         param->setNormalized(normalizedOf(p, values_[static_cast<size_t>(p)]));
@@ -324,6 +326,7 @@ void Plugin::setLatencyFrom(double lookMs) {
 
 tresult PLUGIN_API Plugin::setActive(TBool state) {
     if (state) {
+        checkStamp(); // a set restored by the host whose preset has changed since: the preset's values now
         Snapshot s;
         if (incoming_.take(s))
             values_ = s.values, lookMs_ = s.lookMs, bypass_ = s.bypass, oversampling_ = s.oversampling, mono_ = s.mono;
@@ -530,6 +533,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
         SingleComponentEffect::setParamNormalized(paramId(p), normalizedOf(p, v[static_cast<size_t>(p)]));
     loading_ = false;
     applied_ = chosenValues();
+    updateStamp(false);
     setLatencyFrom(look);
 
     // the processing (exactly the stored values, not their positions)
@@ -569,14 +573,62 @@ void Plugin::loadPresetIntoController(bool colour) {
     if (!chosen) return; // "(other values)"
     loading_ = true;
     const PresetValues& v = chosen->values;
+    std::vector<ParamID> changed;
     for (int p = colour ? kFirstColourParam : 0; p < (colour ? kParamCount : kFirstColourParam); ++p) {
         exact_[static_cast<size_t>(p)] = v[static_cast<size_t>(p)];
-        SingleComponentEffect::setParamNormalized(paramId(p), normalizedOf(p, v[static_cast<size_t>(p)]));
+        const ParamValue n = normalizedOf(p, v[static_cast<size_t>(p)]);
+        if (getParamNormalized(paramId(p)) != n) changed.push_back(paramId(p));
+        SingleComponentEffect::setParamNormalized(paramId(p), n);
     }
     loading_ = false;
     applied_ = chosenValues();
+    updateStamp(fromWindow_);
     // the host reads the new values; the processing gets them as a whole (publishToProcessor)
     if (componentHandler) componentHandler->restartComponent(kParamValuesChanged);
+    // a choice in the window: the host keeps each new value too (client, 2026-10-29: the DJ program restored the
+    // values from before the preset was chosen - Noise and Stereo width off - at its next start)
+    if (fromWindow_)
+        for (const ParamID id : changed) tellHost(id);
+}
+
+double Plugin::stampOf(const PresetValues& v) {
+    uint32_t h = 2166136261u; // FNV-1a over the values' bits
+    for (const double x : v) {
+        uint64_t bits = 0;
+        std::memcpy(&bits, &x, sizeof bits);
+        for (int b = 0; b < 8; ++b) h = (h ^ static_cast<uint8_t>(bits >> (8 * b))) * 16777619u;
+    }
+    return static_cast<double>(h % 65536u) / 65536.0; // exact in a float, as a host may keep it
+}
+
+void Plugin::updateStamp(bool tell) {
+    const double s = stampOf(applied_);
+    if (getParamNormalized(kStampId) == s) return;
+    const bool was = loading_;
+    loading_ = true;
+    SingleComponentEffect::setParamNormalized(kStampId, s);
+    loading_ = was;
+    if (tell) tellHost(kStampId);
+}
+
+void Plugin::checkStamp() {
+    if (!stampRestored_) return;
+    stampRestored_ = false;
+    if (std::fabs(getParamNormalized(kStampId) - stampOf(chosenValues())) < 1e-6) return; // the preset as it was
+    // the preset or colour changed since the host kept this set's values: their values now, told to the host
+    fromWindow_ = true;
+    loadPresetIntoController(false);
+    loadPresetIntoController(true);
+    fromWindow_ = false;
+    updateStamp(true);
+    publishToProcessor();
+    if (view_) view_->refresh();
+}
+
+void Plugin::tellHost(ParamID id) {
+    beginEdit(id);
+    performEdit(id, getParamNormalized(id));
+    endEdit(id);
 }
 
 void Plugin::listsChanged() {
@@ -621,19 +673,21 @@ void Plugin::edited(bool listChanged, bool save) {
     // the preset window changed values of the chosen preset (or colour), or "Save as" moved the plug-in to its copy:
     // those values, and only those - a bass slider or the host's automation of another value stays as it is
     const PresetValues now = chosenValues();
-    bool changed = false;
+    std::vector<ParamID> changed;
     loading_ = true;
     for (int i = 0; i < kParamCount; ++i) {
         const auto k = static_cast<size_t>(i);
         if (now[k] == applied_[k] || now[k] == exact_[k]) continue;
         exact_[k] = now[k];
         SingleComponentEffect::setParamNormalized(paramId(i), normalizedOf(i, now[k]));
-        changed = true;
+        changed.push_back(paramId(i));
     }
     loading_ = false;
     applied_ = now;
-    if (changed) {
+    updateStamp(true);
+    if (!changed.empty()) {
         if (componentHandler) componentHandler->restartComponent(kParamValuesChanged);
+        for (const ParamID id : changed) tellHost(id); // the host keeps the preset window's changes for its set too
         publishToProcessor();
     }
     if (listChanged) listsChanged();
@@ -660,6 +714,7 @@ void Plugin::closeEditors() {
 
 tresult PLUGIN_API Plugin::setParamNormalized(ParamID id, ParamValue value) {
     const ParamValue before = getParamNormalized(id);
+    if (id == kStampId && !loading_) stampRestored_ = true; // only a host restoring a set sets it
     const tresult r = SingleComponentEffect::setParamNormalized(id, value);
     const int p = paramIndex(id);
     if (p >= 0 && !loading_ && value != normalizedOf(p, exact_[static_cast<size_t>(p)]))
@@ -710,17 +765,20 @@ void Plugin::choose(bool colour, int index) {
     const std::vector<Preset>& items = colour ? settings_.colours : settings_.presets;
     if (index < 0 || index >= static_cast<int>(items.size())) return;
     const ParamID id = colour ? kColourId : kPresetId;
+    fromWindow_ = true; // the values the choice changes are told to the host (loadPresetIntoController)
     if (index != (colour ? colourIndex() : presetIndex())) {
         edit(id, static_cast<double>(index) / static_cast<double>(items.size()));
-        return;
+    } else {
+        // already chosen: its values again (after changes), exactly, to the controller and the processing
+        loadPresetIntoController(colour);
+        publishToProcessor();
     }
-    // already chosen: its values again (after changes), exactly, to the controller and the processing
-    loadPresetIntoController(colour);
-    publishToProcessor();
+    fromWindow_ = false;
 }
 
 IPlugView* PLUGIN_API Plugin::createView(FIDString name) {
     if (!name || std::strcmp(name, ViewType::kEditor) != 0) return nullptr;
+    checkStamp(); // (a host that opens the window before it activates the plug-in)
     if (view_) view_->detach(); // one window at a time: an older one still alive goes empty, never unowned
     view_ = new PluginView(this);
     return view_;
