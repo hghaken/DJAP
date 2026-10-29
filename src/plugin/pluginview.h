@@ -59,6 +59,8 @@ private:
     void updateNote(); // the version line: a newer version when the check found one
     int px(int v) const { return MulDiv(v, static_cast<int>(dpi_), 96); }
     static Steinberg::ViewRect sizeFor(UINT dpi);
+    // where the meter panel starts: the margin and the two rows above it (the program's MainWindow::meterTop)
+    static int meterTop(UINT dpi) { return MulDiv(12 + 2 * (28 + 6), static_cast<int>(dpi), 96); }
 
     Plugin* plugin_;
     HWND hwnd_ = nullptr, title_ = nullptr, version_ = nullptr, presetLabel_ = nullptr, preset_ = nullptr,

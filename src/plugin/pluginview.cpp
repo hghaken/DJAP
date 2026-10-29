@@ -56,8 +56,12 @@ std::wstring wide(const std::string& s) {
 
 } // namespace
 
+// The program's main window at its smallest with one channel (client, 2026-10-29: "the plug-in the same size as the
+// program, its smallest"): 600 px wide, the two rows at the top, the meter panel at its smallest height
+// (meterViewMinHeight: every stage row and a readable spectrum) and the margin under it - no status bar. Was 820 x 640.
 ViewRect PluginView::sizeFor(UINT dpi) {
-    return ViewRect(0, 0, MulDiv(820, static_cast<int>(dpi), 96), MulDiv(640, static_cast<int>(dpi), 96));
+    auto px = [dpi](int v) { return MulDiv(v, static_cast<int>(dpi), 96); };
+    return ViewRect(0, 0, px(600), meterTop(dpi) + meterViewMinHeight(dpi) + px(12));
 }
 
 bool PluginView::Graphs::audioActive() const { return view_.plugin_ && view_.plugin_->active(); }
@@ -412,7 +416,7 @@ void PluginView::layout() {
     MoveWindow(colour_, x, y, colourW, px(300), TRUE);
     x += colourW + gap;
     MoveWindow(editColour_, x, y, editW, rowH, TRUE);
-    y += rowH + gap + px(4);
+    y += rowH + gap; // = meterTop(dpi_), as the program's meterTop()
     MoveWindow(meter_, m, y, W, rc.bottom - m - y, TRUE);
     RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
 }
@@ -510,8 +514,7 @@ void PluginView::updateNote() {
     const bool newer = g_updater && g_updater->state() == Updater::State::Available &&
                        compareVersions(g_updater->release().version, AP_VERSION_STRING) > 0;
     const std::wstring t = wide(AP_VERSION_STRING) +
-                           (newer ? L"   -   DJAP " + wide(g_updater->release().version) +
-                                        L" is available: click here (or right-click, About DJAP)"
+                           (newer ? L"  -  " + wide(g_updater->release().version) + L" is available: click"
                                   : L"");
     wchar_t now[256] = {};
     GetWindowTextW(version_, now, 256);
