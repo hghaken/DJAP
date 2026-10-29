@@ -429,13 +429,28 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
     // compressor and goniometer square, but never wider than a fifth of the room (one tall row); between them the
     // loudness and gain histories and the scope
     const int sq = std::min(h, (room - barsW - 5 * g) / 5);
-    const int flexW = std::max(px(120), (room - 2 * sq - barsW - 5 * g) / 3);
     RECT panel[5];
-    int x = left0;
-    const int widths[5] = {sq, flexW, flexW, flexW, sq};
-    for (int i = 0; i < 5; ++i) {
-        panel[i] = RECT{x, top, x + widths[i], bottom};
-        x += widths[i] + g;
+    if (h >= 2 * sq + g) {
+        // a tall row (one deck, the plug-in): the compressor and the goniometer one above the other in the first column
+        // (client, 2026-10-29: "put the compressor and the stereo graph under each other") - the histories and the
+        // scope get the width
+        const int half = (h - g) / 2, col = std::min(half, (room - 3 * g) / 4);
+        const int flexW = std::max(px(120), (room - col - 3 * g) / 3);
+        panel[0] = RECT{left0, top, left0 + col, top + half};
+        panel[4] = RECT{left0, top + half + g, left0 + col, bottom};
+        int x = left0 + col + g;
+        for (int i = 1; i <= 3; ++i) {
+            panel[i] = RECT{x, top, x + flexW, bottom};
+            x += flexW + g;
+        }
+    } else {
+        const int flexW = std::max(px(120), (room - 2 * sq - barsW - 5 * g) / 3);
+        int x = left0;
+        const int widths[5] = {sq, flexW, flexW, flexW, sq};
+        for (int i = 0; i < 5; ++i) {
+            panel[i] = RECT{x, top, x + widths[i], bottom};
+            x += widths[i] + g;
+        }
     }
     for (int i = 0; i < 5; ++i) {
         fill(dc, panel[i], kPanel);

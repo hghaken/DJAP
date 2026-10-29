@@ -771,7 +771,8 @@ The auto tone holds still during breakdowns and fades, so a quiet part does not 
 ![The analysis window](images/analysis.png)
 
 Click **Graphs** on a deck strip (or in the plug-in's window, 9.2: one row for its channel). The window has a row per
-deck with six panels:
+deck with six panels (with one row - one channel, the plug-in - the compressor's curve and the stereo graph stand
+one above the other, so the histories and the scope get the width):
 
 1. **Signal chain** - a row per step in chain order, from *Input* to *Output*. Each step has a lamp (lit when the step
    changes the level by 0.1 dB or more; turquoise = up, orange = down) and a bar against a dB scale from -12 to +12
