@@ -49,6 +49,7 @@ Each deck is one `DeckProcessor` (`src/core/deck.cpp`). Per sample, in this orde
 input (stereo)
  -> clean-up: non-finite or absurd samples (|x| > 1e6) -> 0; the input factor of the volume follower (14.4)
  -> [input meter: K-weighted energy, sample peak]            [dry path: the input delayed by the look-ahead]
+ -> mono (only when chosen): both channels (L + R) / 2, a 20 ms ramp
  -> leveller gain x input gain                               (4)
  -> noise reduction, 4 bands or 1                            (4a)
  -> colour: sub bass, tone, auto tone, contour               (5)

@@ -29,7 +29,7 @@ namespace ap::plugin {
 namespace {
 
 // 2 (0.1.145): the oversampling after the values; a version 1 state (without it) loads with the default
-constexpr int32 kStateVersion = 2;
+constexpr int32 kStateVersion = 3; // 2: the oversampling (0.1.145), 3: mono (0.1.245)
 // The look-ahead parameter: a list of the Setup window's choices (ms; deck.h snapLook) - the host shows what runs
 // (outside review: a 0..5 ms range in steps of 0.1 showed 0.5 or 1.0 while 1.5 ran).
 constexpr int kLookSteps = kLookChoiceCount - 1;
@@ -261,6 +261,7 @@ void Plugin::addParameters() {
                             kBypassId);
     parameters.addParameter(new LookParameter(lookMs_));
     parameters.addParameter(new OversamplingParameter());
+    parameters.addParameter(STR16("Mono"), nullptr, 1, 0.0, ParameterInfo::kCanAutomate, kMonoId); // 0 stereo, 1 mono
     for (int p = 0; p < kParamCount; ++p) {
         auto* param = new ChainParameter(p, unitOf(p));
         param->setNormalized(normalizedOf(p, values_[static_cast<size_t>(p)]));
@@ -322,7 +323,8 @@ void Plugin::setLatencyFrom(double lookMs) {
 tresult PLUGIN_API Plugin::setActive(TBool state) {
     if (state) {
         Snapshot s;
-        if (incoming_.take(s)) values_ = s.values, lookMs_ = s.lookMs, bypass_ = s.bypass, oversampling_ = s.oversampling;
+        if (incoming_.take(s))
+            values_ = s.values, lookMs_ = s.lookMs, bypass_ = s.bypass, oversampling_ = s.oversampling, mono_ = s.mono;
         deck_.prepare(fs_); // allocates: never while processing (the host stops it first)
         publishConfig();
         deck_.startFadeIn(); // a stream may start in the middle of the music
@@ -337,6 +339,7 @@ void Plugin::publishConfig() {
     DeckControl ctl;
     ctl.lookMs = lookMs_;
     ctl.oversampling = oversampling_;
+    ctl.mono = mono_;
     ctl.processing = !bypass_;
     // the coefficients are designed here, on the audio thread, when the host changed a value: no allocation, a few
     // microseconds (the program designs them on its GUI thread)
@@ -351,6 +354,7 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
         lookMs_ = s.lookMs;
         bypass_ = s.bypass;
         oversampling_ = s.oversampling;
+        mono_ = s.mono;
         dirty_ = true;
     }
     if (IParameterChanges* changes = data.inputParameterChanges) {
@@ -371,6 +375,8 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
                 lookMs_ = lookOfNormalized(v); // the window's choices (deck.h)
             } else if (id == kOversamplingId) {
                 oversampling_ = 2 << std::lround(std::min(1.0, std::max(0.0, v)) * 2.0);
+            } else if (id == kMonoId) {
+                mono_ = v >= 0.5;
             } else {
                 const int p = paramIndex(id);
                 if (p < 0) continue;
@@ -421,6 +427,7 @@ tresult PLUGIN_API Plugin::getState(IBStream* state) {
         s.writeDouble(v[static_cast<size_t>(p)]);
     }
     s.writeInt32(static_cast<int32>(plainOf(kOversamplingId))); // version 2
+    s.writeInt8(plainOf(kMonoId) >= 0.5 ? 1 : 0);                // version 3
     return kResultOk;
 }
 
@@ -463,6 +470,8 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     int32 oversampling = kOversamplingDefault;
     if (version >= 2 && s.readInt32(oversampling)) oversampling = snapOversampling(oversampling);
     else oversampling = kOversamplingDefault;
+    int8 mono = 0; // a project of a version before 3: stereo
+    if (version < 3 || !s.readInt8(mono)) mono = 0;
 
     // the controller
     exact_ = v;
@@ -475,6 +484,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     look = snapLook(look); // an old project's 0.5 / 1.0 ms runs - and is reported - as 1.5 from the start
     SingleComponentEffect::setParamNormalized(kLookId, normalizedOfLook(look));
     SingleComponentEffect::setParamNormalized(kOversamplingId, oversampling == 8 ? 1.0 : oversampling == 4 ? 0.5 : 0.0);
+    SingleComponentEffect::setParamNormalized(kMonoId, mono ? 1.0 : 0.0);
     for (int p = 0; p < kParamCount; ++p)
         SingleComponentEffect::setParamNormalized(paramId(p), normalizedOf(p, v[static_cast<size_t>(p)]));
     loading_ = false;
@@ -482,7 +492,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     setLatencyFrom(look);
 
     // the processing (exactly the stored values, not their positions)
-    incoming_.publish(Snapshot{v, look, bypass != 0, oversampling});
+    incoming_.publish(Snapshot{v, look, bypass != 0, oversampling, mono != 0});
     if (view_) view_->refresh();
     return kResultOk;
 }
@@ -504,7 +514,7 @@ int Plugin::colourIndex() const {
 double Plugin::plainOf(ParamID id) const {
     const ParamValue v = const_cast<Plugin*>(this)->getParamNormalized(id);
     if (id == kLookId) return lookOfNormalized(v); // what runs (deck.h)
-    if (id == kBypassId) return v >= 0.5 ? 1.0 : 0.0;
+    if (id == kBypassId || id == kMonoId) return v >= 0.5 ? 1.0 : 0.0;
     if (id == kOversamplingId) return static_cast<double>(2 << std::lround(v * 2.0));
     const int p = paramIndex(id);
     return p >= 0 ? exact_[static_cast<size_t>(p)] : v;
@@ -633,7 +643,7 @@ tresult PLUGIN_API Plugin::setParamNormalized(ParamID id, ParamValue value) {
 
 void Plugin::publishToProcessor() {
     incoming_.publish(Snapshot{exact_, plainOf(kLookId), plainOf(kBypassId) >= 0.5,
-                               static_cast<int>(plainOf(kOversamplingId))});
+                               static_cast<int>(plainOf(kOversamplingId)), plainOf(kMonoId) >= 0.5});
 }
 
 void Plugin::edit(ParamID id, ParamValue normalized) {

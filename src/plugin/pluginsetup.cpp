@@ -19,7 +19,7 @@ namespace {
 const wchar_t* const kClass = L"DJAPPluginSetup";
 HINSTANCE g_module = nullptr;
 bool g_registered = false;
-enum Id { idLook = 1, idOversampling, idTooltips, idUpdates, idClose };
+enum Id { idLook = 1, idOversampling, idTooltips, idUpdates, idClose, idMono };
 
 } // namespace
 
@@ -50,7 +50,7 @@ void SetupWindow::show(HWND owner) {
         const DWORD style = WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN;
         dpi_ = owner ? GetDpiForWindow(owner) : 96;
         if (dpi_ == 0) dpi_ = 96;
-        RECT r{0, 0, px(470), px(232)};
+        RECT r{0, 0, px(470), px(258)};
         AdjustWindowRectExForDpi(&r, style, FALSE, 0, dpi_);
         hwnd_ = CreateWindowExW(WS_EX_CONTROLPARENT, kClass, L"Setup (DJAP plug-in)", style, CW_USEDEFAULT, CW_USEDEFAULT,
                                 r.right - r.left, r.bottom - r.top, owner, nullptr, g_module, this);
@@ -73,7 +73,7 @@ LRESULT CALLBACK SetupWindow::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     const LRESULT r = w->handle(msg, wp, lp);
     if (msg == WM_NCDESTROY) {
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-        w->hwnd_ = w->look_ = w->oversampling_ = w->tooltips_ = w->updates_ = w->close_ = nullptr;
+        w->hwnd_ = w->look_ = w->oversampling_ = w->mono_ = w->tooltips_ = w->updates_ = w->close_ = nullptr;
     }
     return r;
 }
@@ -113,14 +113,16 @@ void SetupWindow::create() {
     look_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idLook, 130, 14, 326, 300);
     HWND osLabel = make(L"STATIC", L"Oversampling", SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, 0, 14, 48, 110, 26);
     oversampling_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOversampling, 130, 48, 326, 300);
-    tooltips_ = make(L"BUTTON", L"Show tooltips", BS_AUTOCHECKBOX | WS_TABSTOP, idTooltips, 14, 86, 440, 24);
+    mono_ = make(L"BUTTON", L"Mono (left and right mixed, the same sound on both outputs)", BS_AUTOCHECKBOX | WS_TABSTOP,
+                 idMono, 14, 86, 440, 24);
+    tooltips_ = make(L"BUTTON", L"Show tooltips", BS_AUTOCHECKBOX | WS_TABSTOP, idTooltips, 14, 112, 440, 24);
     updates_ = make(L"BUTTON", L"Look for a newer DJAP each time the DJ software loads the plug-in", BS_AUTOCHECKBOX | WS_TABSTOP,
-                    idUpdates, 14, 112, 440, 24);
+                    idUpdates, 14, 138, 440, 24);
     make(L"STATIC",
          L"The audio devices are the DJ software's: it chooses this plug-in's input and output. Tooltips and the update "
          L"check are shared with the DJAP program (its settings file).",
-         SS_LEFT, 0, 14, 144, 442, 44);
-    close_ = make(L"BUTTON", L"Close", BS_OWNERDRAW | WS_TABSTOP, idClose, 370, 194, 86, 28);
+         SS_LEFT, 0, 14, 170, 442, 44);
+    close_ = make(L"BUTTON", L"Close", BS_OWNERDRAW | WS_TABSTOP, idClose, 370, 220, 86, 28);
     theme::makeButton(close_);
     theme::makeCombo(look_);
     theme::makeCombo(oversampling_);
@@ -143,6 +145,10 @@ void SetupWindow::create() {
     tips_.add(look_, lookTip);
     tips_.add(osLabel, osTip);
     tips_.add(oversampling_, osTip);
+    tips_.add(mono_, L"Mono: this channel's left and right are mixed, (L + R) / 2, and both outputs carry that one "
+                     L"sound - for a mono sound system. From the input on, so the leveller keeps the loudness on target "
+                     L"and the limiter its ceiling. A parameter of this plug-in, stored with the project; off (stereo) "
+                     L"by default. Bypass stays the unchanged input.");
     tips_.add(tooltips_, L"The explanations that appear when the mouse rests on a control, in the plug-in and in the "
                          L"program (one switch for both: the settings file).");
     tips_.add(updates_, L"Asks GitHub for a newer DJAP each time the DJ software loads the plug-in (the program asks once "
@@ -160,6 +166,7 @@ void SetupWindow::refresh() {
     const int os = static_cast<int>(plugin_->plainOf(kOversamplingId)), oi = os == 8 ? 2 : os == 4 ? 1 : 0;
     if (SendMessageW(oversampling_, CB_GETCURSEL, 0, 0) != oi && !SendMessageW(oversampling_, CB_GETDROPPEDSTATE, 0, 0))
         SendMessageW(oversampling_, CB_SETCURSEL, static_cast<WPARAM>(oi), 0);
+    SendMessageW(mono_, BM_SETCHECK, plugin_->plainOf(kMonoId) >= 0.5 ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(tooltips_, BM_SETCHECK, plugin_->tooltips() ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(updates_, BM_SETCHECK, plugin_->checkUpdates() ? BST_CHECKED : BST_UNCHECKED, 0);
 }
@@ -173,6 +180,8 @@ void SetupWindow::command(int id, int code) {
     } else if (id == idOversampling && code == CBN_SELCHANGE) {
         const int sel = static_cast<int>(SendMessageW(oversampling_, CB_GETCURSEL, 0, 0));
         if (sel >= 0 && sel <= 2) plugin_->edit(kOversamplingId, sel / 2.0);
+    } else if (id == idMono && code == BN_CLICKED) {
+        plugin_->edit(kMonoId, SendMessageW(mono_, BM_GETCHECK, 0, 0) == BST_CHECKED ? 1.0 : 0.0);
     } else if ((id == idTooltips || id == idUpdates) && code == BN_CLICKED) {
         const bool tips = SendMessageW(tooltips_, BM_GETCHECK, 0, 0) == BST_CHECKED;
         const bool updates = SendMessageW(updates_, BM_GETCHECK, 0, 0) == BST_CHECKED;

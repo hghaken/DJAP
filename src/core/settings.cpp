@@ -303,6 +303,8 @@ std::string Settings::toText() const {
     o << "LookAheadMs=" << compact(lookAheadMs) << "\n";
     o << "; Oversampling of the soft clipper and the exciter (2, 4 or 8), both decks: more keeps their overtones from\n"
          "; folding back into the audio band, at more CPU\nOversampling=" << oversampling << "\n";
+    o << "; 1 = mono: every deck's left and right mixed, (L + R) / 2, on both outputs (a mono sound system)\nMono="
+      << (mono ? 1 : 0) << "\n";
     o << "; Driver buffer size in frames (0 = the driver's preferred size)\nBufferSize=" << bufferSize << "\n";
     o << "; Start the audio when the program starts (1 = it was started last and not stopped since)\nStartAudio="
       << (startAudio ? 1 : 0) << "\n";
@@ -441,6 +443,7 @@ void Settings::fromText(const std::string& text) {
         const int f = toInt(*v, 4);
         oversampling = f >= 6 ? 8 : f >= 3 ? 4 : 2; // 2, 4 or 8
     }
+    if (auto v = get("Audio", "Mono")) mono = toInt(*v, 0) != 0;
     if (auto v = get("Audio", "BufferSize")) bufferSize = std::min(8192, std::max(0, toInt(*v, 0)));
     if (auto v = get("Audio", "StartAudio")) startAudio = toInt(*v, 0) != 0;
     if (auto v = get("Audio", "FollowWindowsVolumeOneChannel")) followVolume[0] = toInt(*v, 1) != 0;

@@ -607,6 +607,7 @@ void MainWindow::applyDeck(int d) {
     DeckControl c;
     c.lookMs = settings_.lookAheadMs;
     c.oversampling = settings_.oversampling;
+    c.mono = settings_.mono;
     c.processing = settings_.deck[d].processing;
     audio_.setDeck(d, settings_.deckValues(d), c); // its preset with its colour
     refreshStrip(d);

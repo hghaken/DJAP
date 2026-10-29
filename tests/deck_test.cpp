@@ -484,6 +484,37 @@ void mxcsrRestored() {
 
 // ---- no allocation on the audio path ----
 
+// Mono (client, 2026-10-29): both outputs the same, every sample; the bypass stays the input; off changes nothing.
+void mono() {
+    std::printf("-- mono: left and right mixed from the input on\n");
+    Buffer l = music(4, 41, 0.5), r = music(4, 42, 0.5);
+    for (size_t i = 0; i < r.size(); ++i) r[i] = 0.3f * r[i] + 0.2f * l[i]; // a wide, lopsided stereo signal
+    DeckControl c;
+    c.mono = true;
+    const PresetValues v = shippedPresetValues(3); // Loud
+    const Stereo m = runLive(v, c, l, r, {});
+    size_t same = 0;
+    for (size_t i = 0; i < m.l.size(); ++i) same += m.l[i] == m.r[i];
+    std::printf("   Loud, mono: %zu of %zu frames with L = R\n", same, m.l.size());
+    CHECK(same == m.l.size());
+    // the leveller brings the mono sum where it brings the stereo signal (the loudness of the last 2 s; a mono sum of
+    // wide music is quieter before the leveller)
+    DeckControl st;
+    const Stereo s = runLive(v, st, l, r, {});
+    const double lufs = tdeck::loudness(fs, m.l, m.r, frames(2.0)), stereo = tdeck::loudness(fs, s.l, s.r, frames(2.0));
+    std::printf("   output %.2f LUFS mono, %.2f stereo\n", lufs, stereo);
+    CHECK_NEAR(lufs, stereo, 1.0);
+    // bypassed: the input, unchanged (stereo), delayed by the look-ahead
+    c.processing = false;
+    const Stereo b = runLive(v, c, l, r, {});
+    const int lat = lookFrames(c.lookMs, fs);
+    size_t exact = 0;
+    for (size_t i = static_cast<size_t>(lat); i < b.l.size(); ++i)
+        exact += b.l[i] == l[i - static_cast<size_t>(lat)] && b.r[i] == r[i - static_cast<size_t>(lat)];
+    std::printf("   bypassed with mono on: %zu of %zu frames the input\n", exact, b.l.size() - static_cast<size_t>(lat));
+    CHECK(exact == b.l.size() - static_cast<size_t>(lat));
+}
+
 void noAllocations() {
     std::printf("-- no allocation in process(), with changes published\n");
     DeckProcessor d;
@@ -710,6 +741,13 @@ void clicks() {
     o2.oversampling = 2;
     ratio = clickRatio(base, ctl, {{frames(3.0), base, o8}, {frames(3.3), base, o2}}, 3.0, 4.0, l, r);
     std::printf("   oversampling 4x -> 8x -> 2x: %.2f\n", ratio);
+    CHECK(ratio < 1.5);
+
+    // mono on and off again (a 20 ms ramp to the mid; L and R 90 degrees apart, so the sum differs from both)
+    DeckControl monoOn = ctl;
+    monoOn.mono = true;
+    ratio = clickRatio(base, ctl, {{frames(3.0), base, monoOn}, {frames(3.5), base, ctl}}, 3.0, 4.0, l, r);
+    std::printf("   mono on -> off: %.2f\n", ratio);
     CHECK(ratio < 1.5);
 
     // oversampling 4x -> 8x -> back to 4x within the fade: the change is called off and the stages fade straight back
@@ -1107,6 +1145,7 @@ int main(int argc, char** argv) {
         fadeOut();
         badInput();
         mxcsrRestored();
+        mono();
         noAllocations();
         chainMeters();
     }

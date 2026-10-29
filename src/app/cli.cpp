@@ -45,6 +45,7 @@ const char* const kUsage =
     "        --look <ms>        limiter look-ahead 0..5 ms (above 0 at least 66 samples, the true-peak\n"
     "                           minimum); default: the settings (1.5 ms)\n"
     "        --oversampling <n> the soft clipper's and the exciter's: 2, 4 or 8; default: the settings (4)\n"
+    "        --mono             both channels (L + R) / 2 through the chain; default: the settings (stereo)\n"
     "        --keep-delay       keep the look-ahead delay in the output, like a live device (default: removed)\n"
     "        --pcm24            write 24-bit PCM (default: 32-bit float, lossless)\n"
     "        --trace <file.csv> deck A every 100 ms: loudness in / out (momentary, short-term), the leveller's gain\n"
@@ -304,6 +305,7 @@ bool chooseDeck(const Settings& s, int d, const std::string& choice, const std::
     out = RenderDeck();
     out.control.lookMs = lookMs;
     out.control.oversampling = s.oversampling;
+    out.control.mono = s.mono;
     std::string name = choice;
     if (name.empty()) {
         if (!s.deck[d].processing) {
@@ -500,6 +502,7 @@ int run(int argc, wchar_t** argv) {
     fs::path ini, trace;
     double lookMs = -1.0;
     int oversampling = 0; // 0: the settings
+    bool mono = false;    // --mono: this run mono (else the settings)
     bool keepDelay = false, pcm24 = false;
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string a = toUtf8(args[i]);
@@ -538,6 +541,8 @@ int run(int argc, wchar_t** argv) {
             std::string v;
             if (!value(v) || (v != "2" && v != "4" && v != "8")) return usageError("--oversampling needs 2, 4 or 8");
             oversampling = v[0] - '0';
+        } else if (a == "--mono") {
+            mono = true;
         } else if (a == "--ini") {
             std::string v;
             if (!value(v)) return usageError("--ini needs a file");
@@ -572,14 +577,16 @@ int run(int argc, wchar_t** argv) {
     const bool lookGiven = lookMs >= 0.0;
     if (!lookGiven) lookMs = s.lookAheadMs;
     if (oversampling) s.oversampling = oversampling; // this run only: the command line never writes the settings
+    if (mono) s.mono = true;
 
     if (command == "--render") {
         if (files.size() != 2) return usageError("--render needs an input and an output file");
         return render(s, files[0], files[1], deckA, deckB, colourA, colourB, lookMs, keepDelay, pcm24, trace);
     }
     if (!deckA.empty() || !deckB.empty() || !colourA.empty() || !colourB.empty() || lookGiven || keepDelay || pcm24 ||
-        !trace.empty() || oversampling)
-        return usageError("--a, --b, --ca, --cb, --look, --oversampling, --keep-delay, --pcm24 and --trace belong to "
+        !trace.empty() || oversampling || mono)
+        return usageError("--a, --b, --ca, --cb, --look, --oversampling, --mono, --keep-delay, --pcm24 and --trace "
+                          "belong to "
                           "--render");
     if (command == "--measure") {
         if (files.empty()) return usageError("--measure needs at least one file");

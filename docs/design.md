@@ -114,6 +114,7 @@ analysis.
 | Exciter | frequency / amount | Hz / % | 3500 / 15 | 1500..8000 / 0..100 | 10.7 |
 | De-esser | frequency / threshold / max | Hz / LU re T / dB | 5500 / -10 / 6 | 3000..10000 / -30..0 / 0..12 | 10.8 |
 | Stereo width | width / bass width / bass split | % / % / Hz | 100 / 100 / 150 | 0..200 / 0..100 / 40..400 | 10.5 |
+| | mono | switch | off | - | client, 2026-10-29: "a check box Mono (off by default) in both Setup windows: the sound mono instead of stereo" - (L + R) / 2 on both channels from the deck's input on (after the dry path and the input meters), so the leveller, the limiter and the meters work on what is heard; Bypass stays the stereo input; a 20 ms ramp. Not part of a preset: `[Audio] Mono` (both decks) in the program, the parameter `Mono` (id 6, state version 3) in the plug-in, `DeckControl::mono`; `DJAPCmd --mono` |
 | | oversampling | x | 4 | 2, 4, 8 | the soft clipper and the exciter's saturation (client, 2026-10-27: "CPU is not a problem, make the oversampling a user's choice"); 2x left about -40 dBc on hard-driven 15 kHz tones, 4x / 8x over 100 dB down; Setup and the plug-in, `[Audio] Oversampling`, `DeckControl::oversampling`; a change fades the two stages out and in |
 | Soft clipper | drive | dB | 2 | 0..9 | 10.9; runs at 2x the rate (polyphase IIR halfbands, about 2.6 frames of phase delay, no latency) - its aliases were -16..-44 dBc on 10-15 kHz tones (outside review, client 2026-10-26); the exciter's saturation too |
 | Limiter | ceiling | dBTP | -1.0 | -6..0 | R 128 / AES |

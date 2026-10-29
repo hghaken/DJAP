@@ -88,6 +88,7 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.fs = fs;
     c.look = lookFrames(ctl.lookMs, fs);
     c.oversampling = snapOversampling(ctl.oversampling);
+    c.mono = ctl.mono;
     c.processing = ctl.processing;
     c.freeze = ctl.freeze;
     auto on = [&](Param p) { return v[p] >= 0.5; };
@@ -615,6 +616,7 @@ void DeckProcessor::applyConfig(const DeckConfig& c) {
             running_[s] = c.on[s];
         }
         masterMix_ = c.processing ? 1.0 : 0.0;
+        monoMix_ = c.mono ? 1.0 : 0.0;
         inGain_ = c.inputGain;
         outGain_ = c.outputGain;
         compMakeupS_ = c.compMakeup;
@@ -985,6 +987,18 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             rec_.peakIn[1] = std::max(rec_.peakIn[1], static_cast<float>(std::fabs(xr)));
         }
 
+        // mono (client, 2026-10-29): both channels the mid, (L + R) / 2, from here on - the whole chain, the leveller's
+        // detector and the limiter included, works on what is heard (a mono sum of wide music is quieter: the leveller
+        // brings it back to the target). After the dry path and the input meters: the bypass stays the input, bit
+        // for bit. Switching ramps over 20 ms.
+        if (monoMix_ != (c.mono ? 1.0 : 0.0)) monoMix_ = moveToward(monoMix_, c.mono ? 1.0 : 0.0, c.switchStep);
+        const float rawL = static_cast<float>(xl), rawR = static_cast<float>(xr); // the graphs' "original"
+        if (monoMix_ > 0.0) {
+            const double mid = 0.5 * (xl + xr);
+            xl += monoMix_ * (mid - xl);
+            xr += monoMix_ * (mid - xr);
+        }
+
         // switches (20 ms ramps); a stage that starts from rest starts with a clean state. Skipped once everything
         // has arrived (settled_), until the next configuration.
         if (!settled_) {
@@ -1258,7 +1272,7 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         // the volume of setVolume, after everything (only down: the ceiling holds); taps and meters before it
         left[i] = volOutS_ == 1.0 ? ol : static_cast<float>(ol * volOutS_);
         right[i] = volOutS_ == 1.0 ? orr : static_cast<float>(orr * volOutS_);
-        taps_->push({static_cast<float>(xl), static_cast<float>(xr), ol, orr});
+        taps_->push({rawL, rawR, ol, orr});
 
         // output measurements
         {

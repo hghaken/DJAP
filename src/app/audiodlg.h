@@ -71,6 +71,7 @@ private:
     HWND look_ = nullptr, startup_ = nullptr; // look-ahead, start with Windows
     HWND oversampling_ = nullptr; // the soft clipper's and the exciter's
     HWND tooltips_ = nullptr;                                    // the switch of all tooltips
+    HWND mono_ = nullptr;                                        // both decks mono (client, 2026-10-29)
     HWND checkUpdates_ = nullptr; // the daily update check
     std::wstring notes_;
     int stateLines_ = 1; // the lines the state text takes now (the Health section is as high as its text)

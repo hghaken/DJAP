@@ -473,6 +473,10 @@ the audio again (a short fade-out and fade-in).
   before this volume. If the default playback device is the virtual cable DJAP reads, and Windows turns that cable
   down in software, DJAP undoes that at its input, so the processing still sees the music's own level. One choice per
   mode: on by default with one channel, off with two decks (a key on the keyboard should not move a DJ's outputs).
+- **Mono** - off (stereo) by default. On: every deck's left and right are mixed, (L + R) / 2, and both outputs carry
+  that one sound - for a mono sound system, or a speaker on one side only. It works from the deck's input on, so the
+  leveller keeps the loudness on target (a mono mix of wide music is a little quieter before it) and the limiter its
+  ceiling. Switching glides in over 20 ms. Bypass stays the unchanged (stereo) input.
 - **Start DJAP when Windows starts** (2.5). Stored in Windows' list of startup programs, not in the settings file.
 - **Show tooltips** - on (the default): every control explains itself when the mouse rests on it. Off: no tooltips
   in any window. The plug-in follows the setting the next time it is loaded.
@@ -904,7 +908,8 @@ The window is one deck strip of the program:
   - The plug-in's **Setup** window holds what applies to a plug-in: **Look-ahead** - the limiter's look-ahead, 0, 1.5,
     2, 3 or 5 ms (see 5.1), a list of these five in the DJ software too; the DJ software is told the new delay (an old
     project's 0.5 or 1.0 ms runs as 1.5 ms); **Oversampling** - 2x, 4x (default) or 8x, stored with the DJ software's
-    project; **Show tooltips** and the **update check** - these two are shared with the program (the same settings
+    project; **Mono** - this channel's left and right mixed, the same sound on both outputs (as in the program, 5.2),
+    a parameter stored with the project, off by default; **Show tooltips** and the **update check** - these two are shared with the program (the same settings
     file). There are no audio devices: the DJ software chooses the plug-in's input and output.
   - **About DJAP** - the version, the settings file in use, the copyright and licences, the update check (9.4), a
     Disclaimer button and a link to DJAP's GitHub page.
@@ -1038,7 +1043,7 @@ never plays audio and never changes the settings. Open a command prompt in the i
 path.
 
 ```
-DJAPCmd --render <in> <out.wav> [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--oversampling <2|4|8>] [--keep-delay] [--pcm24] [--trace <file.csv>]
+DJAPCmd --render <in> <out.wav> [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--oversampling <2|4|8>] [--mono] [--keep-delay] [--pcm24] [--trace <file.csv>]
 DJAPCmd --presets
 DJAPCmd --measure <file.wav> [more files]
 DJAPCmd --tone <file> [more files]
@@ -1055,7 +1060,8 @@ DJAPCmd --version | --help
   end - the filters' last few milliseconds of ringing after an abrupt end are still left out, about -35 dB); over 4 GB (about three hours of 4-channel 24-bit audio) it is written as
   RF64, the 64-bit form of WAV. The file is written under a temporary name first, so a failed render leaves no half
   file. A render holds the whole input and output in memory (about 3 times the size of a 24-bit file): fine for songs
-  and sets, but a file of several GB needs that much free memory. `--oversampling` sets the clipper's and exciter's oversampling for this render (default: the settings'). After
+  and sets, but a file of several GB needs that much free memory. `--oversampling` sets the clipper's and exciter's oversampling for this render (default: the settings'); `--mono`
+  renders it mono (default: the settings' Mono). After
   rendering it prints a report of input and output loudness.
   `--trace <file.csv>` also writes deck A every 100 ms: loudness in and out (momentary and short-term), the
   leveller's gain and whether it holds, and what the compressor, density bands, de-esser, clipper and limiter do -
@@ -1088,7 +1094,7 @@ The About window shows which file is in use. DJAP saves it after every change. I
 
 | Section | Holds |
 |---|---|
-| `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume |
+| `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume, oversampling, `Mono` |
 | `[Decks]` | Each deck's loudness preset, colour and processing switch, linked presets |
 | `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options. The plug-in's windows have lines of their own (`PluginSpectrum`, `PluginSetup`, ...) |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |

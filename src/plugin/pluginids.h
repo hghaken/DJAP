@@ -19,6 +19,7 @@ enum ExtraId : Steinberg::Vst::ParamID {
     kBypassId = 3, // the deck's Bypass (the input delayed by the look-ahead)
     kLookId = 4,   // the limiter look-ahead in ms: the plug-in's latency
     kOversamplingId = 5, // the soft clipper's and the exciter's oversampling: 2x, 4x or 8x (since 0.1.145)
+    kMonoId = 6,         // mono: left and right mixed from the input on (since 0.1.245; DeckControl::mono)
 };
 
 // The id of a chain value: a hash of its ini key, so values can be added or reordered in params.h without breaking a

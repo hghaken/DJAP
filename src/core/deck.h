@@ -72,6 +72,7 @@ inline int snapOversampling(int f) { return f >= 6 ? 8 : f >= 3 ? 4 : 2; }
 struct DeckControl {
     double lookMs = 1.5;     // limiter look-ahead, the same for both decks
     int oversampling = kOversamplingDefault; // 2, 4 or 8: the soft clipper and the exciter's saturation
+    bool mono = false;       // both channels (L + R) / 2 from the input on (client, 2026-10-29: a mono sound system)
     bool processing = true;  // false = bypass (input delayed by the look-ahead, bit-exact)
     bool freeze = false;     // leveller holds its gain
 };
@@ -82,6 +83,7 @@ struct DeckConfig {
     double fs = 48000.0;
     int look = 0;
     int oversampling = kOversamplingDefault;
+    bool mono = false;
     bool processing = true, freeze = false;
     bool on[kStageCount] = {};
     double inputGain = 1.0, outputGain = 1.0;
@@ -254,6 +256,7 @@ private:
     double mix_[kStageCount] = {};
     bool running_[kStageCount] = {};
     double masterMix_ = 1.0;
+    double monoMix_ = 0.0; // 0 stereo .. 1 mono (DeckControl::mono), a 20 ms ramp
     bool settled_ = false; // no switch ramp, gain smoothing or retune running: the switch loop is skipped
     double inGain_ = 1.0, outGain_ = 1.0;
 

@@ -438,6 +438,24 @@ int main(int argc, char** argv) {
         b.close();
     }
 
+    // 4c. mono (off by default) is a parameter and goes with the project (state version 3)
+    {
+        Instance a, b;
+        CHECK(a.open(module, &host));
+        CHECK(a.controller->getParamNormalized(ap::plugin::kMonoId) == 0.0);
+        a.controller->setParamNormalized(ap::plugin::kMonoId, 1.0);
+        MemoryStream m;
+        CHECK(a.component->getState(&m) == kResultOk);
+        m.seek(0, IBStream::kIBSeekSet, nullptr);
+        CHECK(b.open(module, &host));
+        CHECK(b.component->setState(&m) == kResultOk);
+        const double loaded = b.controller->getParamNormalized(ap::plugin::kMonoId);
+        std::printf("-- mono stored and loaded: %s\n", loaded == 1.0 ? "mono" : "NOT mono");
+        CHECK(loaded == 1.0);
+        a.close();
+        b.close();
+    }
+
     // 5. an input the host marks silent may hold anything: it is processed as silence
     {
         Instance a;

@@ -48,6 +48,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK(a.inputA == b.inputA && a.inputB == b.inputB && a.outputA == b.outputA && a.outputB == b.outputB);
     CHECK_NEAR(a.lookAheadMs, b.lookAheadMs, 1e-12);
     CHECK(a.oversampling == b.oversampling);
+    CHECK(a.mono == b.mono);
     CHECK(a.bufferSize == b.bufferSize && a.startAudio == b.startAudio);
     CHECK(a.api == b.api && a.exclusive == b.exclusive && a.driftCorrection == b.driftCorrection);
     CHECK(a.inputPeriodMs == b.inputPeriodMs);
@@ -167,6 +168,7 @@ Settings busy() {
     s.outputB = 1;
     s.lookAheadMs = 2.25;
     s.oversampling = 8;
+    s.mono = true; // (stereo by default)
     s.bufferSize = 192;
     s.startAudio = true;
     s.followVolume[0] = false; // both the other way round than the defaults

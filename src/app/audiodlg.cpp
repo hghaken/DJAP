@@ -21,7 +21,7 @@ namespace {
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
           idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
-          idCheckUpdates, idTooltips, idDrift, idInPeriod };
+          idCheckUpdates, idTooltips, idDrift, idInPeriod, idMono };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 // limiter look-ahead choices (ms; 1.5 the default). Nothing between 0 and 1.5: below about 1.3 ms the true-peak
@@ -185,6 +185,8 @@ void AudioWindow::createControls() {
                  BS_AUTOCHECKBOX | WS_TABSTOP, idLink);
     follow_ = make(L"BUTTON", L"The outputs follow the Windows volume (volume keys, taskbar) and mute",
                    BS_AUTOCHECKBOX | WS_TABSTOP, idFollow);
+    mono_ = make(L"BUTTON", L"Mono (left and right mixed, the same sound on both outputs)", BS_AUTOCHECKBOX | WS_TABSTOP,
+                 idMono);
     start_ = make(L"BUTTON", L"Start audio", BS_OWNERDRAW | WS_TABSTOP, idStart);
     stop_ = make(L"BUTTON", L"Stop audio", BS_OWNERDRAW | WS_TABSTOP, idStop);
     state_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY, 0);
@@ -266,6 +268,10 @@ void AudioWindow::createControls() {
                        L"allows. Other APIs: the period asked of Windows.");
     tips_.add(link_, L"On: deck B always uses deck A's loudness preset and colour - the main window then shows one set of "
                      L"controls (deck A's), and its Bypass counts for both decks.");
+    tips_.add(mono_, L"Mono: every deck's left and right are mixed, (L + R) / 2, and both outputs carry that one "
+                     L"sound - for a mono sound system, or a speaker on one side only. From the deck's input on, so "
+                     L"the leveller keeps the loudness on target (a mono mix of wide music is a little quieter) and the "
+                     L"limiter its ceiling. Off (stereo) by default; Bypass stays the unchanged input.");
     tips_.add(follow_, L"On: the volume and mute of Windows' default playback device - what the keyboard's volume "
                        L"keys and the taskbar change - turn the outputs down after the processing (never up: the "
                        L"ceiling holds). The meters show the processing before this volume. When the default playback "
@@ -313,7 +319,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, inPeriod_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_})
+                   start_, stop_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -390,7 +396,7 @@ void AudioWindow::layout() {
         MoveWindow(link_, m + labelW + g, y, W - labelW - g, h, TRUE);
         y += h + g;
     }
-    for (HWND box : {follow_, startup_, tooltips_, checkUpdates_}) {
+    for (HWND box : {follow_, mono_, startup_, tooltips_, checkUpdates_}) {
         MoveWindow(box, m + labelW + g, y, W - labelW - g, h, TRUE);
         y += h + g;
     }
@@ -459,6 +465,7 @@ void AudioWindow::fillAll() {
     selectData(drift_, settings_.driftCorrection);
     SendMessageW(link_, BM_SETCHECK, settings_.linkPresets ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(follow_, BM_SETCHECK, settings_.followsVolume() ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(mono_, BM_SETCHECK, settings_.mono ? BST_CHECKED : BST_UNCHECKED, 0);
     // ASIO: where the decks' inputs come from
     SendMessageW(inputs_, CB_RESETCONTENT, 0, 0);
     const wchar_t* inputLabels[4] = {L"ASIO input pairs", L"WASAPI devices (drift-corrected)",
@@ -791,6 +798,11 @@ void AudioWindow::command(int id, int code) {
     }
     if (id == idFollow && code == BN_CLICKED) { // the choice of the mode in use
         settings_.followVolume[settings_.decks == 1 ? 0 : 1] = SendMessageW(follow_, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        onChange_();
+        return;
+    }
+    if (id == idMono && code == BN_CLICKED) { // heard at once (a 20 ms ramp), both decks
+        settings_.mono = SendMessageW(mono_, BM_GETCHECK, 0, 0) == BST_CHECKED;
         onChange_();
         return;
     }
