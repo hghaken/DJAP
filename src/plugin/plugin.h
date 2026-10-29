@@ -145,6 +145,9 @@ private:
     void updateStamp(bool tell);
     void checkStamp();
     bool stampRestored_ = false; // the host set the stamp (a restore)
+    bool chainRestored_ = false; // the host set a chain value before the first activation (a restore, or a set from
+                                 // before 0.1.253 - which has no stamp)
+    bool stampChecked_ = false;  // checkStamp ran (the first activation or window)
     // the chain values exactly (a preset's 800 Hz split, not the 810 Hz of the nearest host step); a host or the
     // window moving a parameter to another step replaces the value with that step's
     PresetValues exact_{};

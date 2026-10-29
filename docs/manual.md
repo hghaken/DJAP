@@ -940,8 +940,8 @@ the spectrum window, the Setup window and the right-click menu now.
   another plug-in), the plug-in follows the change: it takes the preset's values now (Noise switched on in the
   preset, a wider stereo width, ...). As long as the preset did not change, a value changed in the project itself -
   a bass slider, a point dragged in the spectrum window, automation - stays as the project has it. DJ software that
-  keeps the plug-in's parameter values for its set (instead of the plug-in's own project data) gets this from version
-  0.1.253 on: in a set saved with an older version, choose the deck's loudness preset once again in the plug-in's list.
+  keeps the plug-in's parameter values for its set (instead of the plug-in's own project data) gets this too; a set
+  saved with a version before 0.1.253 takes its loudness preset's and colour's values once when it is opened.
 
 ### 9.4 Updates
 

@@ -504,7 +504,9 @@ void PluginView::meters() {
 }
 
 void PluginView::command(int id, int code) {
-    if ((id == idPreset || id == idColour) && code == CBN_SELCHANGE) {
+    // CBN_SELENDOK too: the item that is already chosen, picked again, sends no CBN_SELCHANGE - and choosing it again
+    // loads its values again (back to the preset after changes)
+    if ((id == idPreset || id == idColour) && (code == CBN_SELCHANGE || code == CBN_SELENDOK)) {
         const bool colour = id == idColour;
         const int sel = static_cast<int>(SendMessageW(colour ? colour_ : preset_, CB_GETCURSEL, 0, 0));
         plugin_->choose(colour, sel);

@@ -829,8 +829,12 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   parameter "Preset state" (id 7, not automatable) holds a 16-bit stamp of the preset's and colour's values as last
   taken over; such a host restores it with the set, and at activation (or when the window opens) a stamp that is not
   the one of the preset in the file now - the preset changed since - loads the preset's and colour's values again,
-  told to the host; with the stamp unchanged the set's own values stay (`plugin_test` 4e copies such a host). A set
-  kept before 0.1.253 has no stamp: choose its preset once again.
+  told to the host; with the stamp unchanged the set's own values stay (`plugin_test` 4e copies such a host). In
+  the next release (client: "nope" - 0.1.253 still showed Noise off): the stamp starts at 1, a value no stamp has, so such a host
+  always restores a kept stamp (it skipped one equal to the fresh value), and values restored without any stamp - a
+  set kept before 0.1.253 - also load the preset's values once; the real stamp is set at the first activation. Choosing
+  the item that is already chosen in the window's lists (no CBN_SELCHANGE for it: CBN_SELENDOK) loads its values
+  again.
 - **Window** (`pluginview.*`, 600 px wide at 96 DPI and as high as the program's smallest one-channel window without its status bar (client, 2026-10-29; was 820 x 640), scaled to the host window's DPI): the program's deck strip -
   DJAP and the version, oversampling, look-ahead, Graphs, Bypass, About; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same

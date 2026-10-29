@@ -542,9 +542,26 @@ int main(int argc, char** argv) {
             writeIni(false);
             Instance s1;
             CHECK(s1.open(module, &host));
+            s1.start(); // a running plug-in: its stamp is set
             s1.controller->setParamNormalized(ap::plugin::paramId(ap::pLimCeiling), ceiling2);
             const Stored set1 = keep(s1);
             s1.close();
+            // a set kept before 0.1.253: no stamp in it - and the preset changed since (Noise on): the preset's values
+            {
+                Stored old;
+                for (const auto& e : set1)
+                    if (e.first != ap::plugin::kStampId) old.push_back(e);
+                writeIni(true);
+                Instance o;
+                CHECK(o.open(module, &host));
+                restore(o, old);
+                o.start();
+                const State r = o.state();
+                std::printf("-- a host restoring a set of before the stamp: noise %s (the preset's now)\n",
+                            r.values[ap::pNoiseOn] >= 0.5 ? "on" : "OFF");
+                CHECK(r.values[ap::pNoiseOn] == 1.0 && r.values[ap::pWidthOn] == 1.0);
+                o.close();
+            }
             writeIni(true);
             Instance s2;
             CHECK(s2.open(module, &host));

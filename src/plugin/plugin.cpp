@@ -265,7 +265,10 @@ void Plugin::addParameters() {
     parameters.addParameter(new OversamplingParameter());
     parameters.addParameter(STR16("Mono"), nullptr, 1, 0.0, ParameterInfo::kCanAutomate, kMonoId); // 0 stereo, 1 mono
     // not automatable: only for a host that keeps parameter values for its set (client, 2026-10-29)
-    parameters.addParameter(STR16("Preset state"), nullptr, 0, stampOf(applied_), 0, kStampId);
+    // it starts at 1, a value no stamp has: a host that kept a stamp for its set always restores it (one that restores
+    // only the values that differ would otherwise skip an equal one), and a restore without it is a set from before
+    // 0.1.253; checkStamp sets the real stamp
+    parameters.addParameter(STR16("Preset state"), nullptr, 0, 1.0, 0, kStampId);
     for (int p = 0; p < kParamCount; ++p) {
         auto* param = new ChainParameter(p, unitOf(p));
         param->setNormalized(normalizedOf(p, values_[static_cast<size_t>(p)]));
@@ -602,6 +605,7 @@ double Plugin::stampOf(const PresetValues& v) {
 }
 
 void Plugin::updateStamp(bool tell) {
+    if (!stampChecked_) return; // before the first activation the stamp stays 1 (a restore must replace it)
     const double s = stampOf(applied_);
     if (getParamNormalized(kStampId) == s) return;
     const bool was = loading_;
@@ -612,17 +616,23 @@ void Plugin::updateStamp(bool tell) {
 }
 
 void Plugin::checkStamp() {
-    if (!stampRestored_) return;
-    stampRestored_ = false;
-    if (std::fabs(getParamNormalized(kStampId) - stampOf(chosenValues())) < 1e-6) return; // the preset as it was
-    // the preset or colour changed since the host kept this set's values: their values now, told to the host
-    fromWindow_ = true;
-    loadPresetIntoController(false);
-    loadPresetIntoController(true);
-    fromWindow_ = false;
-    updateStamp(true);
-    publishToProcessor();
-    if (view_) view_->refresh();
+    if (stampChecked_) return; // once: at the first activation or window (the restore came right after initialize)
+    stampChecked_ = true;
+    // reload when the host restored a stamp that is not the preset's now (the preset changed since the set was kept),
+    // or restored values without any stamp (a set kept before 0.1.253: its values may be the preset's of before - the
+    // client's sets kept Noise and Stereo width off after they had been switched on in the preset)
+    const bool changed = stampRestored_ ? std::fabs(getParamNormalized(kStampId) - stampOf(chosenValues())) >= 1e-6
+                                        : chainRestored_;
+    stampRestored_ = chainRestored_ = false;
+    if (changed) { // the preset's and colour's values now, told to the host
+        fromWindow_ = true;
+        loadPresetIntoController(false);
+        loadPresetIntoController(true);
+        fromWindow_ = false;
+        publishToProcessor();
+        if (view_) view_->refresh();
+    }
+    updateStamp(true); // the real stamp (it started at 1), kept by the host with the set
 }
 
 void Plugin::tellHost(ParamID id) {
@@ -715,6 +725,7 @@ void Plugin::closeEditors() {
 tresult PLUGIN_API Plugin::setParamNormalized(ParamID id, ParamValue value) {
     const ParamValue before = getParamNormalized(id);
     if (id == kStampId && !loading_) stampRestored_ = true; // only a host restoring a set sets it
+    if (!loading_ && !stampChecked_ && paramIndex(id) >= 0) chainRestored_ = true;
     const tresult r = SingleComponentEffect::setParamNormalized(id, value);
     const int p = paramIndex(id);
     if (p >= 0 && !loading_ && value != normalizedOf(p, exact_[static_cast<size_t>(p)]))
