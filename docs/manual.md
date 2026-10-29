@@ -886,29 +886,31 @@ The program and the plug-in can be installed and used together or apart.
 
 The window is one deck strip of the program:
 
-- **Oversampling** - 2x, 4x (default) or 8x, as in the Setup window (5.1); stored with the DJ software's project.
-- **Look-ahead** - the limiter's look-ahead, 0, 1.5, 2, 3 or 5 ms (see 5.1), a list of these five in the DJ software
-  too; the DJ software is told the new delay. An old project's 0.5 or 1.0 ms runs as 1.5 ms.
+- **DJAP** and the version. When a newer version exists, the line says so; a click on it opens About.
 - **Graphs** - the analysis window (8.1) for this channel: one row with the signal chain, the compressor's curve,
   loudness and gains of the last 60 s, the scope and the goniometer. A click on a step of the chain opens its tab, as
   in the program.
 - **Bypass Off / Bypass On** - green "Bypass Off": the channel is processed; red "Bypass On": the input goes out
   unchanged, delayed by the same look-ahead.
-- **About** - the version, the settings file in use, the copyright and licences, the update check (9.4), a Disclaimer button and a link to DJAP's
-  GitHub page. The button reads **Update** and is lit when a newer version exists.
 - **Loudness** and **Colour** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
   and colour windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
-- **The four bass sliders** (4.2).
 - **The meter panel** - LED bars, the gain of each stage and the spectrum with the density bands and the colour curve, as in the main
   window (4.3). Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
   program; clicking the spectrum opens the spectrum window (8.2) for this channel, with the four bass sliders and
   the colour's points. What you drag there changes the plug-in's own values (the project keeps them; the loudness
   presets and colours in the lists stay as they are); Reset loudness / Reset colour set the values of the chosen
   loudness preset or colour again.
-- **Right-click** anywhere on the window: **Setup...** and **About DJAP...**, as in the program. The plug-in's Setup
-  window holds what applies to a plug-in: the look-ahead and the oversampling (as above), **Show tooltips** and the
-  **update check** - these two are shared with the program (the same settings file). There are no audio devices: the
-  DJ software chooses the plug-in's input and output.
+- **Right-click** anywhere on the window: **Setup...** and **About DJAP...**, as in the program.
+  - The plug-in's **Setup** window holds what applies to a plug-in: **Look-ahead** - the limiter's look-ahead, 0, 1.5,
+    2, 3 or 5 ms (see 5.1), a list of these five in the DJ software too; the DJ software is told the new delay (an old
+    project's 0.5 or 1.0 ms runs as 1.5 ms); **Oversampling** - 2x, 4x (default) or 8x, stored with the DJ software's
+    project; **Show tooltips** and the **update check** - these two are shared with the program (the same settings
+    file). There are no audio devices: the DJ software chooses the plug-in's input and output.
+  - **About DJAP** - the version, the settings file in use, the copyright and licences, the update check (9.4), a
+    Disclaimer button and a link to DJAP's GitHub page.
+
+The bass sliders, oversampling, look-ahead and the About button were on the window itself until 0.1.237; they are in
+the spectrum window, the Setup window and the right-click menu now.
 
 ### 9.3 Loudness presets, colours and values
 
@@ -936,7 +938,8 @@ Windows starts.
 The plug-in looks for a new version itself too, so an installation without the program is not left behind: once each
 time the DJ software loads it (the first time its window opens), when "Check GitHub for a new version once a day" is
 on in the program's settings file (on by default, also without the program). **Check now** in its About window asks
-at once. When a newer version exists, the About button reads **Update**; the About window's **Download** button opens
+at once. When a newer version exists, the version line at the top of the plug-in's window says so (a click on it
+opens About); the About window's **Download** button opens
 the release's page on GitHub, where the setup can be downloaded. The plug-in never installs anything itself: close
 the DJ software, then run the setup.
 

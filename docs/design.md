@@ -825,13 +825,18 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   devices: the DJ software chooses the plug-in's input and output. On the brushed metal (`theme.*`); tooltips on every control. Its own common controls 6 through the DLL's
   manifest and `ISOLATION_AWARE_ENABLED`. The window classes and GDI+ live while a window of the DLL is open and are
   removed with the last one (a class left behind would point into an unloaded DLL).
+- **Fewer controls** (client, 2026-10-29: "they can all go, they are in other windows"): the bass sliders, the
+  oversampling and look-ahead lists and the About button left the window - they are in the spectrum window, the
+  Setup window and the right-click menu. The window: DJAP and the version (a newer version's note; a click opens
+  About), Graphs, Bypass, the two lists with their Edit buttons, the meter panel.
 - **About and updates** (client, 2026-10-28: "an About (with the update) in the plug-in" - an installation of the
-  plug-in alone has no program to report updates): an About button at the right of the top row opens the program's
+  plug-in alone has no program to report updates): About DJAP (the right-click menu; an About button until 0.1.237) opens the program's
   About window (`aboutwnd.*`, plug-in mode: not modal, its own placement `PluginAbout`) with the version, the settings
   file, the licences, the GitHub link and the update check. One `Updater` per DLL (created with the window classes,
   removed with them); it asks GitHub once per load of the DLL, when a window first opens and `[Updates]
   CheckUpdates` in the settings file is on (default; hosts open and close a plug-in often, and GitHub answers 60
-  questions an hour per network), and on Check now. A newer version turns the About button into a lit "Update".
+  questions an hour per network), and on Check now. A newer version is named on the version line (a click opens
+  About; until 0.1.237 the About button turned into a lit "Update").
   The plug-in never downloads or runs a setup (it lives inside the DJ software, whose module the setup can only
   replace at the next Windows start): Download opens the release's GitHub page, only a `https://github.com/` page.
   `DJAP_NO_UPDATE_CHECK` in the environment stops the automatic check (tests with the editor host).
