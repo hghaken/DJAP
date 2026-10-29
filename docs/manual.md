@@ -935,7 +935,11 @@ the spectrum window, the Setup window and the right-click menu now.
   (named "Stage: value", for example "Compressor: Threshold", grouped by stage), the loudness preset and colour lists, Bypass
   and the look-ahead. They move in the same steps as the program's sliders.
 - A **project** (or a preset of the DJ software) stores the values themselves, not only the loudness preset's name: it
-  sounds the same on a computer where that loudness preset does not exist or was changed.
+  sounds the same on a computer where that loudness preset does not exist.
+- When the project is loaded again and its loudness preset or colour **was changed since** (in the program or in
+  another plug-in), the plug-in follows the change: every value the project had left as the preset had it takes the
+  preset's value now (Noise switched on in the preset, a wider stereo width, ...). A value changed in the project
+  itself - a bass slider, a point dragged in the spectrum window, automation - stays as the project has it.
 
 ### 9.4 Updates
 

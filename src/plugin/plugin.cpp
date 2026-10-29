@@ -29,7 +29,9 @@ namespace ap::plugin {
 namespace {
 
 // 2 (0.1.145): the oversampling after the values; a version 1 state (without it) loads with the default
-constexpr int32 kStateVersion = 3; // 2: the oversampling (0.1.145), 3: mono (0.1.245)
+// 2: the oversampling (0.1.145), 3: mono (0.1.245), 4: the preset and colour values the project's values were based on
+// (0.1.251)
+constexpr int32 kStateVersion = 4;
 // The look-ahead parameter: a list of the Setup window's choices (ms; deck.h snapLook) - the host shows what runs
 // (outside review: a 0..5 ms range in steps of 0.1 showed 0.5 or 1.0 while 1.5 ran).
 constexpr int kLookSteps = kLookChoiceCount - 1;
@@ -428,6 +430,13 @@ tresult PLUGIN_API Plugin::getState(IBStream* state) {
     }
     s.writeInt32(static_cast<int32>(plainOf(kOversamplingId))); // version 2
     s.writeInt8(plainOf(kMonoId) >= 0.5 ? 1 : 0);                // version 3
+    // version 4: the chosen preset's and colour's values as this plug-in last took them over - so a load can tell a
+    // value changed in this project from one the preset has changed since
+    s.writeInt32(kParamCount);
+    for (int p = 0; p < kParamCount; ++p) {
+        s.writeStr8(paramInfo(p).key);
+        s.writeDouble(applied_[static_cast<size_t>(p)]);
+    }
     return kResultOk;
 }
 
@@ -472,6 +481,38 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     else oversampling = kOversamplingDefault;
     int8 mono = 0; // a project of a version before 3: stereo
     if (version < 3 || !s.readInt8(mono)) mono = 0;
+    // the preset and the colour as they are in the settings file now win over the project's copy of them (client,
+    // 2026-10-29: "some settings are not taken over after the start of the plug-in - noise and stereo": a set kept
+    // the values of before a change of its preset): three-way, as edited() does - a value the project left as its
+    // preset had it (version 4 stores that base) takes the preset's value now, a value changed in the project (a
+    // bass slider, the spectrum window, automation) stays. A project without that base (before 0.1.251) takes the
+    // named preset's and colour's values now. Values of a preset or colour that is not in the file stay as stored.
+    PresetValues base = v;
+    bool haveBase = false;
+    int32 baseCount = 0;
+    if (version >= 4 && s.readInt32(baseCount)) {
+        haveBase = true;
+        for (int32 i = 0; i < baseCount; ++i) {
+            const std::string key = readText();
+            double x = 0;
+            if (!s.readDouble(x)) {
+                haveBase = false;
+                break;
+            }
+            for (int p = 0; p < kParamCount; ++p)
+                if (key == paramInfo(p).key) base[static_cast<size_t>(p)] = x;
+        }
+    }
+    {
+        const Preset* pp = settings_.find(preset);
+        const Preset* cp = settings_.find(colour, PresetKind::Colour);
+        for (int p = 0; p < kParamCount; ++p) {
+            const Preset* from = isColourParam(p) ? cp : pp;
+            const auto k = static_cast<size_t>(p);
+            if (from && (!haveBase || v[k] == base[k])) v[k] = from->values[k];
+        }
+        normaliseValues(v);
+    }
 
     // the controller
     exact_ = v;

@@ -25,6 +25,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <string>
@@ -452,6 +454,69 @@ int main(int argc, char** argv) {
         const double loaded = b.controller->getParamNormalized(ap::plugin::kMonoId);
         std::printf("-- mono stored and loaded: %s\n", loaded == 1.0 ? "mono" : "NOT mono");
         CHECK(loaded == 1.0);
+        a.close();
+        b.close();
+    }
+
+    // 4d. a project loaded after its preset changed in the settings file (client, 2026-10-29: "noise and stereo not
+    // taken over after the start"): the values the project left as the preset had them take the preset's values now,
+    // a value changed in the project stays. On a scratch settings file (DJAP_PLUGIN_INI), never the user's.
+    {
+        const std::filesystem::path ini = std::filesystem::temp_directory_path() / "djap_plugin_test.ini";
+        std::error_code ec;
+        std::filesystem::remove(ini, ec);
+        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", ini.wstring().c_str());
+        Instance a, b;
+        CHECK(a.open(module, &host)); // no file yet: the shipped lists, Medium with Neutral
+        const double ceiling = static_cast<double>(ap::paramPositionOf(ap::pLimCeiling, -2.0)) /
+                               ap::paramPositions(ap::pLimCeiling);
+        a.controller->setParamNormalized(ap::plugin::paramId(ap::pLimCeiling), ceiling); // this project's own change
+        MemoryStream m;
+        CHECK(a.component->getState(&m) == kResultOk);
+        {
+            std::ofstream f(ini);
+            f << "[Preset Medium]\nWidthOn=1\nWidth=200\nBassWidth=0\nNoiseOn=1\n"; // the preset changed meanwhile
+        }
+        CHECK(b.open(module, &host));
+        m.seek(0, IBStream::kIBSeekSet, nullptr);
+        CHECK(b.component->setState(&m) == kResultOk);
+        const State back = b.state();
+        std::printf("-- the preset changed after the project was saved: width %s %.0f %%, bass width %.0f %%, noise %s, "
+                    "the project's own ceiling %.1f dBTP\n",
+                    back.values[ap::pWidthOn] >= 0.5 ? "on" : "OFF", back.values[ap::pWidth], back.values[ap::pBassWidth],
+                    back.values[ap::pNoiseOn] >= 0.5 ? "on" : "OFF", back.values[ap::pLimCeiling]);
+        CHECK(back.preset == "Medium");
+        CHECK(back.values[ap::pWidthOn] == 1.0 && back.values[ap::pWidth] == 200.0 && back.values[ap::pBassWidth] == 0.0);
+        CHECK(back.values[ap::pNoiseOn] == 1.0);
+        CHECK(back.values[ap::pLimCeiling] == -2.0);
+        // a project of a version before the base (state version 3, as 0.1.245 wrote it): the named preset's values now
+        {
+            MemoryStream old;
+            IBStreamer w(&old, kLittleEndian);
+            w.writeInt32(3);
+            w.writeStr8("Medium");
+            w.writeStr8("Neutral");
+            w.writeDouble(1.5);
+            w.writeInt8(0);
+            w.writeInt32(2);
+            w.writeStr8(ap::paramInfo(ap::pWidthOn).key);
+            w.writeDouble(0.0);
+            w.writeStr8(ap::paramInfo(ap::pLimCeiling).key);
+            w.writeDouble(-2.0);
+            w.writeInt32(4); // oversampling
+            w.writeInt8(0);  // mono
+            Instance c;
+            CHECK(c.open(module, &host));
+            old.seek(0, IBStream::kIBSeekSet, nullptr);
+            CHECK(c.component->setState(&old) == kResultOk);
+            const State o = c.state();
+            std::printf("-- a version-3 project: width %s, ceiling %.1f dBTP (Medium's now)\n",
+                        o.values[ap::pWidthOn] >= 0.5 ? "on" : "OFF", o.values[ap::pLimCeiling]);
+            CHECK(o.values[ap::pWidthOn] == 1.0 && o.values[ap::pLimCeiling] == -1.0);
+            c.close();
+        }
+        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
+        std::filesystem::remove(ini, ec);
         a.close();
         b.close();
     }

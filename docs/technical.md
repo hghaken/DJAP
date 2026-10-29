@@ -920,7 +920,10 @@ buffers.
   host, and announced again (`kLatencyChanged`) when the look-ahead or the sample rate changes, so the host can
   delay the other channels by the same amount (plug-in delay compensation).
 - **State.** A versioned binary stream: loudness preset and colour names, look-ahead, Bypass and every value as a pair of
-  settings key and value. Loading it sets the controller and hands the processor a complete snapshot through a
+  settings key and value, the oversampling, mono, and the loudness preset's and colour's values the project's values
+  were based on. Loading merges three-way: a value the project left as its preset had it takes the preset's value in
+  the settings file now (the preset may have been changed since), a value changed in the project stays. Loading it
+  sets the controller and hands the processor a complete snapshot through a
   second sequence-locked slot (the host may load a project while audio runs).
 - **Window.** A Win32 child window in the host's window, scaled to its DPI, built from the program's own parts:
   the brushed metal (`theme.*`), the meter panel (`meterview.*`), the loudness window and tooltips. A DLL must not

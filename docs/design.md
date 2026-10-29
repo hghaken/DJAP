@@ -815,7 +815,13 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   (`kLatencyChanged`) when the look-ahead or the sample rate changes, so the host keeps the decks in time.
 - **State** (a project, a host preset): a version, the preset and colour names, look-ahead, Bypass and every value
   by its ini key - the values themselves, so a project sounds the same on a computer where that preset does not
-  exist or was changed; unknown keys of a newer version are skipped.
+  exist; unknown keys of a newer version are skipped. Since 0.1.251 (state version 4; client, 2026-10-29: "some
+  settings are not taken over in the graphs after the plug-in starts - noise and stereo": a DJ set kept the values
+  of before its preset was changed) it also stores the preset's and colour's values as the plug-in last took them
+  over (`applied_`), and a load merges three-way as the preset window's edits do: a value the project left as that
+  base takes the preset's or colour's value in the settings file now, a value changed in the project stays. A project
+  without the base (before 0.1.251) takes the named preset's and colour's values now; a preset or colour that is not
+  in the file leaves the stored values (`plugin_test` 4d).
 - **Window** (`pluginview.*`, 600 px wide at 96 DPI and as high as the program's smallest one-channel window without its status bar (client, 2026-10-29; was 820 x 640), scaled to the host window's DPI): the program's deck strip -
   DJAP and the version, oversampling, look-ahead, Graphs, Bypass, About; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same
