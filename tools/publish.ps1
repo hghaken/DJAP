@@ -31,8 +31,9 @@ try {
 }
 
 $version = "{0}.{1}" -f (Get-Content VERSION -Raw).Trim(), (git rev-list --count HEAD).Trim()
-# the co-authors GitHub shows on the public commit (also Grok, whose reviews went into the code)
-if (-not $Message) { $Message = "DJAP $version`n`nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`nCo-authored-by: Grok <grok@x.ai>" }
+# the co-author GitHub shows on the public commit. Grok, whose reviews went into the code, is credited in the README
+# only: GitHub linked its address (grok@x.ai) to an unrelated account, which then showed as a contributor (2026-10-28)
+if (-not $Message) { $Message = "DJAP $version`n`nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" }
 if ($NotesFile) { $Notes = [IO.File]::ReadAllText((Resolve-Path $NotesFile).Path) }
 if (-not $Notes) { $Notes = "DJAP $version" }
 

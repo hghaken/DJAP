@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The plug-in's window inside the host: one deck strip as in the program - preset and colour with their Edit
-// buttons (the program's preset window), look-ahead, Bypass, the four bass sliders and the meter panel (LED bars, the
-// gain of each stage, the spectrum; a click on a row opens its tab) - on the brushed metal; and About with the
-// update check (one per DLL, asked once per load when the program's daily check is on). Every value is also a
-// parameter the host shows in its own list.
+// buttons (the program's preset window), look-ahead, Graphs (the program's analysis window, one deck), Bypass, the
+// four bass sliders and the meter panel (LED bars, the gain of each stage, the spectrum; a click on a row opens its
+// tab) - on the brushed metal; and About with the update check (one per DLL, asked once per load when the program's
+// daily check is on). Every value is also a parameter the host shows in its own list.
 #pragma once
 
 #include "aboutwnd.h"
+#include "analysiswnd.h"
 #include "monitor.h"
 #include "theme.h"
 #include "tooltips.h"
@@ -58,8 +59,23 @@ private:
     Plugin* plugin_;
     HWND hwnd_ = nullptr, title_ = nullptr, version_ = nullptr, presetLabel_ = nullptr, preset_ = nullptr,
          colourLabel_ = nullptr, colour_ = nullptr, lookLabel_ = nullptr, look_ = nullptr, bypass_ = nullptr, oversampling_ = nullptr,
-         meter_ = nullptr, edit_ = nullptr, editColour_ = nullptr, about_ = nullptr;
+         meter_ = nullptr, edit_ = nullptr, editColour_ = nullptr, about_ = nullptr, graphs_ = nullptr;
     AboutWindow aboutWnd_; // the About window with the update check (client, 2026-10-28)
+    // the Graphs button's analysis window (client, 2026-10-29: "I miss the Graphs button in the plug-in"): this deck
+    class Graphs : public AnalysisSource {
+    public:
+        explicit Graphs(const PluginView& view) : view_(view) {}
+        int decks() const override { return 1; }
+        bool audioActive() const override;
+        const DeckMeters& meters(int) const override { return view_.monitor_.meters(); }
+        const DeckAnalysis& analysis(int) const override { return view_.monitor_.analysis(); }
+        PresetValues values(int) const override;
+        std::wstring title(int) const override;
+        bool processing(int) const override;
+
+    private:
+        const PluginView& view_;
+    };
     int ticks_ = 0;
     HWND sliderLabel_[4] = {}, slider_[4] = {}, sliderValue_[4] = {};
     HFONT font_ = nullptr, bold_ = nullptr;
@@ -72,6 +88,8 @@ private:
     theme::Metal metal_;
     Tooltips tips_;
     DeckMonitor monitor_;
+    Graphs graphsSource_{*this};
+    AnalysisWindow graphsWnd_{graphsSource_};
 };
 
 } // namespace ap::plugin

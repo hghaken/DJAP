@@ -3,12 +3,12 @@
 // chain from input to output with a bar per step (what each step does to the level now), the compressor's curve with
 // its working point, the last 60 s of loudness (original and processed, LU to the target),
 // the last 60 s of the leveller / compressor / density gains, a goniometer of the output, and bars for the output's
-// correlation and the input's and output's stereo width. Custom-drawn, refreshed by the main window's timer; every
-// graph has a tooltip. One modeless window, owned by the main window.
+// correlation and the input's and output's stereo width. Custom-drawn, refreshed by its owner's timer; every
+// graph has a tooltip. One modeless window, owned by the main window - or by the plug-in's window (one deck).
 #pragma once
 
-#include "audioio.h"
-#include "settings.h"
+#include "monitor.h"
+#include "params.h"
 #include "tooltips.h"
 
 #include <windows.h>
@@ -18,17 +18,35 @@
 
 namespace ap {
 
+// What the window shows: the program's decks (one or two) or the plug-in's one deck.
+class AnalysisSource {
+public:
+    virtual ~AnalysisSource() = default;
+    virtual int decks() const = 0; // the rows: 1 or 2
+    virtual bool audioActive() const = 0;
+    virtual const DeckMeters& meters(int d) const = 0;
+    virtual const DeckAnalysis& analysis(int d) const = 0;
+    virtual PresetValues values(int d) const = 0; // the deck's chain values: its loudness preset with its colour
+    virtual std::wstring title(int d) const = 0;  // "Deck A   Medium"
+    virtual bool processing(int d) const = 0;     // false: bypassed
+};
+
 class AnalysisWindow {
 public:
-    AnalysisWindow(const Settings& settings, const AudioIO& audio);
+    explicit AnalysisWindow(const AnalysisSource& source);
     ~AnalysisWindow();
     void show(HWND owner);
-    void refresh(); // from the main window's timer
+    void close();   // the window goes (its owner goes)
+    void refresh(); // from the owner's timer, 20 times a second
     HWND hwnd() const { return hwnd_; }
     // A click on a step of the signal chain: open its settings - the preset window (colour: the colour window) on
     // the stage's tab (client, 2026-10-25).
     using OpenStage = std::function<void(int deck, const std::string& stage, bool colour)>;
     void onOpenStage(OpenStage f) { openStage_ = std::move(f); }
+    // The module the window class belongs to: the program (default) or the plug-in DLL, which removes the class
+    // again before it is unloaded.
+    static void setModule(HINSTANCE instance);
+    static void unregisterClass();
 
 private:
     // compressor, loudness, gain, goniometer, correlation, width in, width out, scope; then a row per step of the chain
@@ -45,8 +63,7 @@ private:
     // the chain row under a point (client coordinates): its deck and row, false when none
     bool chainRowAt(POINT pt, int& deck, int& row) const;
 
-    const Settings& settings_;
-    const AudioIO& audio_;
+    const AnalysisSource& source_;
     HWND hwnd_ = nullptr;
     HFONT font_ = nullptr, small_ = nullptr, bold_ = nullptr;
     UINT dpi_ = 96;

@@ -791,10 +791,12 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
 - **State** (a project, a host preset): a version, the preset and colour names, look-ahead, Bypass and every value
   by its ini key - the values themselves, so a project sounds the same on a computer where that preset does not
   exist or was changed; unknown keys of a newer version are skipped.
-- **Window** (`pluginview.*`, 740 x 640 at 96 DPI, scaled to the host window's DPI): the program's deck strip -
-  DJAP and the version, oversampling, look-ahead, Bypass, About; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
+- **Window** (`pluginview.*`, 820 x 640 at 96 DPI, scaled to the host window's DPI): the program's deck strip -
+  DJAP and the version, oversampling, look-ahead, Graphs, Bypass, About; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same
-  code). On the brushed metal (`theme.*`); tooltips on every control. Its own common controls 6 through the DLL's
+  code). Graphs (client, 2026-10-29: "I miss the Graphs button in the plug-in") opens the program's analysis window
+  (`analysiswnd.*`) with one row: it reads its decks through `AnalysisSource` - the program's settings and audio, or
+  the plug-in's `DeckMonitor` and parameters; refreshed by the plug-in's 50 ms timer, closed with the plug-in's window. On the brushed metal (`theme.*`); tooltips on every control. Its own common controls 6 through the DLL's
   manifest and `ISOLATION_AWARE_ENABLED`. The window classes and GDI+ live while a window of the DLL is open and are
   removed with the last one (a class left behind would point into an unloaded DLL).
 - **About and updates** (client, 2026-10-28: "an About (with the update) in the plug-in" - an installation of the

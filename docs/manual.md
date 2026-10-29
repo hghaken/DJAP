@@ -743,7 +743,8 @@ The auto tone holds still during breakdowns and fades, so a quiet part does not 
 
 ![The analysis window](images/analysis.png)
 
-Click **Graphs** on a deck strip. The window has a row per deck with six panels:
+Click **Graphs** on a deck strip (or in the plug-in's window, 9.2: one row for its channel). The window has a row per
+deck with six panels:
 
 1. **Signal chain** - a row per step in chain order, from *Input* to *Output*. Each step has a lamp (lit when the step
    changes the level by 0.1 dB or more; turquoise = up, orange = down) and a bar against a dB scale from -12 to +12
@@ -863,6 +864,9 @@ The window is one deck strip of the program:
 - **Oversampling** - 2x, 4x (default) or 8x, as in the Setup window (5.1); stored with the DJ software's project.
 - **Look-ahead** - the limiter's look-ahead, 0, 1.5, 2, 3 or 5 ms (see 5.1), a list of these five in the DJ software
   too; the DJ software is told the new delay. An old project's 0.5 or 1.0 ms runs as 1.5 ms.
+- **Graphs** - the analysis window (8.1) for this channel: one row with the signal chain, the compressor's curve,
+  loudness and gains of the last 60 s, the scope and the goniometer. A click on a step of the chain opens its tab, as
+  in the program.
 - **Bypass** - lit: the input goes out unchanged, delayed by the same look-ahead.
 - **About** - the version, the settings file in use, the copyright and licences, the update check (9.4), a Disclaimer button and a link to DJAP's
   GitHub page. The button reads **Update** and is lit when a newer version exists.

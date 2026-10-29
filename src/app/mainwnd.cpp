@@ -101,7 +101,7 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
           editor_.refresh();
           colourEditor_.refresh();
       }),
-      analysisWindow_(settings, audio),
+      graphs_(settings, audio), analysisWindow_(graphs_),
       spectrumWindow_(settings, audio, [this](bool saveNow) { // a colour point or band handle dragged, snap switched
           presetsChanged(false, saveNow);
           refreshStrip(0);
@@ -114,6 +114,11 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
         if (colour) colourEditor_.show(hwnd_, settings_.deck[d].colour, d, stage);
         else editor_.show(hwnd_, settings_.deck[d].preset, d, stage);
     });
+}
+
+std::wstring MainWindow::Graphs::title(int d) const {
+    return (settings_.decks == 1 ? L"Channel" : d == 0 ? L"Deck A" : L"Deck B") + std::wstring(L"   ") +
+           fromUtf8(settings_.deck[d].preset);
 }
 
 void MainWindow::presetsChanged(bool listChanged, bool saveNow) {

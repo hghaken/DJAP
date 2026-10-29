@@ -100,6 +100,22 @@ private:
     theme::Metal metal_;
     EditWindow editor_, colourEditor_;
     AudioWindow audioWindow_;
+    // what the analysis window shows: the decks of the settings and the audio
+    class Graphs : public AnalysisSource {
+    public:
+        Graphs(const Settings& settings, const AudioIO& audio) : settings_(settings), audio_(audio) {}
+        int decks() const override { return settings_.decks; }
+        bool audioActive() const override { return audio_.audioActive(); }
+        const DeckMeters& meters(int d) const override { return audio_.meters(d); }
+        const DeckAnalysis& analysis(int d) const override { return audio_.analysis(d); }
+        PresetValues values(int d) const override { return settings_.deckValues(d); }
+        std::wstring title(int d) const override;
+        bool processing(int d) const override { return settings_.deck[d].processing; }
+
+    private:
+        const Settings& settings_;
+        const AudioIO& audio_;
+    } graphs_;
     AnalysisWindow analysisWindow_;
     SpectrumWindow spectrumWindow_;
     AboutWindow about_;

@@ -28,6 +28,8 @@ smtg_add_vst3plugin(DJAPPlugin PACKAGE_NAME "DJAP" SOURCES_LIST
     ${CMAKE_SOURCE_DIR}/src/app/appstate.cpp
     # the About window with the update check (client, 2026-10-28: a plug-in installed on its own got no update notice)
     ${CMAKE_SOURCE_DIR}/src/app/aboutwnd.cpp
+    # the Graphs button's analysis window (client, 2026-10-29)
+    ${CMAKE_SOURCE_DIR}/src/app/analysiswnd.cpp
     ${CMAKE_SOURCE_DIR}/src/app/updater.cpp)
 target_include_directories(DJAPPlugin PRIVATE ${CMAKE_SOURCE_DIR}/src/app "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(DJAPPlugin PRIVATE sdk apcore comctl32 gdi32 gdiplus user32 uxtheme shell32 ole32 winhttp)

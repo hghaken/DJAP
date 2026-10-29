@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "analysiswnd.h"
 
-#include "appstate.h"
 #include "placement.h"
 #include "resource.h"
 #include "stages.h"
@@ -19,6 +18,11 @@ namespace ap {
 namespace {
 
 const wchar_t* const kClass = L"APAnalysisWindow";
+
+// The module the window class belongs to: the program, or the plug-in DLL (AnalysisWindow::setModule).
+HINSTANCE g_module = nullptr;
+bool g_registered = false;
+HINSTANCE moduleInstance() { return g_module ? g_module : GetModuleHandleW(nullptr); }
 
 // the meter panel's palette (meterview.cpp)
 const COLORREF kBack = RGB(28, 30, 33), kPanel = RGB(20, 22, 25), kEdge = RGB(55, 58, 64), kGrid = RGB(70, 74, 80),
@@ -165,20 +169,28 @@ std::wstring num(const wchar_t* fmt, double v) {
 
 } // namespace
 
-AnalysisWindow::AnalysisWindow(const Settings& settings, const AudioIO& audio) : settings_(settings), audio_(audio) {
+AnalysisWindow::AnalysisWindow(const AnalysisSource& source) : source_(source) {
     for (auto& deck : trail_)
         for (double& x : deck) x = kFloorDb; // no point yet
 }
 
-AnalysisWindow::~AnalysisWindow() {
+AnalysisWindow::~AnalysisWindow() { close(); }
+
+void AnalysisWindow::close() {
     if (hwnd_) DestroyWindow(hwnd_);
+}
+
+void AnalysisWindow::setModule(HINSTANCE instance) { g_module = instance; }
+
+void AnalysisWindow::unregisterClass() {
+    if (g_registered) UnregisterClassW(kClass, moduleInstance());
+    g_registered = false;
 }
 
 void AnalysisWindow::show(HWND owner) {
     if (!hwnd_) {
-        static bool registered = false;
-        HINSTANCE inst = GetModuleHandleW(nullptr);
-        if (!registered) {
+        HINSTANCE inst = moduleInstance();
+        if (!g_registered) {
             WNDCLASSEXW wc{};
             wc.cbSize = sizeof wc;
             wc.lpfnWndProc = proc;
@@ -186,7 +198,7 @@ void AnalysisWindow::show(HWND owner) {
             wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
             wc.hIcon = LoadIconW(wc.hInstance, MAKEINTRESOURCEW(IDI_APP));
             wc.lpszClassName = kClass;
-            registered = RegisterClassExW(&wc) != 0;
+            g_registered = RegisterClassExW(&wc) != 0;
         }
         hwnd_ = CreateWindowExW(0, kClass, L"Analysis", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                 CW_USEDEFAULT, owner, nullptr, inst, this);
@@ -203,9 +215,9 @@ void AnalysisWindow::show(HWND owner) {
 void AnalysisWindow::refresh() {
     // the trail is kept while the window is closed too: it opens with the last 3 s
     trailPos_ = (trailPos_ + 1) % kTrail;
-    for (int d = 0; d < 2; ++d) {
-        const DeckMeters& m = audio_.meters(d);
-        trail_[d][trailPos_] = audio_.audioActive() && m.live && m.compressorIn > -100.0 ? m.compressorIn : kFloorDb;
+    for (int d = 0; d < source_.decks(); ++d) {
+        const DeckMeters& m = source_.meters(d);
+        trail_[d][trailPos_] = source_.audioActive() && m.live && m.compressorIn > -100.0 ? m.compressorIn : kFloorDb;
     }
     if (hwnd_ && IsWindowVisible(hwnd_) && !IsIconic(hwnd_)) InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -341,7 +353,7 @@ void AnalysisWindow::setFonts() {
 }
 
 bool AnalysisWindow::chainRowAt(POINT pt, int& deck, int& row) const {
-    for (int d = 0; d < settings_.decks; ++d)
+    for (int d = 0; d < source_.decks(); ++d)
         for (int i = 0; i < kChainRows; ++i)
             if (PtInRect(&tipRect_[d][kGraphs + i], pt)) { // the rows as last painted
                 deck = d;
@@ -369,7 +381,7 @@ void AnalysisWindow::paint(HDC target) {
     SetBkMode(dc, TRANSPARENT);
     SetBkColor(dc, kPanel); // the gaps of dotted lines
     fill(dc, rc, kBack);
-    const int rows = settings_.decks; // one channel: one row over the whole height
+    const int rows = source_.decks(); // one channel (or the plug-in): one row over the whole height
     const int m = px(10), half = rows == 1 ? H - 2 * m : (H - 3 * m) / 2;
     for (int d = 0; d < rows; ++d) {
         const RECT area{m, m + d * (half + m), W - m, m + d * (half + m) + half};
@@ -385,11 +397,11 @@ void AnalysisWindow::paint(HDC target) {
 }
 
 void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
-    const DeckMeters& met = audio_.meters(d);
-    const DeckAnalysis& an = audio_.analysis(d);
-    const PresetValues v = settings_.valuesOf(settings_.deck[d].preset);
+    const DeckMeters& met = source_.meters(d);
+    const DeckAnalysis& an = source_.analysis(d);
+    const PresetValues v = source_.values(d);
     const double target = v[pTarget];
-    const bool live = audio_.audioActive() && met.live;
+    const bool live = source_.audioActive() && met.live;
     TEXTMETRICW tm;
     SelectObject(dc, small_);
     GetTextMetricsW(dc, &tm);
@@ -397,8 +409,7 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
 
     // title
     SelectObject(dc, bold_);
-    const std::wstring title = (settings_.decks == 1 ? L"Channel" : d == 0 ? L"Deck A" : L"Deck B") + std::wstring(L"   ") + fromUtf8(settings_.deck[d].preset) +
-                               (settings_.deck[d].processing ? L"" : L"   (bypassed)");
+    const std::wstring title = source_.title(d) + (source_.processing(d) ? L"" : L"   (bypassed)");
     text(dc, area.left, area.top, title, kText);
     TEXTMETRICW btm;
     GetTextMetricsW(dc, &btm);
@@ -626,9 +637,9 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
 void AnalysisWindow::paintScope(HDC dc, int d, const RECT& p, bool live, int th) {
     scopeRect_[d] = p;
     const bool input = scopeInput_[d];
-    const WaveScope& s = input ? audio_.analysis(d).scopeIn : audio_.analysis(d).scopeOut;
-    const PresetValues v = settings_.valuesOf(settings_.deck[d].preset);
-    const bool ceilingShown = !input && v[pLimOn] >= 0.5 && settings_.deck[d].processing;
+    const WaveScope& s = input ? source_.analysis(d).scopeIn : source_.analysis(d).scopeOut;
+    const PresetValues v = source_.values(d);
+    const bool ceilingShown = !input && v[pLimOn] >= 0.5 && source_.processing(d);
     const double ceiling = dbToLin(v[pLimCeiling]);
     const int span = scopeMs_[d];
     // the span that fits the kept samples (eighth outside review: at 88.2 kHz and up "200 ms" showed 85-186 ms)
@@ -746,8 +757,8 @@ void AnalysisWindow::paintScope(HDC dc, int d, const RECT& p, bool live, int th)
 }
 
 void AnalysisWindow::paintChain(HDC dc, int d, const RECT& p, bool live) {
-    const DeckMeters& met = audio_.meters(d);
-    const PresetValues v = settings_.deckValues(d);
+    const DeckMeters& met = source_.meters(d);
+    const PresetValues v = source_.values(d);
     fill(dc, p, kPanel);
     frame(dc, p, kEdge);
     TEXTMETRICW tm;
@@ -812,7 +823,7 @@ void AnalysisWindow::paintChain(HDC dc, int d, const RECT& p, bool live) {
         // the value: LUFS for a level row, dB for the others. The input is shown after the loudness preset's input gain
         // (what enters the processing); the measured points around the leveller include that gain, so the
         // leveller's row takes it out (nothing is applied while bypassed)
-        const double inGain = settings_.deck[d].processing ? v[pInputGain] : 0.0;
+        const double inGain = source_.processing(d) ? v[pInputGain] : 0.0;
         double val = 0;
         bool known = live;
         if (row.kind == RowKind::level) {
