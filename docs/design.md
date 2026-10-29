@@ -402,7 +402,7 @@ tone's correction at 100 %; calibrates the reference, 3.3), `--ca` / `--cb <colo
 GUI main window (`mainwnd`, `meterview`): two deck strips side by side. Each strip (client, 2026-10-25): on the
 title row the route on two lines (client, 2026-10-27: "in and out on 2 lines, on a small screen it does not fit"):
 "In: WASAPI: Line 1 (virtual cable)" above "Out: ASIO: outputs 7-8", each side with its API, each line ending in "..."
-when too long, right after the deck's name; the Graphs and Bypass buttons at the right (Bypass lit = bypassed; saved as `Processing`);
+when too long, right after the deck's name; the Graphs and Bypass buttons at the right (Bypass: green "Bypass Off" while processing, red "Bypass On" while bypassed - client, 2026-10-29; saved as `Processing`);
 then the preset choice with its "Edit..." button and the colour choice (3.3) with its "Edit..." button; and a meter panel without buttons (its R - reset meters - and F - freeze leveller - buttons were removed,
 client 2026-10-25: "not needed"). With linked presets there is one
 set of controls (client, 2026-10-25): deck A's preset and colour, Edit and Bypass
@@ -517,7 +517,7 @@ per-row grain, strokes of random place, length 16-600 px and strength, soft ends
 without a seam). Each window renders its client area once per size; labels, check boxes and sliders get the same
 bitmap as an aligned pattern brush, so the strokes run on behind them. Push buttons are owner-drawn 3D buttons (dark
 metal face with a highlight on the upper edge and a shadow below; lighter while the mouse is over them; pushed in
-while pressed; Bypass lights up green while on; grey when disabled; a dotted ring for the keyboard focus). The meter
+while pressed; Bypass green "Bypass Off" or red "Bypass On" (`theme::setBypass`), About green with an update; grey when disabled; a dotted ring for the keyboard focus). The meter
 panels, the analysis graphs and the small name prompt keep their own look. Fields are a light grey in the metal's
 tint instead of white (client, 2026-10-25): edit fields and lists through their colour messages, the drop-down
 lists and the preset window's tabs drawn by the program (rounded tabs, the chosen one joined to a line under the

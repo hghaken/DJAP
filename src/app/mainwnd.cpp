@@ -378,8 +378,8 @@ void MainWindow::createControls() {
         s.title = make(L"STATIC", deckName(d).c_str(), SS_LEFT, 0);
         s.route = make(L"STATIC", L"", SS_LEFT | SS_ENDELLIPSIS | SS_NOPREFIX | SS_NOTIFY, 0);
         s.routeOut = make(L"STATIC", L"", SS_LEFT | SS_ENDELLIPSIS | SS_NOPREFIX | SS_NOTIFY, 0);
-        // checked = bypassed
-        s.processing = make(L"BUTTON", L"Bypass", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iProcessing));
+        // checked = bypassed: "Bypass On", red (theme::setBypass)
+        s.processing = make(L"BUTTON", L"Bypass Off",BS_OWNERDRAW | WS_TABSTOP, idOf(d, iProcessing));
         s.graphs = make(L"BUTTON", L"Graphs", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iGraphs));
         s.presetLabel = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
         s.preset = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iPreset));
@@ -408,9 +408,9 @@ void MainWindow::createControls() {
                   L"-23 (EBU R 128, wide dynamics), Web Stream -16 (-2 dBTP for MP3 / AAC); your own follow. A new choice is "
                   L"heard at once, without a click. With linked presets (Setup) both decks change.");
         tips_.add(s.processing,
-                  L"Bypass (lit): the input goes out unchanged (bit-exact), delayed by the same limiter look-ahead, "
-                  L"so switching never shifts the sound in time.\nNot lit: the deck runs through its chain. Saved "
-                  L"per deck; with linked presets deck A's switch counts for both.");
+                  L"Bypass Off (green): the deck runs through its chain.\nBypass On (red): the input goes out "
+                  L"unchanged (bit-exact), delayed by the same limiter look-ahead, so switching never shifts the sound "
+                  L"in time. Saved per deck; with linked presets deck A's switch counts for both.");
         tips_.add(s.graphs,
                   L"Opens the analysis window: for each deck the signal chain step "
                   L"by step, the compressor's curve, loudness and gains of the last 60 s, the goniometer with "
@@ -571,7 +571,7 @@ void MainWindow::command(int id, int code) {
     } else if (item == iGraphs && code == BN_CLICKED) { // the analysis window
         analysisWindow_.show(hwnd_);
     } else if (item == iProcessing && code == BN_CLICKED) {
-        settings_.deck[d].processing = !settings_.deck[d].processing; // lit = bypassed
+        settings_.deck[d].processing = !settings_.deck[d].processing; // red "Bypass On" = bypassed
         save();
         applyAll(); // linked: deck A's switch counts for both decks
     } else if (item == iMeter && code == kMeterOpenRow + kMeterSpectrum) { // the spectrum: the spectrum window
@@ -617,7 +617,7 @@ void MainWindow::refreshStrip(int d) {
         if (settings_.presets[i].name == name) SendMessageW(s.preset, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
     for (size_t i = 0; i < settings_.colours.size(); ++i)
         if (settings_.colours[i].name == settings_.deck[d].colour) SendMessageW(s.colour, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
-    theme::setChecked(s.processing, !settings_.deck[d].processing);
+    theme::setBypass(s.processing, !settings_.deck[d].processing);
     // one channel: deck B's strip is not there; linked presets: one set of controls, on deck A
     const bool gone = d == 1 && settings_.decks == 1, single = gone || (d == 1 && linked());
     for (HWND h : {s.presetLabel, s.preset, s.colourLabel, s.colour, s.edit, s.editColour, s.processing, s.graphs})

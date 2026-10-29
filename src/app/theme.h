@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The look of the main, preset and Audio windows (docs/design.md section 8): a brushed aluminium background - a light
 // to darker gradient under a random pattern of fine horizontal brush strokes - and dark 3D push buttons that light up
-// green while checked (owner-drawn, anti-aliased with GDI+). The meter panel and the analysis graphs keep their own
+// green while checked, the Bypass button green or red (owner-drawn, anti-aliased with GDI+). The meter panel and the analysis graphs keep their own
 // dark look; small prompts keep the system look. Edit fields, drop-down lists and tabs are a light grey in the
 // metal's tint instead of white.
 #pragma once
@@ -51,8 +51,11 @@ void makeButton(HWND button);
 // A drop-down list (CBS_DROPDOWNLIST) with its field in light grey instead of white; the list itself is grey through
 // WM_CTLCOLORLISTBOX.
 void makeCombo(HWND combo);
-// A toggle button (Bypass): checked = pushed in and lit green.
+// A toggle button (About with an update): checked = lit green.
 void setChecked(HWND button, bool on);
 bool isChecked(HWND button);
+// The Bypass button (client, 2026-10-29): "Bypass Off" on green while the deck processes, "Bypass On" on red while
+// it is bypassed; isChecked() is true while bypassed.
+void setBypass(HWND button, bool bypassed);
 
 } // namespace ap::theme

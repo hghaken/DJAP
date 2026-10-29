@@ -113,6 +113,7 @@ void rounded(Gdiplus::GraphicsPath& p, Gdiplus::RectF r, float radius) {
 
 const wchar_t* const kHot = L"ApThemeHot";
 const wchar_t* const kChecked = L"ApThemeChecked";
+const wchar_t* const kBypass = L"ApThemeBypass"; // drawn green (processing) or red (bypassed)
 
 LRESULT CALLBACK buttonProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR) {
     switch (msg) {
@@ -133,6 +134,7 @@ LRESULT CALLBACK buttonProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DW
     case WM_NCDESTROY:
         RemovePropW(h, kHot);
         RemovePropW(h, kChecked);
+        RemovePropW(h, kBypass);
         RemoveWindowSubclass(h, buttonProc, 1);
         break;
     default:
@@ -162,6 +164,12 @@ void drawButton(const DRAWITEMSTRUCT* di, Metal& metal) {
     Face f{{98, 100, 104}, {50, 52, 56}, {22, 23, 26}, {242, 243, 245}};          // dark metal, light text
     if (hot) f = {{116, 118, 122}, {60, 62, 66}, {22, 23, 26}, {255, 255, 255}};
     if (checked) f = {{112, 204, 72}, {38, 126, 24}, {18, 60, 10}, {255, 255, 255}}; // lit green
+    if (GetPropW(di->hwndItem, kBypass)) {
+        if (!checked) f = hot ? Face{{128, 216, 88}, {46, 138, 30}, {18, 60, 10}, {255, 255, 255}}
+                              : Face{{112, 204, 72}, {38, 126, 24}, {18, 60, 10}, {255, 255, 255}};
+        else f = hot ? Face{{238, 104, 88}, {170, 34, 24}, {74, 12, 8}, {255, 255, 255}}
+                     : Face{{226, 86, 70}, {152, 26, 18}, {74, 12, 8}, {255, 255, 255}}; // bypassed: red
+    }
     if (pressed) std::swap(f.top, f.bottom);                                         // pushed in: light below
     if (disabled) f = {{150, 152, 156}, {120, 122, 126}, {92, 94, 98}, {196, 198, 202}};
 
@@ -532,5 +540,18 @@ void setChecked(HWND button, bool on) {
 }
 
 bool isChecked(HWND button) { return GetPropW(button, kChecked) != nullptr; }
+
+void setBypass(HWND button, bool bypassed) {
+    if (!button) return;
+    if (!GetPropW(button, kBypass)) {
+        SetPropW(button, kBypass, reinterpret_cast<HANDLE>(1));
+        InvalidateRect(button, nullptr, FALSE);
+    }
+    const wchar_t* text = bypassed ? L"Bypass On" : L"Bypass Off";
+    wchar_t now[16] = {};
+    GetWindowTextW(button, now, 16);
+    if (wcscmp(now, text) != 0) SetWindowTextW(button, text);
+    setChecked(button, bypassed);
+}
 
 } // namespace ap::theme

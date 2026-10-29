@@ -262,7 +262,7 @@ void PluginView::create() {
     look_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idLook);
     oversampling_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOversampling);
     graphs_ = make(L"BUTTON", L"Graphs", BS_OWNERDRAW | WS_TABSTOP, idGraphs);
-    bypass_ = make(L"BUTTON", L"Bypass", BS_OWNERDRAW | WS_TABSTOP, idBypass);
+    bypass_ = make(L"BUTTON", L"Bypass Off", BS_OWNERDRAW | WS_TABSTOP, idBypass);
     about_ = make(L"BUTTON", L"About", BS_OWNERDRAW | WS_TABSTOP, idAbout);
     presetLabel_ = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
     preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
@@ -317,8 +317,8 @@ void PluginView::create() {
     tips_.add(graphs_, L"Opens the analysis window of this channel: the signal chain step by step (a click on a step "
                        L"opens its settings), the compressor's curve, loudness and gains of the last 60 s, the scope "
                        L"(right-click: input or output) and the goniometer with correlation and stereo width.");
-    tips_.add(bypass_, L"Bypass (lit):the input goes out unchanged, delayed by the same look-ahead, so switching "
-                       L"never shifts the sound in time.");
+    tips_.add(bypass_, L"Bypass Off (green): the channel runs through DJAP's chain.\nBypass On (red): the input goes "
+                       L"out unchanged, delayed by the same look-ahead, so switching never shifts the sound in time.");
     tips_.add(about_, L"About DJAP: the version, the licences, the settings file, DJAP's GitHub page - and the updates: "
                       L"Check now asks GitHub for a newer DJAP, Download opens its page. With the program's daily "
                       L"check on (its Setup window), the plug-in asks once each time the DJ software loads it; when a "
@@ -421,7 +421,7 @@ void PluginView::fill() {
     const int os = static_cast<int>(plugin_->plainOf(kOversamplingId)), oi = os == 8 ? 2 : os == 4 ? 1 : 0;
     if (SendMessageW(oversampling_, CB_GETCURSEL, 0, 0) != oi)
         SendMessageW(oversampling_, CB_SETCURSEL, static_cast<WPARAM>(oi), 0);
-    theme::setChecked(bypass_, plugin_->plainOf(kBypassId) >= 0.5);
+    theme::setBypass(bypass_, plugin_->plainOf(kBypassId) >= 0.5);
 
     const PresetValues v = plugin_->currentValues();
     const int pos[kSliders] = {static_cast<int>(std::lround(v[pToneBass] * 2.0)),

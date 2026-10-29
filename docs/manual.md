@@ -368,8 +368,8 @@ that still shows every meter row and a readable spectrum.
   outputs 1-2`, or with other APIs the device names (a name too long for the window ends in "..."; the Setup window
   shows it whole). With linked presets deck B shows "linked to deck A".
 - **Graphs** opens the analysis window (8.1).
-- **Bypass.** Lit (green): the deck's input goes out unchanged, delayed by the look-ahead. Not lit: the deck is
-  processed. Saved per deck.
+- **Bypass Off / Bypass On.** Green "Bypass Off": the deck is processed. Red "Bypass On": the deck's input goes out
+  unchanged, delayed by the look-ahead. A click switches it; saved per deck.
 - **Loudness** and its **Edit...** button: the deck's loudness preset (the loudness and dynamics) and the loudness window
   (chapter 6). The list runs from the quietest output to the loudest; your own loudness presets are sorted in.
 - **Colour** and its **Edit...** button: the deck's colour (the tone) and the colour window (chapter 7).
@@ -867,7 +867,8 @@ The window is one deck strip of the program:
 - **Graphs** - the analysis window (8.1) for this channel: one row with the signal chain, the compressor's curve,
   loudness and gains of the last 60 s, the scope and the goniometer. A click on a step of the chain opens its tab, as
   in the program.
-- **Bypass** - lit: the input goes out unchanged, delayed by the same look-ahead.
+- **Bypass Off / Bypass On** - green "Bypass Off": the channel is processed; red "Bypass On": the input goes out
+  unchanged, delayed by the same look-ahead.
 - **About** - the version, the settings file in use, the copyright and licences, the update check (9.4), a Disclaimer button and a link to DJAP's
   GitHub page. The button reads **Update** and is lit when a newer version exists.
 - **Loudness** and **Colour** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
