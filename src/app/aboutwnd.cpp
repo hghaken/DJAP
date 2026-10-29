@@ -82,6 +82,12 @@ bool AboutWindow::takeKey(const MSG& m) {
     return true;
 }
 
+LRESULT CALLBACK AboutWindow::keyHook(int code, WPARAM wp, LPARAM lp) {
+    MSG* m = reinterpret_cast<MSG*>(lp);
+    if (code == HC_ACTION && wp == PM_REMOVE && takeKey(*m)) m->message = WM_NULL; // taken: the host sees nothing
+    return CallNextHookEx(nullptr, code, wp, lp);
+}
+
 RECT AboutWindow::topRect() const { return RECT{0, 0, px(kWidth), px(20 + kLogoH + 12)}; }
 
 // Deck A's bass against its own average: a low-pass at 120 Hz, its power over 25 ms against over 1 s - a kick drum
@@ -290,6 +296,7 @@ void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
     placement::remember(hwnd_, plugin_ ? "PluginAbout" : "About", owner);
     // modal, as a message box - not in the plug-in: it would block the DJ software's own window
     if (!plugin_) EnableWindow(owner_, FALSE);
+    if (plugin_ && !keyHook_) keyHook_ = SetWindowsHookExW(WH_GETMESSAGE, keyHook, nullptr, GetCurrentThreadId());
     ShowWindow(hwnd_, SW_SHOWNORMAL);
     SetFocus(ok_);
 }
@@ -468,6 +475,8 @@ LRESULT AboutWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_DESTROY: // (also when the main window goes first: before GDI+ shuts down in main)
         KillTimer(hwnd_, kAnimTimer);
+        if (keyHook_) UnhookWindowsHookEx(keyHook_); // before the DLL can go
+        keyHook_ = nullptr;
         animating_ = credits_ = false;
         pulseUntil_ = 0;
         pulse_ = 0.0;

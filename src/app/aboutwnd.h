@@ -49,6 +49,7 @@ public:
 
 private:
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+    static LRESULT CALLBACK keyHook(int code, WPARAM wp, LPARAM lp); // the plug-in: takeKey in the host's loop
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
     void create();
     void setFonts();
@@ -80,6 +81,9 @@ private:
     double creditsY_ = 0.0;
     bool animating_ = false;
     bool plugin_ = false; // setPlugin
+    // The plug-in has no message loop of its own: while its About window is open, a hook on the GUI thread's
+    // messages gives takeKey the keys the host's loop takes (client, 2026-10-29)
+    HHOOK keyHook_ = nullptr;
     IStream* stream_ = nullptr;
     Gdiplus::Bitmap* logo_ = nullptr;
     // Steinberg's Compatible logo of the SDK the module is built with (its usage guidelines: in the About box;
