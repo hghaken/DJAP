@@ -827,7 +827,7 @@ peak); the meters show the true peak, which can be a little higher between the s
 
 ![The spectrum window](images/spectrum.jpg)
 
-Click the **spectrum** in a deck's meter panel. The big graph shows, for one deck:
+Click the **spectrum** in a deck's meter panel (in the plug-in too, 9.2). The big graph shows, for one deck:
 
 - The **spectrum** of the input (orange) and the output (turquoise), with its dB scale on the left. It reaches down
   to -96 dB; what is quieter is not drawn, so where a song has (almost) no highs the line drops out at the bottom.
@@ -901,7 +901,14 @@ The window is one deck strip of the program:
 - **The four bass sliders** (4.2).
 - **The meter panel** - LED bars, the gain of each stage and the spectrum with the density bands and the colour curve, as in the main
   window (4.3). Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
-  program; clicking the spectrum opens its Density tab.
+  program; clicking the spectrum opens the spectrum window (8.2) for this channel, with the four bass sliders and
+  the colour's points. What you drag there changes the plug-in's own values (the project keeps them; the loudness
+  presets and colours in the lists stay as they are); Reset loudness / Reset colour set the values of the chosen
+  loudness preset or colour again.
+- **Right-click** anywhere on the window: **Setup...** and **About DJAP...**, as in the program. The plug-in's Setup
+  window holds what applies to a plug-in: the look-ahead and the oversampling (as above), **Show tooltips** and the
+  **update check** - these two are shared with the program (the same settings file). There are no audio devices: the
+  DJ software chooses the plug-in's input and output.
 
 ### 9.3 Loudness presets, colours and values
 

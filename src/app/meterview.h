@@ -37,8 +37,8 @@ struct MeterViewData {
 // A click on a stage row or a LED bar (client, 2026-10-25: "open its settings") tells the parent with WM_COMMAND:
 // its control id, code kMeterOpenRow + the target (0 leveller, 1 noise reduction (2026-10-29), 2 compressor, 3 density -
 // no row of its own since 2026-10-26, 4 de-esser, 5 clipper, 6 limiter; 7 the In bars: General - input gain, target;
-// 8 the Out bars: Limiter - their ceiling; 9 the spectrum: the program opens its spectrum window, the plug-in the
-// Density tab; meterStage()).
+// 8 the Out bars: Limiter - their ceiling; 9 the spectrum: the spectrum window (in the plug-in too since 2026-10-29;
+// before, the Density tab); meterStage()).
 constexpr int kMeterOpenRow = 10;
 constexpr int kMeterRows = 7, kMeterTargets = 10, kMeterSpectrum = 9;
 const char* meterStage(int target); // the preset window's tab of a target ("Leveller", ...)

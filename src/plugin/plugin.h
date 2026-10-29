@@ -63,6 +63,9 @@ public:
     const std::vector<Preset>& presets() const { return settings_.presets; }
     bool tooltips() const { return settings_.showTooltips; } // the program's switch (read from the settings file)
     bool checkUpdates() const { return settings_.checkUpdates; } // the program's daily-check switch, likewise
+    bool snapToBands() const { return settings_.snapToBands; }   // the spectrum window's start (not saved by the plug-in)
+    // The plug-in's Setup window: the two switches it shares with the program, merged into the settings file.
+    void setSwitches(bool tooltips, bool checkUpdates);
     const std::filesystem::path& iniFile() const { return ini_; } // (not "settingsFile": plugin.cpp's own function)
     const std::vector<Preset>& colours() const { return settings_.colours; }
     int presetIndex() const; // in its list; the list's size = "(other values)"

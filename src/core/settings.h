@@ -97,8 +97,10 @@ public:
     // other's presets and colours. The lists in the file as it is now are taken, and the changes this object made
     // since `base` (its lists as last read or written) are applied to them: presets it added or changed are written,
     // presets it deleted (or renamed away) are removed, everything else in the file stays. The program (Owner) writes
-    // its other settings; the plug-in (Guest) keeps the file's. Afterwards this object holds the merged lists (the
-    // other's new presets included) and `base` is set to them. False when the file could not be written.
+    // its other settings; the plug-in (Guest) keeps the file's - except the two switches both can change (Show
+    // tooltips, the daily update check: the plug-in's Setup window), merged three-way like the lists. Afterwards this
+    // object holds the merged lists (the other's new presets included) and those switches, and `base` is set to them.
+    // False when the file could not be written.
     enum class SaveRole { Owner, Guest };
     bool saveMerged(const std::filesystem::path& file, Settings& base, SaveRole role);
     std::string toText() const;

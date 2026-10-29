@@ -810,7 +810,19 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same
   code). Graphs (client, 2026-10-29: "I miss the Graphs button in the plug-in") opens the program's analysis window
   (`analysiswnd.*`) with one row: it reads its decks through `AnalysisSource` - the program's settings and audio, or
-  the plug-in's `DeckMonitor` and parameters; refreshed by the plug-in's 50 ms timer, closed with the plug-in's window. On the brushed metal (`theme.*`); tooltips on every control. Its own common controls 6 through the DLL's
+  the plug-in's `DeckMonitor` and parameters; refreshed by the plug-in's 50 ms timer, closed with the plug-in's window.
+  A click on the meter panel's spectrum (client, 2026-10-29: "the plug-in does not follow the program: a click on the
+  spectrum does not give the big one, nor the bass settings"; it opened the Density tab) opens the program's spectrum
+  window (`spectrumwnd.*`) for the channel: it reads and changes its deck through `SpectrumSource` - the program's
+  `SettingsSpectrum` (the presets and colours in the settings: every deck using them changes) or the plug-in's
+  parameters (a dragged point, a band handle, a bass slider, a list: the project keeps them, the presets stay as they
+  are; Reset loudness / colour = the chosen preset's or colour's values again; Snap to bands not saved). The bass
+  sliders' rule is one function for both (`bass::changes`). A right-click anywhere on the window (client, same day:
+  "a right-click with the Setup window and the About", as in the program): Setup... and About DJAP.... Setup is the
+  plug-in's own (`pluginsetup.*`): look-ahead and oversampling (its parameters, as in its window) and the two
+  switches it shares with the program - Show tooltips and the update check - merged into the settings file
+  (`saveMerged` takes a switch's change since the writer's last read, else keeps the file's; `settings_test`). No
+  devices: the DJ software chooses the plug-in's input and output. On the brushed metal (`theme.*`); tooltips on every control. Its own common controls 6 through the DLL's
   manifest and `ISOLATION_AWARE_ENABLED`. The window classes and GDI+ live while a window of the DLL is open and are
   removed with the last one (a class left behind would point into an unloaded DLL).
 - **About and updates** (client, 2026-10-28: "an About (with the update) in the plug-in" - an installation of the

@@ -117,6 +117,7 @@ private:
         const AudioIO& audio_;
     } graphs_;
     AnalysisWindow analysisWindow_;
+    SettingsSpectrum spectrumSource_; // what the spectrum window shows and changes: the decks' presets and colours
     SpectrumWindow spectrumWindow_;
     AboutWindow about_;
     std::string saveError_, message_, holdSaves_;

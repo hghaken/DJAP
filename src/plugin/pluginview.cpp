@@ -2,6 +2,7 @@
 #include "pluginview.h"
 
 #include "meterview.h"
+#include "placement.h"
 #include "plugin.h"
 #include "pluginids.h"
 #include "stages.h"
@@ -12,6 +13,7 @@
 
 #include <commctrl.h>
 #include <shellapi.h>
+#include <windowsx.h>
 
 #include <memory>
 
@@ -32,6 +34,7 @@ namespace {
 
 const wchar_t* const kClass = L"DJAPPluginView";
 enum Id { idPreset = 1, idColour, idLook, idBypass, idEdit, idEditColour, idOversampling, idAbout, idGraphs, idSlider0 = 10, idMeter = 20 };
+enum MenuId { mSetup = 1, mAbout };
 enum Slider { slLevel, slEnhancer, slWidth, slFreq, kSliders };
 const wchar_t* const kSliderName[kSliders] = {L"Bass level", L"Bass enhancer", L"Bass width", L"Bass frequency"};
 const int kSliderMin[kSliders] = {-24, 0, 0, 8}, kSliderMax[kSliders] = {24, 20, 20, 50}; // 0.5 dB / 5 % / 5 Hz
@@ -84,7 +87,76 @@ std::wstring PluginView::Graphs::title(int) const {
 
 bool PluginView::Graphs::processing(int) const { return !view_.plugin_ || view_.plugin_->plainOf(kBypassId) < 0.5; }
 
-PluginView::PluginView(Plugin* plugin) : plugin_(plugin) {
+double PluginView::Spectrum::sampleRate() const {
+    const Plugin* p = view_.plugin_;
+    return p && p->active() && p->sampleRate() > 0 ? p->sampleRate() : 0.0;
+}
+
+std::vector<std::string> PluginView::Spectrum::names(bool colour) const {
+    std::vector<std::string> n;
+    if (view_.plugin_)
+        for (const Preset& p : colour ? view_.plugin_->colours() : view_.plugin_->presets()) n.push_back(p.name);
+    return n;
+}
+
+int PluginView::Spectrum::chosen(int, bool colour) const {
+    const Plugin* p = view_.plugin_;
+    if (!p) return -1;
+    const int i = colour ? p->colourIndex() : p->presetIndex();
+    const size_t size = (colour ? p->colours() : p->presets()).size();
+    return i >= 0 && static_cast<size_t>(i) < size ? i : -1; // the list's size: "(other values)"
+}
+
+std::string PluginView::Spectrum::chosenName(int d, bool colour) const {
+    const int i = chosen(d, colour);
+    return i < 0 ? std::string() : (colour ? view_.plugin_->colours() : view_.plugin_->presets())[static_cast<size_t>(i)].name;
+}
+
+void PluginView::Spectrum::choose(int, bool colour, int index) {
+    if (!view_.plugin_) return;
+    view_.plugin_->choose(colour, index);
+    view_.refresh();
+}
+
+void PluginView::Spectrum::set(int, const std::vector<std::pair<int, double>>& values, bool) {
+    if (!view_.plugin_) return;
+    for (const auto& [param, value] : values) view_.plugin_->editPlain(paramId(param), value);
+    view_.refresh(); // the bass sliders of the plug-in's window follow
+}
+
+void PluginView::Spectrum::setBass(int d, int slider, int pos, bool save) { set(d, bass::changes(slider, pos), save); }
+
+void PluginView::Spectrum::reset(int d, bool colour, HWND owner) {
+    const int i = chosen(d, colour);
+    if (!view_.plugin_ || i < 0) {
+        placement::messageBox(owner, colour ? L"These colour values match no colour in the list." :
+                                              L"These values match no loudness preset in the list.",
+                              colour ? L"Reset colour" : L"Reset loudness", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    const std::wstring q = std::wstring(L"Set the plug-in's ") + (colour ? L"colour" : L"loudness") +
+                           L" values back to those of \"" + wide(chosenName(d, colour)) + L"\"?";
+    if (placement::messageBox(owner, q.c_str(), colour ? L"Reset colour" : L"Reset loudness",
+                              MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
+        return;
+    view_.plugin_->choose(colour, i); // the chosen one again: every value of it
+    view_.refresh();
+}
+
+const wchar_t* PluginView::Spectrum::resetTip(bool colour) const {
+    return colour ? L"Reset colour: the plug-in's colour values back to those of the colour chosen in the list (asks "
+                    L"first) - after points were dragged here or the host changed them. The colour itself is not changed."
+                  : L"Reset loudness: the plug-in's loudness values back to those of the loudness preset chosen in the "
+                    L"list (asks first) - the density band handles go back with them. The preset itself is not changed.";
+}
+
+std::wstring PluginView::Spectrum::hint(int) const {
+    return L"Drag a point: this plug-in's colour values (blue: bass level and frequency). A purple handle: a density "
+           L"band's fixed gain. The project keeps them - the presets in the lists stay as they are; double-click resets.";
+}
+
+PluginView::PluginView(Plugin* plugin)
+    : plugin_(plugin), spectrumSource_(*this), spectrumWnd_(spectrumSource_), setupWnd_(plugin_) {
     const ViewRect r = sizeFor(GetDpiForSystem());
     setRect(r);
 }
@@ -102,6 +174,8 @@ void PluginView::teardown() {
     if (plugin_) plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
     aboutWnd_.close();                    // likewise (its owner is the host's window, not this one)
     graphsWnd_.close();                   // likewise
+    spectrumWnd_.close();
+    setupWnd_.close();
     if (hwnd_) {
         KillTimer(hwnd_, 1);
         DestroyWindow(hwnd_);
@@ -128,6 +202,8 @@ void PluginView::registerClasses(HINSTANCE instance) {
     EditWindow::setModule(instance); // the preset window registers its classes when it is first opened
     AboutWindow::setModule(instance); // About likewise
     AnalysisWindow::setModule(instance); // and the Graphs window
+    SpectrumWindow::setModule(instance); // the spectrum window
+    SetupWindow::setModule(instance);    // the Setup window
     if (!g_updater) g_updater = std::make_unique<Updater>();
     INITCOMMONCONTROLSEX icc{sizeof icc, ICC_BAR_CLASSES | ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES};
     InitCommonControlsEx(&icc);
@@ -137,6 +213,8 @@ void PluginView::unregisterClasses() {
     g_updater.reset(); // waits for a check still running (its thread must not outlive the DLL)
     AboutWindow::unregisterClass();
     AnalysisWindow::unregisterClass();
+    SpectrumWindow::unregisterClass();
+    SetupWindow::unregisterClass();
     EditWindow::unregisterClasses();
     unregisterMeterView();
     UnregisterClassW(kClass, ghInst);
@@ -175,6 +253,7 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
     graphsWnd_.onOpenStage([this](int, const std::string& stage, bool colour) {
         if (plugin_ && hwnd_) plugin_->openEditor(colour, GetAncestor(hwnd_, GA_ROOT), stage);
     });
+    spectrumSource_.snap_ = plugin_->snapToBands();
     aboutWnd_.setPlugin(true);
     aboutWnd_.setBeatSource([this] { return &monitor_.analysis().scopeOut; });
     aboutWnd_.setUpdates(
@@ -230,6 +309,8 @@ LRESULT PluginView::handle(UINT msg, WPARAM wp, LPARAM lp) {
         if (dirty_) fill();
         meters();
         graphsWnd_.refresh(); // after meters(): it read the deck's rings
+        spectrumWnd_.refresh();
+        setupWnd_.refresh();
         if (++ticks_ % 20 == 0) { // once a second: the update line (another window may have started the check)
             aboutWnd_.refresh();
             updateNote();
@@ -241,6 +322,15 @@ LRESULT PluginView::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_COMMAND:
         command(LOWORD(wp), HIWORD(wp));
         return 0;
+    case WM_CONTEXTMENU: { // a right-click anywhere on the window (its controls pass it up): Setup, About
+        POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+        if (pt.x == -1 && pt.y == -1) { // from the keyboard: at the window's top left
+            pt = {px(40), px(40)};
+            ClientToScreen(hwnd_, &pt);
+        }
+        contextMenu(pt.x, pt.y);
+        return 0;
+    }
     case WM_DPICHANGED_AFTERPARENT:
         dpi_ = GetDpiForWindow(hwnd_);
         layout();
@@ -473,26 +563,8 @@ void PluginView::slider(HWND bar, int code) {
     for (int k = 0; k < kSliders; ++k) {
         if (slider_[k] != bar) continue;
         const int pos = static_cast<int>(SendMessageW(bar, TBM_GETPOS, 0, 0));
-        switch (k) {
-        case slLevel:
-            plugin_->editPlain(paramId(pToneBass), pos * 0.5);
-            break;
-        case slEnhancer:
-            plugin_->editPlain(paramId(pBassAmount), pos * 5.0);
-            plugin_->editPlain(paramId(pBassOn), pos > 0 ? 1.0 : 0.0);
-            break;
-        case slWidth:
-            plugin_->editPlain(paramId(pBassWidth), pos * 5.0);
-            plugin_->editPlain(paramId(pWidthOn), 1.0);
-            break;
-        default: { // the bass frequency of all three, each within its own range
-            const double f = pos * 5.0;
-            plugin_->editPlain(paramId(pToneBassFreq), f);
-            plugin_->editPlain(paramId(pBassFreq), std::min(paramInfo(pBassFreq).max, std::max(paramInfo(pBassFreq).min, f)));
-            plugin_->editPlain(paramId(pWidthSplit), std::min(paramInfo(pWidthSplit).max, std::max(paramInfo(pWidthSplit).min, f)));
-            break;
-        }
-        }
+        // the program's rule (bassctl.h), on the parameters: the bass frequency of all three, each within its range
+        for (const auto& [param, value] : bass::changes(k, pos)) plugin_->editPlain(paramId(param), value);
         fill();
         return;
     }
@@ -520,9 +592,23 @@ void PluginView::command(int id, int code) {
         aboutWnd_.show(GetAncestor(hwnd_, GA_ROOT), plugin_->iniFile());
     } else if ((id == idEdit || id == idEditColour) && code == BN_CLICKED) {
         plugin_->openEditor(id == idEditColour, GetAncestor(hwnd_, GA_ROOT));
+    } else if (id == idMeter && code == kMeterOpenRow + kMeterSpectrum) { // the spectrum: the spectrum window
+        spectrumWnd_.show(GetAncestor(hwnd_, GA_ROOT), 0);
     } else if (id == idMeter && code >= kMeterOpenRow && code < kMeterOpenRow + kMeterTargets) { // a row or bar
         plugin_->openEditor(false, GetAncestor(hwnd_, GA_ROOT), meterStage(code - kMeterOpenRow));
     }
+}
+
+void PluginView::contextMenu(int x, int y) {
+    if (!plugin_) return;
+    HMENU m = CreatePopupMenu();
+    AppendMenuW(m, MF_STRING, mSetup, L"&Setup...");
+    AppendMenuW(m, MF_STRING, mAbout, L"&About DJAP...");
+    const UINT cmd = static_cast<UINT>(TrackPopupMenuEx(m, TPM_RIGHTBUTTON | TPM_RETURNCMD, x, y, hwnd_, nullptr));
+    DestroyMenu(m);
+    const HWND root = GetAncestor(hwnd_, GA_ROOT);
+    if (cmd == mSetup) setupWnd_.show(root);
+    else if (cmd == mAbout) aboutWnd_.show(root, plugin_->iniFile());
 }
 
 // A newer version found: the About button says "Update" (the version line has no room for a sentence).

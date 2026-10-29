@@ -645,6 +645,12 @@ void Plugin::editPlain(ParamID id, double plain) {
     edit(id, p >= 0 ? normalizedOf(p, plain) : plain);
 }
 
+void Plugin::setSwitches(bool tooltips, bool checkUpdates) {
+    settings_.showTooltips = tooltips;
+    settings_.checkUpdates = checkUpdates;
+    saveSettings(); // as a guest: these two (changed since base_) and nothing else of the program's
+}
+
 void Plugin::choose(bool colour, int index) {
     const std::vector<Preset>& items = colour ? settings_.colours : settings_.presets;
     if (index < 0 || index >= static_cast<int>(items.size())) return;

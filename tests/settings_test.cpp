@@ -640,7 +640,25 @@ void merged(const fs::path& dir) {
     Settings fresh, freshBase;
     CHECK(fresh.saveMerged(none, freshBase, Settings::SaveRole::Guest));
     CHECK(!fs::exists(none, ec));
-    std::printf("   both kept each other's presets and colours; the program's settings untouched by the plug-in\n");
+
+    // the two switches both may change (the plug-in's Setup window): the one who changed it wins, the other keeps it
+    plugin.showTooltips = false;
+    plugin.driver = "not mine"; // still the program's
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(check.load(file));
+    CHECK(!check.showTooltips && check.driver == "Test ASIO");
+    CHECK(program.showTooltips); // the program's copy, unchanged by itself: its next save keeps the plug-in's choice
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(check.load(file));
+    CHECK(!check.showTooltips);
+    CHECK(!program.showTooltips); // and takes it over
+    program.checkUpdates = false; // the program's own change wins at its save; the plug-in takes it at its next one
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(check.load(file));
+    CHECK(!check.checkUpdates && !plugin.checkUpdates);
+    std::printf("   both kept each other's presets and colours; the program's settings untouched by the plug-in, "
+                "except the two switches it changed\n");
 }
 
 } // namespace

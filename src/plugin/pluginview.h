@@ -2,13 +2,16 @@
 // The plug-in's window inside the host: one deck strip as in the program - preset and colour with their Edit
 // buttons (the program's preset window), look-ahead, Graphs (the program's analysis window, one deck), Bypass, the
 // four bass sliders and the meter panel (LED bars, the gain of each stage, the spectrum; a click on a row opens its
-// tab) - on the brushed metal; and About with the update check (one per DLL, asked once per load when the program's
-// daily check is on). Every value is also a parameter the host shows in its own list.
+// tab, on the spectrum the program's spectrum window for this channel) - on the brushed metal; About with the update
+// check (one per DLL, asked once per load when the program's daily check is on); a right-click: Setup (the plug-in's
+// own, pluginsetup.h) and About, as in the program. Every value is also a parameter the host shows in its own list.
 #pragma once
 
 #include "aboutwnd.h"
 #include "analysiswnd.h"
 #include "monitor.h"
+#include "pluginsetup.h"
+#include "spectrumwnd.h"
 #include "theme.h"
 #include "tooltips.h"
 
@@ -76,6 +79,38 @@ private:
     private:
         const PluginView& view_;
     };
+    // the spectrum window of this channel (client, 2026-10-29: "a click on the spectrum does not give the big one, nor
+    // the bass settings"): the program's window, its values the plug-in's parameters - the project keeps them, the
+    // presets in the lists stay as they are
+    class Spectrum : public SpectrumSource {
+    public:
+        explicit Spectrum(PluginView& view) : view_(view) {}
+        int decks() const override { return 1; }
+        bool audioActive() const override { return view_.graphsSource_.audioActive(); }
+        const DeckMeters& meters(int) const override { return view_.monitor_.meters(); }
+        const DeckAnalysis& analysis(int) const override { return view_.monitor_.analysis(); }
+        double sampleRate() const override;
+        PresetValues values(int d) const override { return view_.graphsSource_.values(d); }
+        bool processing(int d) const override { return view_.graphsSource_.processing(d); }
+        std::wstring deckName(int) const override { return L"DJAP"; }
+        std::vector<std::string> names(bool colour) const override;
+        int chosen(int d, bool colour) const override;
+        std::string chosenName(int d, bool colour) const override;
+        void choose(int d, bool colour, int index) override;
+        bool editable(int, bool) const override { return view_.plugin_ != nullptr; }
+        void set(int d, const std::vector<std::pair<int, double>>& values, bool save) override;
+        void setBass(int d, int slider, int pos, bool save) override;
+        void reset(int d, bool colour, HWND owner) override;
+        const wchar_t* resetTip(bool colour) const override;
+        std::wstring hint(int d) const override;
+        bool snapToBands() const override { return snap_; }
+        void setSnapToBands(bool on) override { snap_ = on; }
+        bool snap_ = false; // from the settings file when the window opens; not saved by the plug-in
+
+    private:
+        PluginView& view_;
+    };
+    void contextMenu(int x, int y);
     int ticks_ = 0;
     HWND sliderLabel_[4] = {}, slider_[4] = {}, sliderValue_[4] = {};
     HFONT font_ = nullptr, bold_ = nullptr;
@@ -90,6 +125,10 @@ private:
     DeckMonitor monitor_;
     Graphs graphsSource_{*this};
     AnalysisWindow graphsWnd_{graphsSource_};
+    // (set in the constructor: a default member initializer sees *this as const here)
+    Spectrum spectrumSource_;
+    SpectrumWindow spectrumWnd_;
+    SetupWindow setupWnd_;
 };
 
 } // namespace ap::plugin

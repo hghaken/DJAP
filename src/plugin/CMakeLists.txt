@@ -30,6 +30,10 @@ smtg_add_vst3plugin(DJAPPlugin PACKAGE_NAME "DJAP" SOURCES_LIST
     ${CMAKE_SOURCE_DIR}/src/app/aboutwnd.cpp
     # the Graphs button's analysis window (client, 2026-10-29)
     ${CMAKE_SOURCE_DIR}/src/app/analysiswnd.cpp
+    # the spectrum window with the bass sliders, and the plug-in's Setup window (client, 2026-10-29)
+    ${CMAKE_SOURCE_DIR}/src/app/spectrumwnd.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/bassctl.cpp
+    pluginsetup.cpp
     ${CMAKE_SOURCE_DIR}/src/app/updater.cpp)
 target_include_directories(DJAPPlugin PRIVATE ${CMAKE_SOURCE_DIR}/src/app "${CMAKE_BINARY_DIR}/generated")
 target_link_libraries(DJAPPlugin PRIVATE sdk apcore comctl32 gdi32 gdiplus user32 uxtheme shell32 ole32 winhttp)

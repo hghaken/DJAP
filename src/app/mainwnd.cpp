@@ -102,13 +102,15 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
           colourEditor_.refresh();
       }),
       graphs_(settings, audio), analysisWindow_(graphs_),
-      spectrumWindow_(settings, audio, [this](bool saveNow) { // a colour point or band handle dragged, snap switched
-          presetsChanged(false, saveNow);
-          refreshStrip(0);
-          refreshStrip(1);
-          editor_.refresh();
-          colourEditor_.refresh();
-      }) {
+      spectrumSource_(settings, graphs_, [&audio] { return audio.sampleRate(); },
+                      [this](bool saveNow) { // a colour point or band handle dragged, a list, snap switched
+                          presetsChanged(false, saveNow);
+                          refreshStrip(0);
+                          refreshStrip(1);
+                          editor_.refresh();
+                          colourEditor_.refresh();
+                      }),
+      spectrumWindow_(spectrumSource_) {
     // a click on a step in the analysis window: that deck's preset (or colour) window on the step's tab
     analysisWindow_.onOpenStage([this](int d, const std::string& stage, bool colour) {
         if (colour) colourEditor_.show(hwnd_, settings_.deck[d].colour, d, stage);

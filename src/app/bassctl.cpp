@@ -3,6 +3,7 @@
 
 #include <commctrl.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cwchar>
 
@@ -69,34 +70,32 @@ std::wstring text(const PresetValues& v, int k) {
     return t;
 }
 
+std::vector<std::pair<int, double>> changes(int k, int pos) {
+    auto within = [](int p, double x) { return std::min(paramInfo(p).max, std::max(paramInfo(p).min, x)); };
+    switch (k) {
+    case kLevel:
+        return {{pToneBass, within(pToneBass, pos * 0.5)}};
+    case kEnhancer:
+        return {{pBassAmount, within(pBassAmount, pos * 5.0)}, {pBassOn, pos > 0 ? 1.0 : 0.0}};
+    case kWidth:
+        return {{pBassWidth, within(pBassWidth, pos * 5.0)}, {pWidthOn, 1.0}};
+    default: // the bass frequency of all three, each within its own range (the enhancer 60 .. 160 Hz)
+        return {{pToneBassFreq, within(pToneBassFreq, pos * 5.0)},
+                {pBassFreq, within(pBassFreq, pos * 5.0)},
+                {pWidthSplit, within(pWidthSplit, pos * 5.0)}};
+    }
+}
+
 bool apply(Settings& s, int deck, int k, int pos) {
     // bass level in the colour, enhancer and width in the loudness preset, the frequency in both: every deck using
     // them changes
     Preset* p = s.find(s.deck[deck].preset);
     Preset* c = s.find(s.deck[deck].colour, PresetKind::Colour);
     if (!p || !c) return false;
-    PresetValues& v = p->values;
-    PresetValues& cv = c->values;
-    switch (k) {
-    case kLevel:
-        cv[pToneBass] = pos * 0.5;
-        break;
-    case kEnhancer:
-        v[pBassAmount] = pos * 5.0;
-        v[pBassOn] = pos > 0 ? 1.0 : 0.0;
-        break;
-    case kWidth:
-        v[pBassWidth] = pos * 5.0;
-        v[pWidthOn] = 1.0;
-        break;
-    default: // the bass frequency of all three
-        cv[pToneBassFreq] = pos * 5.0;
-        v[pBassFreq] = pos * 5.0; // clamped to 60 .. 160 Hz
-        v[pWidthSplit] = pos * 5.0;
-        break;
-    }
-    normaliseValues(v);
-    normaliseValues(cv);
+    for (const auto& [param, value] : changes(k, pos))
+        (isColourParam(param) ? c->values : p->values)[static_cast<size_t>(param)] = value;
+    normaliseValues(p->values);
+    normaliseValues(c->values);
     return true;
 }
 

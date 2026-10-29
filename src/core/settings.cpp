@@ -650,6 +650,12 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
             if (const Preset* c = named(colours, d.colour)) out.colours.push_back(*c);
     }
     out.sortPresets();
+    // the switches both can change (the plug-in's Setup window, client 2026-10-29): three-way like the lists - a
+    // change this writer made since `base` is written, else the file's value stays (the other may have changed it)
+    for (bool Settings::*f : {&Settings::showTooltips, &Settings::checkUpdates}) {
+        out.*f = this->*f != base.*f ? this->*f : now.*f;
+        this->*f = base.*f = out.*f;
+    }
     // nothing new (a guest only reading the other's presets): the file stays untouched
     const bool same = (existed || role == SaveRole::Guest) && out.toText() == now.toText();
     if (!same && !out.save(file)) return false;

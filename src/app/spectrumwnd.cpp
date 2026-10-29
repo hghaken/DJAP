@@ -20,6 +20,9 @@ namespace ap {
 namespace {
 
 const wchar_t* const kClass = L"APSpectrumWindow";
+HINSTANCE g_module = nullptr; // the program, or the plug-in DLL (setModule)
+bool g_registered = false;
+HINSTANCE moduleInstance() { return g_module ? g_module : GetModuleHandleW(nullptr); }
 
 // the meter panel's palette (meterview.cpp)
 const COLORREF kBack = RGB(28, 30, 33), kText = RGB(214, 218, 224), kDim = RGB(120, 126, 134), kWell = RGB(44, 47, 52),
@@ -40,10 +43,8 @@ const wchar_t* const kTipText[kTips] = {
     L"The deck whose spectrum and colour are shown.",
     L"Snap to bands (lit): a colour point dragged near a density band split sits exactly on it, so a tone section "
     L"starts where a density band does.",
-    L"Reset loudness: every value of the deck's loudness preset back - a shipped one to its shipped values, your own "
-    L"to the generic defaults - as the loudness window's button does (asks first). The density band handles go back with it.",
-    L"Reset colour: every value of the deck's colour back - a shipped colour to its shipped values, your own to neutral "
-    L"- as the colour window's button does (asks first). The coloured points go back with it.",
+    L"", // Reset loudness, Reset colour: the source's (SpectrumSource::resetTip)
+    L"",
 };
 
 void fill(HDC dc, const RECT& r, COLORREF c) {
@@ -67,19 +68,114 @@ std::wstring hzText(double f) {
 
 } // namespace
 
-SpectrumWindow::SpectrumWindow(Settings& settings, const AudioIO& audio, Changed onChange)
-    : settings_(settings), audio_(audio), onChange_(std::move(onChange)) {}
+// ---- the program's decks ----
 
-SpectrumWindow::~SpectrumWindow() {
+std::wstring SettingsSpectrum::deckName(int d) const {
+    return settings_.decks == 1 ? L"Channel" : d == 0 ? L"Deck A" : L"Deck B";
+}
+
+std::vector<std::string> SettingsSpectrum::names(bool colour) const {
+    std::vector<std::string> n;
+    for (const Preset& p : colour ? settings_.colours : settings_.presets) n.push_back(p.name);
+    return n;
+}
+
+int SettingsSpectrum::chosen(int d, bool colour) const {
+    const std::vector<Preset>& list = colour ? settings_.colours : settings_.presets;
+    const std::string name = chosenName(d, colour);
+    for (size_t i = 0; i < list.size(); ++i)
+        if (list[i].name == name) return static_cast<int>(i);
+    return -1;
+}
+
+std::string SettingsSpectrum::chosenName(int d, bool colour) const {
+    return colour ? settings_.deck[d].colour : settings_.deck[d].preset;
+}
+
+void SettingsSpectrum::choose(int d, bool colour, int index) {
+    const std::vector<Preset>& list = colour ? settings_.colours : settings_.presets;
+    if (index < 0 || static_cast<size_t>(index) >= list.size()) return;
+    const std::string name = list[static_cast<size_t>(index)].name;
+    for (int k = 0; k < 2; ++k) // the deck shown; both when the presets are linked
+        if (k == d || (settings_.linkPresets && settings_.decks == 2))
+            (colour ? settings_.deck[k].colour : settings_.deck[k].preset) = name;
+    if (changed_) changed_(true); // heard at once, saved; the main window's lists follow
+}
+
+bool SettingsSpectrum::editable(int d, bool colour) const {
+    return settings_.find(chosenName(d, colour), colour ? PresetKind::Colour : PresetKind::Dynamics) != nullptr;
+}
+
+void SettingsSpectrum::set(int d, const std::vector<std::pair<int, double>>& values, bool save) {
+    Preset* p = settings_.find(settings_.deck[d].preset);
+    Preset* c = settings_.find(settings_.deck[d].colour, PresetKind::Colour);
+    for (const auto& [param, value] : values) {
+        Preset* to = isColourParam(param) ? c : p;
+        if (to) to->values[static_cast<size_t>(param)] = value;
+    }
+    if (changed_) changed_(save); // (no values: the end of a drag - saved now)
+}
+
+void SettingsSpectrum::setBass(int d, int slider, int pos, bool save) {
+    if (bass::apply(settings_, d, slider, pos) && changed_) changed_(save);
+}
+
+void SettingsSpectrum::reset(int d, bool colour, HWND owner) {
+    const std::string name = chosenName(d, colour);
+    const PresetKind kind = colour ? PresetKind::Colour : PresetKind::Dynamics;
+    const Preset* p = settings_.find(name, kind);
+    if (!p) return;
+    const std::wstring q = L"Set every value of \"" + fromUtf8(name) + L"\" back to " +
+                           (p->shipped ? L"its shipped values?" : colour ? L"neutral?" : L"the generic defaults?");
+    if (placement::messageBox(owner, q.c_str(), colour ? L"Reset colour" : L"Reset loudness",
+                              MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
+        return;
+    settings_.resetPreset(name, kind);
+    if (changed_) changed_(true); // heard at once, saved; the preset / colour window and the sliders follow
+}
+
+const wchar_t* SettingsSpectrum::resetTip(bool colour) const {
+    return colour ? L"Reset colour: every value of the deck's colour back - a shipped colour to its shipped values, your "
+                    L"own to neutral - as the colour window's button does (asks first). The coloured points go back with it."
+                  : L"Reset loudness: every value of the deck's loudness preset back - a shipped one to its shipped "
+                    L"values, your own to the generic defaults - as the loudness window's button does (asks first). The "
+                    L"density band handles go back with it.";
+}
+
+std::wstring SettingsSpectrum::hint(int d) const {
+    if (!editable(d, true)) return L"This deck has no colour.";
+    return L"Drag a point: the colour \"" + fromUtf8(settings_.deck[d].colour) +
+           L"\" (blue: bass level and frequency). A purple handle: a density band of \"" +
+           fromUtf8(settings_.deck[d].preset) + L"\". Every deck using them changes; double-click resets.";
+}
+
+void SettingsSpectrum::setSnapToBands(bool on) {
+    settings_.snapToBands = on;
+    if (changed_) changed_(true);
+}
+
+// ---- the window ----
+
+SpectrumWindow::SpectrumWindow(SpectrumSource& source) : source_(source) {}
+
+SpectrumWindow::~SpectrumWindow() { close(); }
+
+void SpectrumWindow::close() {
     if (hwnd_) DestroyWindow(hwnd_);
 }
 
+void SpectrumWindow::setModule(HINSTANCE instance) { g_module = instance; }
+
+void SpectrumWindow::unregisterClass() {
+    if (g_registered) UnregisterClassW(kClass, moduleInstance());
+    g_registered = false;
+}
+
 void SpectrumWindow::show(HWND owner, int deck) {
-    deck_ = std::max(0, std::min(settings_.decks - 1, deck));
+    deck_ = std::max(0, std::min(source_.decks() - 1, deck));
     if (!hwnd_) {
-        static bool registered = false;
-        HINSTANCE inst = GetModuleHandleW(nullptr);
-        if (!registered) {
+        HINSTANCE inst = moduleInstance();
+        if (!g_registered) {
             WNDCLASSEXW wc{};
             wc.cbSize = sizeof wc;
             wc.style = CS_DBLCLKS;
@@ -88,7 +184,7 @@ void SpectrumWindow::show(HWND owner, int deck) {
             wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
             wc.hIcon = LoadIconW(wc.hInstance, MAKEINTRESOURCEW(IDI_APP));
             wc.lpszClassName = kClass;
-            registered = RegisterClassExW(&wc) != 0;
+            g_registered = RegisterClassExW(&wc) != 0;
         }
         hwnd_ = CreateWindowExW(0, kClass, L"Spectrum", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                 CW_USEDEFAULT, owner, nullptr, inst, this);
@@ -108,8 +204,8 @@ void SpectrumWindow::show(HWND owner, int deck) {
 
 void SpectrumWindow::refresh() {
     if (!hwnd_ || !IsWindowVisible(hwnd_) || IsIconic(hwnd_)) return;
-    if (deck_ >= settings_.decks) deck_ = 0; // one channel now: deck A
-    if (layoutDecks_ != settings_.decks) layoutBar();
+    if (deck_ >= source_.decks()) deck_ = 0; // one channel now: deck A
+    if (layoutDecks_ != source_.decks()) layoutBar();
     setTitle(); // the deck's preset or colour may have been chosen elsewhere
     fillBoxes();
     fillSliders();
@@ -118,35 +214,34 @@ void SpectrumWindow::refresh() {
 
 void SpectrumWindow::setTitle() {
     if (!hwnd_) return;
-    const std::wstring deck = settings_.decks == 1 ? L"Channel" : deck_ == 0 ? L"Deck A" : L"Deck B";
-    const std::wstring title = L"Spectrum: " + deck + L" (loudness " + fromUtf8(settings_.deck[deck_].preset) +
-                               L", colour " + fromUtf8(settings_.deck[deck_].colour) + L")";
+    auto name = [&](bool colour) {
+        const std::string n = source_.chosenName(deck_, colour);
+        return n.empty() ? std::wstring(L"(other values)") : fromUtf8(n);
+    };
+    const std::wstring title = L"Spectrum: " + source_.deckName(deck_) + L" (loudness " + name(false) + L", colour " +
+                               name(true) + L")";
     if (title == title_) return; // only when it changed (refresh() asks 20 times a second)
     title_ = title;
     SetWindowTextW(hwnd_, title.c_str());
 }
 
-Preset* SpectrumWindow::colour() { return settings_.find(settings_.deck[deck_].colour, PresetKind::Colour); }
-
-Preset* SpectrumWindow::preset() { return settings_.find(settings_.deck[deck_].preset); }
-
 spectrum::Data SpectrumWindow::data() const {
     spectrum::Data d;
-    const DeckMeters& m = audio_.meters(deck_);
-    const DeckAnalysis& an = audio_.analysis(deck_);
-    const PresetValues v = settings_.deckValues(deck_);
-    const bool live = audio_.audioActive() && m.live;
+    const DeckMeters& m = source_.meters(deck_);
+    const DeckAnalysis& an = source_.analysis(deck_);
+    const PresetValues v = source_.values(deck_);
+    const bool live = source_.audioActive() && m.live;
     d.in = an.specIn.points();
     d.out = an.specOut.points();
     d.live = live && an.specOut.frames() > 0;
-    d.densityOn = settings_.deck[deck_].processing && v[pDensOn] >= 0.5;
+    d.densityOn = source_.processing(deck_) && v[pDensOn] >= 0.5;
     d.bands = m.bands > 0 ? m.bands : static_cast<int>(v[pDensBands]);
     for (int k = 0; k < kMaxSplits; ++k) d.splits[k] = v[static_cast<size_t>(pDensSplit1 + k)];
     for (int k = 0; k < kMaxBands; ++k) d.densityDb[k] = live ? m.densityDb[k] : 0.0;
     d.colour = true;
     d.values = v;
     for (int k = 0; k < 4; ++k) d.autoDb[k] = live ? m.autoToneDb[k] : 0.0;
-    d.fs = audio_.sampleRate() > 0 ? audio_.sampleRate() : 48000.0;
+    d.fs = source_.sampleRate() > 0 ? source_.sampleRate() : 48000.0;
     d.hotNode = dragging_ >= 0 ? dragging_ : hot_;
     d.bandHandles = d.densityOn;
     for (int k = 0; k < kMaxBands; ++k) d.bandGainDb[k] = v[static_cast<size_t>(pDensGain1 + k)];
@@ -189,34 +284,17 @@ void SpectrumWindow::hover(POINT pt) {
 }
 
 void SpectrumWindow::dragBand(POINT pt) {
-    Preset* p = preset();
-    if (!p || draggingBand_ < 0) return;
+    if (!source_.editable(deck_, false) || draggingBand_ < 0) return;
     const int gp = pDensGain1 + draggingBand_;
     const double g = paramValueAt(gp, paramPositionOf(gp, geo_.eqAt(pt.y)));
-    if (g == p->values[static_cast<size_t>(gp)]) return;
-    p->values[static_cast<size_t>(gp)] = g;
-    if (onChange_) onChange_(false);
-    InvalidateRect(hwnd_, nullptr, FALSE);
-}
-
-void SpectrumWindow::reset(bool colour) {
-    const std::string& name = colour ? settings_.deck[deck_].colour : settings_.deck[deck_].preset;
-    const PresetKind kind = colour ? PresetKind::Colour : PresetKind::Dynamics;
-    const Preset* p = settings_.find(name, kind);
-    if (!p) return;
-    const std::wstring q = L"Set every value of \"" + fromUtf8(name) + L"\" back to " +
-                           (p->shipped ? L"its shipped values?" : colour ? L"neutral?" : L"the generic defaults?");
-    if (placement::messageBox(hwnd_, q.c_str(), colour ? L"Reset colour" : L"Reset loudness",
-                              MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
-        return;
-    settings_.resetPreset(name, kind);
-    if (onChange_) onChange_(true); // heard at once, saved; the preset / colour window and the sliders follow
+    if (g == source_.values(deck_)[static_cast<size_t>(gp)]) return;
+    source_.set(deck_, {{gp, g}}, false);
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void SpectrumWindow::layoutBar() {
     if (!hwnd_ || !boxes_[0]) return;
-    layoutDecks_ = settings_.decks;
+    layoutDecks_ = source_.decks();
     HDC dc = GetDC(hwnd_);
     HGDIOBJ old = SelectObject(dc, font_);
     auto width = [&](const wchar_t* s) {
@@ -226,7 +304,7 @@ void SpectrumWindow::layoutBar() {
     };
     const int m = px(12), barH = px(30);
     int x = m;
-    if (settings_.decks == 2) x += width(L"Deck") + px(8) + 2 * (width(L"A") + px(20)) + px(24); // as paint() draws them
+    if (source_.decks() == 2) x += width(L"Deck") + px(8) + 2 * (width(L"A") + px(20)) + px(24); // as paint() draws them
     decksRight_ = x;
     const int boxW[2] = {px(170), px(140)};
     const wchar_t* const labels[2] = {L"Loudness", L"Colour"};
@@ -259,18 +337,13 @@ void SpectrumWindow::fillBoxes() {
     if (!boxes_[0]) return;
     filling_ = true;
     for (int k = 0; k < 2; ++k) {
-        const std::vector<Preset>& list = k == 0 ? settings_.presets : settings_.colours;
-        std::vector<std::string> names;
-        for (const Preset& p : list) names.push_back(p.name);
+        const std::vector<std::string> names = source_.names(k == 1);
         if (names != boxNames_[k]) {
             SendMessageW(boxes_[k], CB_RESETCONTENT, 0, 0);
             for (const std::string& n : names) SendMessageW(boxes_[k], CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(fromUtf8(n).c_str()));
             boxNames_[k] = names;
         }
-        const std::string& chosen = k == 0 ? settings_.deck[deck_].preset : settings_.deck[deck_].colour;
-        LRESULT want = -1;
-        for (size_t i = 0; i < names.size(); ++i)
-            if (names[i] == chosen) want = static_cast<LRESULT>(i);
+        const LRESULT want = source_.chosen(deck_, k == 1);
         if (SendMessageW(boxes_[k], CB_GETCURSEL, 0, 0) != want && SendMessageW(boxes_[k], CB_GETDROPPEDSTATE, 0, 0) == 0)
             SendMessageW(boxes_[k], CB_SETCURSEL, static_cast<WPARAM>(want), 0);
     }
@@ -278,7 +351,7 @@ void SpectrumWindow::fillBoxes() {
 }
 
 void SpectrumWindow::fillSliders() {
-    const PresetValues v = settings_.deckValues(deck_);
+    const PresetValues v = source_.values(deck_);
     for (int k = 0; k < bass::kSliders; ++k) {
         if (!bass_[k] || GetCapture() == bass_[k]) continue; // dragged now: it shows its own position
         const int pos = bass::position(v, k);
@@ -288,13 +361,8 @@ void SpectrumWindow::fillSliders() {
 
 void SpectrumWindow::choose(bool colour) {
     const LRESULT sel = SendMessageW(boxes_[colour ? 1 : 0], CB_GETCURSEL, 0, 0);
-    const std::vector<Preset>& list = colour ? settings_.colours : settings_.presets;
-    if (sel < 0 || static_cast<size_t>(sel) >= list.size()) return;
-    const std::string name = list[static_cast<size_t>(sel)].name;
-    for (int d = 0; d < 2; ++d) // the deck shown; both when the presets are linked
-        if (d == deck_ || (settings_.linkPresets && settings_.decks == 2))
-            (colour ? settings_.deck[d].colour : settings_.deck[d].preset) = name;
-    if (onChange_) onChange_(true); // heard at once, saved; the main window's lists follow
+    if (sel < 0) return;
+    source_.choose(deck_, colour, static_cast<int>(sel));
     setTitle();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -302,20 +370,19 @@ void SpectrumWindow::choose(bool colour) {
 void SpectrumWindow::endDrag() {
     const bool was = dragging_ >= 0 || draggingBand_ >= 0;
     dragging_ = draggingBand_ = snapSplit_ = -1;
-    if (was && onChange_) onChange_(true); // saved when the mouse is let go
+    if (was) source_.set(deck_, {}, true); // saved when the mouse is let go
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
 void SpectrumWindow::drag(POINT pt) {
-    Preset* c = colour();
-    if (!c || dragging_ < 0) return;
+    if (!source_.editable(deck_, true) || dragging_ < 0) return;
+    const PresetValues v = source_.values(deck_);
     const int fp = spectrum::kNodeFreq[dragging_], gp = spectrum::kNodeGain[dragging_];
     // the parameters' own steps (frequencies on their log scale), within their ranges; with Snap to bands, on a
     // band split when the mouse is near it (and the split lies within the section's range)
     double f = paramValueAt(fp, paramPositionOf(fp, geo_.hzAt(pt.x)));
     snapSplit_ = -1;
-    if (settings_.snapToBands) {
-        const PresetValues v = settings_.deckValues(deck_);
+    if (source_.snapToBands()) {
         const ParamInfo& in = paramInfo(fp);
         int best = px(10);
         for (int k = 0; k < geo_.splits; ++k) {
@@ -330,19 +397,16 @@ void SpectrumWindow::drag(POINT pt) {
     }
     const double g = paramValueAt(gp, paramPositionOf(gp, geo_.eqAt(pt.y)));
     if (dragging_ == 0) { // the bass point is the bass sliders' level and frequency (the enhancer and width follow)
-        const PresetValues v = settings_.deckValues(deck_);
         const int posF = static_cast<int>(std::lround(f / 5.0)), posL = static_cast<int>(std::lround(g * 2.0));
         if (posF == bass::position(v, bass::kFreq) && posL == bass::position(v, bass::kLevel)) return;
-        bass::apply(settings_, deck_, bass::kFreq, posF);
-        bass::apply(settings_, deck_, bass::kLevel, posL);
-        if (onChange_) onChange_(false);
+        std::vector<std::pair<int, double>> both = bass::changes(bass::kFreq, posF);
+        for (const auto& c : bass::changes(bass::kLevel, posL)) both.push_back(c);
+        source_.set(deck_, both, false);
         InvalidateRect(hwnd_, nullptr, FALSE);
         return;
     }
-    if (f == c->values[static_cast<size_t>(fp)] && g == c->values[static_cast<size_t>(gp)]) return;
-    c->values[static_cast<size_t>(fp)] = f;
-    c->values[static_cast<size_t>(gp)] = g;
-    if (onChange_) onChange_(false); // heard at once; saved when the mouse is let go
+    if (f == v[static_cast<size_t>(fp)] && g == v[static_cast<size_t>(gp)]) return;
+    source_.set(deck_, {{fp, f}, {gp, g}}, false); // heard at once; saved when the mouse is let go
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -352,11 +416,14 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         dpi_ = GetDpiForWindow(hwnd_);
         setFonts();
         tips_.create(hwnd_);
-        for (int t = 0; t < kTips; ++t) tips_.addRect(hwnd_, static_cast<UINT_PTR>(t), kTipText[t]);
+        for (int t = 0; t < kTips; ++t)
+            tips_.addRect(hwnd_, static_cast<UINT_PTR>(t), t == tResetPreset   ? source_.resetTip(false)
+                                                           : t == tResetColour ? source_.resetTip(true)
+                                                                               : kTipText[t]);
         for (int k = 0; k < 2; ++k) {
             boxes_[k] = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | CBS_DROPDOWNLIST,
                                         0, 0, 10, 10, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(idLoudnessBox + k)),
-                                        GetModuleHandleW(nullptr), nullptr);
+                                        moduleInstance(), nullptr);
             theme::makeCombo(boxes_[k]);
             SendMessageW(boxes_[k], WM_SETFONT, reinterpret_cast<WPARAM>(font_), FALSE);
         }
@@ -367,7 +434,7 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         for (int k = 0; k < bass::kSliders; ++k) {
             bass_[k] = CreateWindowExW(0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS | TBS_BOTTOM,
                                        0, 0, 10, 10, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(idBass0 + k)),
-                                       GetModuleHandleW(nullptr), nullptr);
+                                       moduleInstance(), nullptr);
             bass::setup(bass_[k], k);
             tips_.add(bass_[k], (std::wstring(bass::kTip[k]) + L"\n\nAs the main window's slider: every deck that uses "
                                                                 L"the same loudness preset or colour changes too.").c_str());
@@ -402,8 +469,8 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         for (int k = 0; k < bass::kSliders; ++k)
             if (bar && bar == bass_[k]) {
                 const int pos = static_cast<int>(SendMessageW(bar, TBM_GETPOS, 0, 0));
-                if (bass::apply(settings_, deck_, k, pos) && onChange_)
-                    onChange_(LOWORD(wp) != TB_THUMBTRACK); // heard while dragging, saved when let go (keys: at once)
+                // heard while dragging, saved when let go (keys: at once)
+                source_.setBass(deck_, k, pos, LOWORD(wp) != TB_THUMBTRACK);
                 InvalidateRect(hwnd_, nullptr, FALSE);
             }
         return 0;
@@ -453,20 +520,20 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         const POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         const int b = buttonAt(pt);
         if (b == bDeckA || b == bDeckB) {
-            deck_ = std::min(settings_.decks - 1, b == bDeckA ? 0 : 1);
+            deck_ = std::min(source_.decks() - 1, b == bDeckA ? 0 : 1);
             setTitle();
             fillBoxes();
             fillSliders();
             InvalidateRect(hwnd_, nullptr, FALSE);
         } else if (b == bResetPreset || b == bResetColour) {
-            reset(b == bResetColour);
+            source_.reset(deck_, b == bResetColour, hwnd_);
+            InvalidateRect(hwnd_, nullptr, FALSE);
         } else if (b == bSnap) {
-            settings_.snapToBands = !settings_.snapToBands;
-            if (onChange_) onChange_(true);
+            source_.setSnapToBands(!source_.snapToBands());
             InvalidateRect(hwnd_, nullptr, FALSE);
         } else {
-            const int node = colour() ? geo_.nodeAt(pt, px(10)) : -1;
-            const int band = node < 0 && preset() ? geo_.handleAt(pt, px(6)) : -1;
+            const int node = source_.editable(deck_, true) ? geo_.nodeAt(pt, px(10)) : -1;
+            const int band = node < 0 && source_.editable(deck_, false) ? geo_.handleAt(pt, px(6)) : -1;
             if (node >= 0) dragging_ = node;
             else if (band >= 0) draggingBand_ = band;
             if (node >= 0 || band >= 0) SetCapture(hwnd_);
@@ -486,12 +553,11 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         const POINT pt{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         const int n = geo_.nodeAt(pt, px(10));
         const int band = n < 0 ? geo_.handleAt(pt, px(6)) : -1;
-        Preset* c = colour();
-        Preset* p = preset();
-        if (n >= 0 && c) c->values[static_cast<size_t>(spectrum::kNodeGain[n])] = 0.0;
-        else if (band >= 0 && p) p->values[static_cast<size_t>(pDensGain1 + band)] = 0.0;
-        if ((n >= 0 && c) || (band >= 0 && p)) {
-            if (onChange_) onChange_(true);
+        if (n >= 0 && source_.editable(deck_, true)) {
+            source_.set(deck_, {{spectrum::kNodeGain[n], 0.0}}, true);
+            InvalidateRect(hwnd_, nullptr, FALSE);
+        } else if (band >= 0 && source_.editable(deck_, false)) {
+            source_.set(deck_, {{pDensGain1 + band, 0.0}}, true);
             InvalidateRect(hwnd_, nullptr, FALSE);
         }
         return 0;
@@ -576,7 +642,7 @@ void SpectrumWindow::paint(HDC target) {
         GetTextExtentPoint32W(dc, s, static_cast<int>(wcslen(s)), &sz);
         return x + sz.cx + px(8);
     };
-    const bool two = settings_.decks == 2;
+    const bool two = source_.decks() == 2;
     int x = m;
     if (two) {
         x = label(x, L"Deck");
@@ -590,7 +656,7 @@ void SpectrumWindow::paint(HDC target) {
     label(boxLabelX_[1], L"Colour");
     x = std::max(x, buttonsX_);
     const int snapLeft = x;
-    x = drawButton(bSnap, x, L"Snap to bands", settings_.snapToBands, true);
+    x = drawButton(bSnap, x, L"Snap to bands", source_.snapToBands(), true);
     const int snapRight = x;
     const int resetPresetLeft = x + px(24);
     x = drawButton(bResetPreset, resetPresetLeft, L"Reset loudness", false, true);
@@ -603,7 +669,7 @@ void SpectrumWindow::paint(HDC target) {
     const int hintH = th + px(10);
     // the bass sliders' names and values (their trackbars are child windows)
     {
-        const PresetValues v = settings_.deckValues(deck_);
+        const PresetValues v = source_.values(deck_);
         for (int k = 0; k < bass::kSliders; ++k) {
             SetTextColor(dc, kDim);
             SetTextAlign(dc, TA_LEFT | TA_TOP);
@@ -620,20 +686,19 @@ void SpectrumWindow::paint(HDC target) {
 
     // ---- read-out (right of the bar): the point being dragged or under the mouse, or the frequency under it ----
     std::wstring read;
-    const Preset* c = colour();
     const int node = dragging_ >= 0 ? dragging_ : hot_;
-    if (node >= 0 && c) {
+    if (node >= 0 && source_.editable(deck_, true)) {
         wchar_t b[96];
         swprintf(b, 96, L"%ls: %ls, %+.1f dB", spectrum::nodeName(node),
-                 hzText(c->values[static_cast<size_t>(spectrum::kNodeFreq[node])]).c_str(),
-                 c->values[static_cast<size_t>(spectrum::kNodeGain[node])]);
+                 hzText(d.values[static_cast<size_t>(spectrum::kNodeFreq[node])]).c_str(),
+                 d.values[static_cast<size_t>(spectrum::kNodeGain[node])]);
         read = b;
         if (snapSplit_ >= 0 && dragging_ >= 0) {
             wchar_t s[48];
             swprintf(s, 48, L"  (on the split of bands %d and %d)", snapSplit_ + 1, snapSplit_ + 2);
             read += s;
         }
-    } else if ((draggingBand_ >= 0 || hotBand_ >= 0) && preset()) {
+    } else if ((draggingBand_ >= 0 || hotBand_ >= 0) && source_.editable(deck_, false)) {
         const int band = draggingBand_ >= 0 ? draggingBand_ : hotBand_;
         wchar_t b[128];
         swprintf(b, 128, L"Density band %d: fixed gain %+.1f dB, now %+.1f dB", band + 1, d.bandGainDb[band],
@@ -663,11 +728,7 @@ void SpectrumWindow::paint(HDC target) {
     }
 
     // ---- hint ----
-    const std::wstring hint = c ? L"Drag a point: the colour \"" + fromUtf8(c->name) +
-                                      L"\" (blue: bass level and frequency). A purple handle: a density band of \"" +
-                                      fromUtf8(settings_.deck[deck_].preset) + L"\". Every deck using them changes; "
-                                      L"double-click resets."
-                                : L"This deck has no colour.";
+    const std::wstring hint = source_.hint(deck_);
     SetTextColor(dc, kDim);
     SetTextAlign(dc, TA_LEFT | TA_TOP);
     TextOutW(dc, m, H - hintH, hint.c_str(), static_cast<int>(hint.size()));
