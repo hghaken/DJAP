@@ -76,6 +76,7 @@ struct DeckAnalysis {
     struct Point {
         float inM = static_cast<float>(kFloorDb), outM = static_cast<float>(kFloorDb); // LUFS
         float leveller = 0, compressor = 0, density = 0;                                 // dB (compressor <= 0)
+        float noise = 0; // the noise reduction's most reduced band, dB (<= 0; client, 2026-10-29)
         bool live = false;
     };
     SpectrumAnalyzer specIn, specOut;

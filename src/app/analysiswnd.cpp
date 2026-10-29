@@ -28,7 +28,8 @@ HINSTANCE moduleInstance() { return g_module ? g_module : GetModuleHandleW(nullp
 const COLORREF kBack = RGB(28, 30, 33), kPanel = RGB(20, 22, 25), kEdge = RGB(55, 58, 64), kGrid = RGB(70, 74, 80),
                kText = RGB(214, 218, 224), kDim = RGB(120, 126, 134), kBlue = RGB(80, 160, 235),
                kOrange = RGB(240, 130, 50), kTeal = RGB(80, 215, 195), kPurple = RGB(175, 145, 245),
-               kTarget = RGB(250, 220, 90), kWell = RGB(44, 47, 52), kRed = RGB(235, 70, 70);
+               kTarget = RGB(250, 220, 90), kWell = RGB(44, 47, 52), kRed = RGB(235, 70, 70),
+               kPink = RGB(235, 120, 175); // the noise reduction's line
 
 const wchar_t* const kTips[8] = {
     L"The compressor's curve for this deck's loudness preset: output against input level, both in LU to the target (dashed: "
@@ -38,8 +39,10 @@ const wchar_t* const kTips[8] = {
     L"Loudness of the last 60 s, momentary (400 ms), in LU to the loudness preset's target: orange = original (the deck's "
     L"input), turquoise = processed (the output), -30 .. +18 LU. The processed line should stay close to the target line; the "
     L"original shows how much the songs' levels differ.",
-    L"Gains of the last 60 s: leveller (blue; up = lifted), compressor (turquoise; its reduction, 0 or down) and "
-    L"density (purple; the average of its bands). Scale -18 .. +18 dB.",
+    L"Gains of the last 60 s: leveller (blue; up = lifted), compressor (turquoise; its reduction, 0 or down), "
+    L"density (purple; the average of its bands) and noise (pink; how far the noise reduction turned its most reduced "
+    L"band down - it dips in pauses and quiet passages, a deeper cut than 18 dB lies on the bottom edge). Scale "
+    L"-18 .. +18 dB.",
     L"Goniometer of the output (the last 43 ms): mono is a vertical line, left alone lies on the L diagonal, right "
     L"alone on the R diagonal; the wider the cloud, the wider the stereo image. A flat, horizontal cloud means left "
     L"and right are opposite (a phase problem).",
@@ -525,18 +528,19 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
         }
         if (which == 0) text(dc, r, Y(0) - th - px(1), L"target", kDim, TA_RIGHT);
         { // legend, bottom left
-            const wchar_t* names[2][3] = {{L"original", L"processed", nullptr}, {L"leveller", L"compressor", L"density"}};
-            const COLORREF cols[2][3] = {{kOrange, kTeal, 0}, {kBlue, kTeal, kPurple}};
+            const wchar_t* names[2][4] = {{L"original", L"processed", nullptr, nullptr},
+                                          {L"leveller", L"compressor", L"density", L"noise"}};
+            const COLORREF cols[2][4] = {{kOrange, kTeal, 0, 0}, {kBlue, kTeal, kPurple, kPink}};
             int xl = p.left + px(6);
-            for (int k = 0; k < 3 && names[which][k]; ++k) {
+            for (int k = 0; k < 4 && names[which][k]; ++k) {
                 text(dc, xl, p.bottom - th - px(4), names[which][k], cols[which][k]);
                 SIZE sz{};
                 GetTextExtentPoint32W(dc, names[which][k], static_cast<int>(wcslen(names[which][k])), &sz);
                 xl += sz.cx + px(12);
             }
         }
-        const int lines = which == 0 ? 2 : 3;
-        const COLORREF colors[2][3] = {{kOrange, kTeal, 0}, {kBlue, kTeal, kPurple}};
+        const int lines = which == 0 ? 2 : 4;
+        const COLORREF colors[2][4] = {{kOrange, kTeal, 0, 0}, {kBlue, kTeal, kPurple, kPink}};
         for (int k = 0; k < lines; ++k) {
             // one pixel: 600 points of 100 ms in a few hundred pixels - a thicker line ran together into a band
             // (client, 2026-10-27: "thinner, no thick mush")
@@ -550,7 +554,7 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
                     val = lufs - target;
                     ok = ok && lufs > -70.0 && val >= lo; // under the scale: a gap, not a line on the edge
                 } else {
-                    val = k == 0 ? pt.leveller : k == 1 ? pt.compressor : pt.density;
+                    val = k == 0 ? pt.leveller : k == 1 ? pt.compressor : k == 2 ? pt.density : pt.noise;
                 }
                 tr.add(X(i), Y(val), ok);
             }

@@ -784,7 +784,9 @@ deck with six panels:
    (the dashed line is 1:1). The white dot is where the detector is now; amber dots show the last 3 seconds.
 3. **Loudness** - the momentary loudness of the input (original, orange) and output (processed, turquoise) over the
    last 60 seconds, relative to the target.
-4. **Gain** - the leveller, compressor and density gains over the last 60 seconds.
+4. **Gain** - the leveller, compressor and density gains over the last 60 seconds, and the noise reduction (pink:
+   how far its most reduced band is down - it dips in pauses and quiet passages; a cut deeper than 18 dB lies on the
+   bottom edge).
 5. **Scope** - an oscilloscope of the waveform, left channel above and right below, to see whether the sound clips
    (the output by default; see "The scope" below).
 6. **Stereo** - a goniometer of the output (mono is the vertical line, left and right the diagonals), with bars for

@@ -499,7 +499,8 @@ per 10 ms record, averaged over 0.4 s in the GUI), on a square-root scale (0.5 d
 preset (output against input, LU to the target, 1:1 dashed) with the detector's level now as a white dot and its last 3 s as amber dots fading with age (client: "the dots in
 the compressor output"; a point per GUI refresh, 20 Hz, kept while the window is closed); the last 60 s
 of momentary loudness of input and output in LU to the target; the last 60 s of the leveller, compressor and
-density (mean of the bands) gains; a scope of the last 2 s (client, 2026-10-27: "an oscilloscope of L and R to
+density (mean of the bands) gains and, in pink, the noise reduction's most reduced band (client, 2026-10-29: "can the
+noise be made visible in the analysis window too"; `DeckAnalysis::Point::noise`); a scope of the last 2 s (client, 2026-10-27: "an oscilloscope of L and R to
 check for clipping, of the input and the output, chosen with a right-click"; then "the sines are too close
 together": 1 / 5 / 10 / 20 / 50 / 200 ms of the samples themselves - 50 by default; under 1 sample per pixel a line
 through the samples - ending at the newest rising zero crossing of the left channel within the last 50 ms (at least

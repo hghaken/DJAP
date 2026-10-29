@@ -94,6 +94,7 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
         double dens = 0;
         for (int b = 0; b < m.bands; ++b) dens += m.densityDb[b];
         p.density = static_cast<float>(m.bands > 0 ? dens / m.bands : 0.0);
+        p.noise = static_cast<float>(-m.noiseMaxDb());
         a_.history[static_cast<size_t>(a_.historyPos)] = p;
         a_.historyPos = (a_.historyPos + 1) % DeckAnalysis::kHistory;
     }
