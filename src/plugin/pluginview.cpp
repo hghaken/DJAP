@@ -5,6 +5,7 @@
 #include "placement.h"
 #include "plugin.h"
 #include "pluginids.h"
+#include "settingslock.h"
 #include "stages.h"
 #include "updater.h"
 #include "version.h"
@@ -45,6 +46,33 @@ int g_views = 0; // open windows of this DLL: the classes and GDI+ live while on
 // questions an hour per network)
 std::unique_ptr<Updater> g_updater;
 bool g_checked = false;
+// The places of the DLL's windows (client, 2026-10-29: "the plug-in does not remember the windows' places and
+// sizes"): one store for every window of the DLL while one is open, in the shared settings file under "Plugin..."
+// names, saved as a guest (Settings::saveMerged writes the windows it moved and keeps the program's)
+std::unique_ptr<Settings> g_places, g_placesBase;
+std::filesystem::path g_placesFile;
+
+void openPlaces(const std::filesystem::path& file) {
+    if (g_places || file.empty()) return;
+    g_placesFile = file;
+    g_places = std::make_unique<Settings>();
+    std::error_code ec;
+    if (std::filesystem::exists(file, ec)) g_places->load(file);
+    g_placesBase = std::make_unique<Settings>(*g_places);
+    placement::setStore(&g_places->windows, [] {
+        if (!g_places) return;
+        std::error_code e;
+        std::filesystem::create_directories(g_placesFile.parent_path(), e); // a plug-in without the program
+        const SettingsLock lock; // the program or another instance saving at the same moment waits
+        g_places->saveMerged(g_placesFile, *g_placesBase, Settings::SaveRole::Guest);
+    }, "Plugin");
+}
+
+void closePlaces() {
+    placement::setStore(nullptr, {});
+    g_places.reset();
+    g_placesBase.reset();
+}
 
 std::wstring wide(const std::string& s) {
     if (s.empty()) return {};
@@ -204,6 +232,7 @@ void PluginView::registerClasses(HINSTANCE instance) {
 
 void PluginView::unregisterClasses() {
     g_updater.reset(); // waits for a check still running (its thread must not outlive the DLL)
+    closePlaces();
     AboutWindow::unregisterClass();
     AnalysisWindow::unregisterClass();
     SpectrumWindow::unregisterClass();
@@ -223,6 +252,7 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
     if (g_views++ == 0) registerClasses(ghInst);
     attached_ = true;
     Tooltips::setEnabled(plugin_->tooltips()); // the program's Setup switch
+    openPlaces(plugin_->iniFile());            // the windows' remembered places
     const tresult r = CPluginView::attached(parent, type);
     dpi_ = GetDpiForWindow(static_cast<HWND>(parent));
     if (dpi_ == 0) dpi_ = 96;

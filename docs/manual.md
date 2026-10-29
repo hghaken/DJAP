@@ -1090,7 +1090,7 @@ The About window shows which file is in use. DJAP saves it after every change. I
 |---|---|
 | `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume |
 | `[Decks]` | Each deck's loudness preset, colour and processing switch, linked presets |
-| `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options |
+| `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options. The plug-in's windows have lines of their own (`PluginSpectrum`, `PluginSetup`, ...) |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |
 | `[Preset <name>]` | The values of a loudness preset that differ from its shipped values (own loudness presets: all values) |
 | `[Colour <name>]` | The same for a colour |

@@ -445,10 +445,13 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Audio", "StartAudio")) startAudio = toInt(*v, 0) != 0;
     if (auto v = get("Audio", "FollowWindowsVolumeOneChannel")) followVolume[0] = toInt(*v, 1) != 0;
     if (auto v = get("Audio", "FollowWindowsVolumeTwoDecks")) followVolume[1] = toInt(*v, 0) != 0;
-    for (const char* name : {"Main", "Setup", "Loudness", "Colour", "Analysis", "Spectrum", "About"})
-        if (auto v = get("Window", name)) {
+    // every window's place: the program's (Main, Setup, Loudness, ...) and the plug-in's (PluginSpectrum, ...) - any
+    // line of the section that reads as a place (was a fixed list of the program's windows: the plug-in's About and,
+    // since 2026-10-29, its other windows were never read back)
+    for (const auto& [name, value] : sections["Window"])
+        if (name != "X" && name != "Y") { // (the switches in the section do not read as places)
             WindowPlace p;
-            std::istringstream f(*v);
+            std::istringstream f(value);
             char c[4] = {};
             int max = 0;
             if ((f >> p.x >> c[0] >> p.y >> c[1] >> p.w >> c[2] >> p.h) && c[0] == ',' && c[1] == ',' && c[2] == ',' &&
@@ -656,6 +659,14 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
         out.*f = this->*f != base.*f ? this->*f : now.*f;
         this->*f = base.*f = out.*f;
     }
+    // the windows' places, per window (client, 2026-10-29: the plug-in's windows remember theirs too): a window this
+    // writer moved since `base` is written, every other one stays as the file has it
+    out.windows = now.windows;
+    for (const auto& [name, place] : windows) {
+        const auto b = base.windows.find(name);
+        if (b == base.windows.end() || !(b->second == place)) out.windows[name] = place;
+    }
+    windows = base.windows = out.windows;
     // nothing new (a guest only reading the other's presets): the file stays untouched
     const bool same = (existed || role == SaveRole::Guest) && out.toText() == now.toText();
     if (!same && !out.save(file)) return false;

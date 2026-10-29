@@ -518,7 +518,13 @@ title bar is still on a monitor; else, and without a line, centred on the work a
 monitor for the main window). Every move, resize, maximise or restore is written at once (a drag once, when it ends;
 a subclass of the window watches `WM_EXITSIZEMOVE` and `WM_WINDOWPOSCHANGED`); hiding or minimising is not a change. A
 window last maximised opens maximised. The main window's `X` / `Y` of earlier versions become its place. The
-plug-in's windows are only centred (it never writes the program's settings). The name prompt and every message box
+plug-in's windows (client, 2026-10-29: "the plug-in does not remember all the windows' places and sizes"; they were
+only centred) are remembered the same way under names of their own - `PluginSpectrum`, `PluginAnalysis`,
+`PluginLoudness`, `PluginColour`, `PluginSetup`, `PluginAbout` - in one store per DLL while a window of it is open,
+saved as a guest: `Settings::saveMerged` merges the places per window (a window the writer moved is written, every
+other line stays), so the program and the plug-ins keep each other's places; the loader reads every place line of
+`[Window]` (it read a fixed list of the program's names, so `PluginAbout` was never read back). The plug-in's own
+window is the DJ software's frame: the host places it. The name prompt and every message box
 stay centred on the window that asks (a CBT hook moves the box), kept inside that monitor's work area; while the
 main window is minimised or in the notification area its normal position counts.
 

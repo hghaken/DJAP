@@ -45,6 +45,7 @@ LRESULT CALLBACK cbtProc(int code, WPARAM wp, LPARAM lp) {
 // ---- remembered places ----
 std::map<std::string, WindowPlace>* g_places = nullptr;
 std::function<void()> g_save;
+std::string g_prefix; // the plug-in's: "Plugin"
 const UINT_PTR kSubclass = 0x4A50; // the tracking subclass's id
 
 struct Tracked {
@@ -161,21 +162,24 @@ int messageBox(HWND owner, const wchar_t* text, const wchar_t* caption, UINT typ
     return result;
 }
 
-void setStore(std::map<std::string, WindowPlace>* places, std::function<void()> save) {
+void setStore(std::map<std::string, WindowPlace>* places, std::function<void()> save, const std::string& prefix) {
     g_places = places;
     g_save = std::move(save);
+    g_prefix = prefix;
 }
 
 void remember(HWND wnd, const char* name, HWND owner) {
     if (!wnd) return;
+    // the store's name: with the plug-in's prefix ("PluginAbout" has it already)
+    const std::string key = std::string(name).compare(0, g_prefix.size(), g_prefix) == 0 ? name : g_prefix + name;
     const WindowPlace* p = nullptr;
     if (g_places) {
-        auto it = g_places->find(name);
+        auto it = g_places->find(key);
         if (it != g_places->end()) p = &it->second;
     }
     if (!p || !restore(wnd, *p)) centreOnScreen(wnd, owner);
     if (!g_places) return;
-    Tracked* t = new Tracked{name, p && p->maximised, false};
+    Tracked* t = new Tracked{key, p && p->maximised, false};
     if (!SetWindowSubclass(wnd, trackProc, kSubclass, reinterpret_cast<DWORD_PTR>(t))) delete t;
 }
 

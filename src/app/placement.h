@@ -24,9 +24,11 @@ void centreOn(HWND wnd, HWND owner);
 int messageBox(HWND owner, const wchar_t* text, const wchar_t* caption, UINT type);
 
 // The remembered places: the program sets them once, before its first window (its Settings' windows and the
-// function that saves the settings file). Without them (the plug-in: it never writes the program's settings) a
-// window is only centred on the screen and nothing is remembered.
-void setStore(std::map<std::string, WindowPlace>* places, std::function<void()> save);
+// function that saves the settings file); the plug-in while a window of its DLL is open, with the prefix "Plugin" -
+// its windows' names in the store (PluginSpectrum, ...), so the program's places stay the program's (client,
+// 2026-10-29: "the plug-in does not remember the windows' places and sizes"). Without a store a window is only
+// centred on the screen and nothing is remembered.
+void setStore(std::map<std::string, WindowPlace>* places, std::function<void()> save, const std::string& prefix = {});
 
 // Called once after creating a window, with its name (the ini key: Main, Setup, Loudness, Colour, Analysis,
 // Spectrum, About) and its owner: the window goes to its remembered place - the size too when it can be resized -

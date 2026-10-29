@@ -61,6 +61,10 @@ void ascii(String128 out, const char* text) { UString(out, 128).fromAscii(text);
 // The program's settings file, where the user's own presets and colours are (also those saved from a plug-in). A
 // portable program (DJAP.ini next to DJAP.exe) is not seen.
 std::filesystem::path settingsFile() {
+    // a test with editorhost that writes (the windows' places, a Setup switch) points it at a scratch copy, never at
+    // the user's own file
+    wchar_t test[MAX_PATH] = {};
+    if (GetEnvironmentVariableW(L"DJAP_PLUGIN_INI", test, MAX_PATH) > 0) return std::filesystem::path(test);
     PWSTR roaming = nullptr;
     std::filesystem::path p;
     if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming)))

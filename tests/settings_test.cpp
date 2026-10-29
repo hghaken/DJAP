@@ -604,6 +604,17 @@ void merged(const fs::path& dir) {
     CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
     CHECK(check.load(file));
     CHECK(check.windows.count("Spectrum") && check.windows["Spectrum"].w == 900);
+    // the plug-in's own places ("Plugin..." names) are written by it, and the program's next save keeps them
+    plugin.windows["PluginSpectrum"] = WindowPlace{10, 20, 700, 500, false};
+    plugin.windows["Spectrum"] = WindowPlace{1, 1, 1, 1, false}; // stale copies of the program's are never written:
+    pluginBase.windows["Spectrum"] = plugin.windows["Spectrum"]; // (unchanged since its base)
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    program.windows["Main"] = WindowPlace{5, 6, 800, 600, false};
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(check.load(file));
+    CHECK(check.windows.count("PluginSpectrum") && check.windows["PluginSpectrum"].w == 700);
+    CHECK(check.windows["Spectrum"].w == 900 && check.windows["Main"].w == 800);
+    CHECK(program.windows.count("PluginSpectrum") == 1); // the program's copy took it over
 
     // the plug-in renames its preset and deletes its colour; the program meanwhile deletes Club
     CHECK(plugin.rename("Plug", "Plug 2", err));

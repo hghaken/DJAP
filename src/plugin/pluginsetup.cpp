@@ -56,10 +56,10 @@ void SetupWindow::show(HWND owner) {
                                 r.right - r.left, r.bottom - r.top, owner, nullptr, g_module, this);
         if (!hwnd_) return;
         create();
-        placement::centreOn(hwnd_, owner);
+        placement::remember(hwnd_, "Setup", owner); // "PluginSetup": the program's Setup keeps its own place
     }
     refresh();
-    ShowWindow(hwnd_, SW_SHOWNORMAL);
+    ShowWindow(hwnd_, placement::showCommand(hwnd_));
     SetForegroundWindow(hwnd_);
 }
 
