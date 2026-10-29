@@ -41,6 +41,9 @@ and the standards / papers it cites (technical manual, chapter 21).
 ```
 deck input (stereo, pre-fader preferred - see 7)
  -> leveller gain + input gain       slow loudness control; its detector sits after width (below)
+ -> noise reduction (4 bands or 1)   downward expander, threshold relative to the target (client, 2026-10-29); off in
+                                     every shipped preset; before the colour, so a treble boost does not lift the hiss
+                                     into its detector
  -> colour (tone, auto tone,         the deck's colour preset (3.3): tone shelves / bells, the auto-tone correction,
     loudness, sub bass)              the loudness contour, the sub-bass generator; before the detector, so the
                                      leveller keeps the loudness on target and only the balance changes
@@ -89,6 +92,13 @@ analysis.
 | | release | s per 10 dB | **1.5** (6.7 dB/s; Gentle, DAB+: 5) | 0.2..20 (never slower than the speed) | up when the gain is > 4 dB under what the 3 s level needs and the music is not falling (a soft intro, a quiet verse after a loud chorus), until within 1 dB - the counterpart of attack; and the catch-up after a pause upwards. Until 2026-10-27 a fixed "fast up" (4 x speed up to 3 dB/s, or 2 x speed if more: Gentle and DAB+ 2, the others 3, FM Station 4 dB/s) and a catch-up switch at 20 dB/s; measured on copies of 18 songs with soft intros (Loud): the time until on level summed 322 -> 249 s, the seconds more than 6 LU too soft 601 -> 497, the steepest rise 3 -> 6.7 dB/s, no song further over the target (+3.6 LU at most, as before); 1 s per 10 dB took 234 s at 10 dB/s. Gentle and DAB+ keep 2 dB/s (3 brought quiet song endings up too eagerly there) |
 | | catch-up | - | always | - | after >= 2 s of silence (deck stopped) the gain moves to the level of the 0.4 s detector - up at the release, down at the attack speed (was a switch at 20 dB/s both ways: down at Gentle's release played a loud song 2 LU too loud, render check); it goes on while that level rose > 1 dB in the last second (a track fading in), at most 15 s, then the 3 s detector starts from the level reached (measured: 12 s fade-in from -50 dB to -7 LUFS ended 5.1 LU too loud without, 0.04 LU with) |
 | | freeze | switch | off | - | **DJ**: holds the gain while the DJ works with EQ kills / filters. In the DSP core (`DeckControl::freeze`, for a later plug-in); the program has no button for it since 2026-10-25 (client: the F button "is not needed") |
+| Noise reduction | on | switch | **off** (every shipped preset) | - | client, 2026-10-29: "a noise canceller, adjustable". Off by default: music has no noise to take away, and a threshold set for one record dulls the quiet parts of another; existing renders and presets stay as they were |
+| | bands | count | 4 | 1 or 4 | client, 2026-10-29: "the three frequencies adjustable too" - four bands, three splits. Rumble / hum, low, mid and hiss each close on their own, so music in one band does not hold the hiss open in another; 1 = one gate for the whole sound (pauses between songs) |
+| | threshold | LU re T | -45 | -80..-20 | relative to the target like the compressor's and the de-esser's: after the leveller every song sits there. -45 is about -59 LUFS at Medium - under the quiet passages of music (the leveller's hold level is 10 LU under T) and above the hiss of most old recordings and vinyl transfers (-60..-70 dBFS) |
+| | depth | dB | 12 | 0..40 | the largest reduction: 12 dB takes hiss out of hearing in a pause without the "hole" of a hard gate; up to 40 for a gate |
+| | ratio | 1:x | 2 | 1.5..10 | downward expansion under the threshold, (x - 1) dB per dB, 6 dB soft knee; 2 is gentle (the band fades as the music fades), 10 nearly a gate |
+| | attack / hold / release | ms | 2 / 50 / 250 | 0.5..50 / 0..500 / 20..2000 | a band opens within a few ms (no look-ahead: the first transient after a pause passes nearly whole); the hold keeps it open between notes (no chatter); the release lets a note's tail fade as it would |
+| | splits | Hz | 80 / 1000 / 5000 | 20..16000, rising, >= 1.25x apart | rumble and hum under 80 Hz, hiss above 5 kHz (where tape and vinyl noise is heard); LR4 with phase-aligning all-passes (flat sum) like the density bank; a change runs in a spare bank and crossfades (20 ms). Cost with 4 bands about 0.16 % of one core per deck (`deck_test --cpu`). No noise-floor estimate and no signal-to-noise ratio: the user's threshold decides (technical manual 4a) |
 | Compressor | threshold | LU re T | +2 | -10..+15 | 10.3 / 9.7 |
 | | ratio / knee | - / dB | 2.0 / 6 | 1..8 / 0..12 | 10.3 |
 | | attack / release | ms | 10 / 200 | 1..100 / 20..1000 | 10.3, measured step response |
@@ -418,13 +428,14 @@ plug-in - client: "now that these are in the big spectrum window, they can go he
 colour or the preset, so every deck using it: Bass level (-12..+12 dB, the colour's bass shelf), Bass enhancer
 (0..100 %; 0 switches the enhancer off, more switches it on), Bass width (0..100 %, 0 = mono bass; switches the
 width stage on), Bass frequency (40..250 Hz: sets the colour's bass corner and, within their ranges, the preset's
-enhancer frequency and width split together). Heard while dragging, saved when let go. The nine stage switches are in
+enhancer frequency and width split together). Heard while dragging, saved when let go. The stage switches (ten since the noise reduction) are in
 the preset window (client, 2026-10-25; they were on the strips). The meter panel (client, 2026-10-25: "only IN L/R and OUT L/R, a dB and a LUFS scale; the R button is not
 needed"): LED bars In L / R (sample peak, dBFS, after the preset's input gain - client: "the input slider should move the In bar"; shown by adding the gain to the measurement, which stays the deck's raw input for the offline report) and Out L / R (true peak, dBTP), segments of 5 px lit up to the
 value, unlit ones dark in their zone's colour (input: amber from -6, red from -1 dBFS; output: amber in the last
 3 dB under the ceiling, red over it) and a peak-hold LED for 1.5 s; across each pair the momentary loudness (white)
 and the target (yellow); one axis -40..+3 with a dB scale on the left and a LUFS scale on the right; the gain of each stage (a click on a row opens the preset window on that stage's tab, a click on the In bars the General tab, on the Out bars the Limiter tab - client 2026-10-25; leveller up / down over
-its range, compressor / de-esser / clipper / limiter reduction 0..12 dB; the density row was removed 2026-10-26 - the density
+its range, compressor / de-esser / clipper / limiter reduction 0..12 dB, the noise reduction's most reduced band
+0..24 dB (a row after the leveller, 2026-10-29: the panel one row taller); the density row was removed 2026-10-26 - the density
 bands are lines in the spectrum) and the
 spectrum; the two lines of numbers (M, S, I, LRA, max true peak, state) were removed at the client's request
 (2026-10-25) to give the spectrum room. No menu bar (2026-10-25): a right-click opens Setup / Shutdown.
@@ -469,18 +480,19 @@ The meter panel's spectrum: 4096-point FFT, Hann window, a frame every 2048 samp
 than the points, below about 300 Hz). A sine of amplitude A reads 20 log10(A) dB (on a bin; up to 1.42 dB less
 between bins). The Graphs button left of Bypass in each strip (client, 2026-10-25; it replaced the View menu) opens a window with a row per deck - first the signal chain (client, 2026-10-25:
 "for every step a bar, to see whether a step does anything; begin and end with an input / output volume bar"): a
-row per step in chain order - Input, Leveller (with the input gain), Colour, Compressor, Density, Bass enhancer,
+row per step in chain order - Input, Leveller (with the input gain), Noise, Colour, Compressor, Density, Bass enhancer,
 Exciter, De-esser, Stereo width, Soft clipper, Limiter, Output gain, Output - each with a lamp (lit at 0.1 dB or
 more; turquoise up, orange down) and a bar against a scale, no numbers (client: "scale on the bars", then "remove
 the numbers"); "off" in the bar of a step that is off. The scale (-12 -6 -1 0 +1 +6 +12 dB; -40..0 for input and
 output) goes under every bar when the rows have room, else once above and once below the panel; numbers that would
 touch are left out. A click on a row (hand pointer) opens that step's settings (client, 2026-10-25): the deck's preset
-window on the stage's tab (Input, Output gain, Output: General), the colour window for Colour. Input and output show
+window on the stage's tab (Input, Output gain, Output: General), the colour window for Colour. A Noise row after the
+Leveller (2026-10-29) shows the noise reduction's most reduced band. Input and output show
 the momentary loudness as a bar (-40..0 LUFS) and the peak as a white mark
 on the same axis (input: sample peak dBFS, output: true peak dBTP, both held and falling 20 dB/s); the output's
-target in yellow. Compressor, de-esser, clipper and limiter show
+target in yellow. Noise reduction, compressor, de-esser, clipper and limiter show
 their own gain reduction (their level change would hide it: make-up, the clipper's drive); the other steps the
-level after the step against the level before it (`MeterRecord::chain`, sums of L^2 + R^2 at 12 points of the chain
+level after the step against the level before it (`MeterRecord::chain`, sums of L^2 + R^2 at 13 points of the chain
 per 10 ms record, averaged over 0.4 s in the GUI), on a square-root scale (0.5 dB visible, 12 dB full). Cost: about
 +0.06 % of one core for two decks (`deck_test --cpu`: 3.09 -> 3.15 %). Then the compressor's static curve for the
 preset (output against input, LU to the target, 1:1 dashed) with the detector's level now as a white dot and its last 3 s as amber dots fading with age (client: "the dots in
@@ -721,6 +733,7 @@ preset (`[Preset X]`) and per colour (`[Colour X]`), readable and editable by ha
 | Windows volume | volume 0.5 from the start; input / 4 with an input factor of 4; mute and unmute while playing | half of every sample, bit-exact; the original output, bit-exact; no gain step > 0.01, silent after 0.3 s, bit-exact after unmute |
 | Neutral | -6 dBFS sine through a neutral chain | unchanged (< 0.01 dB) |
 | Density | band-sum flatness for every band count 1..7; tone two bands away | 0.01 dB; 0.001 dB |
+| Noise reduction (`noise_test`) | band sum while open (depth 0; depth 12 with the bands a tone does not reach closed); one band open; pink noise 19 dB under the threshold, depth 12 / 30, 4 bands and 1, and the meter; a 500 Hz tone at -20 dBFS with hiss; a tone stepping -20 -> -80 -> -20 dBFS; each of its values changed on a 1 kHz tone it turns down part of the way; the split rule, off in every shipped preset | 0.001 dB; 0.05 dB (the tone's leak into a closed band); bit-exact; the depth within 0.3 dB, the meter within 0.1; tone within 0.05 dB, hiss above 8 kHz down > 18 dB with 4 bands, unchanged with 1; open through the detector's fall and the hold, 63 % of the depth one release time later, open again within 10 ms; click ratio < 1.5 (measured 1.00); rising, 1.25x apart |
 | Band count | switch 3 -> 7 -> 1 bands on a sine while playing | no step larger than the signal's own |
 | Presets | all 8 shipped presets render a test playlist; reset restores shipped values; own presets survive a restart | output I within 1 LU of each preset's target at -18 and -9 LUFS in (Gentle also -6); TP <= ceiling; Gentle -> Very Loud rising loudness; FM Station and Web Stream / DAB+ within 1 LU of target + output gain, true peak <= their ceiling |
 | Width | left tone at 200 % / 0 %; mono stays mono | L 1.5 / R 0.5; 0.5 / 0.5 |
@@ -752,7 +765,7 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
 - **Processor and controller in one object** (the SDK's single-component effect): the window reads the deck's
   meter and tap rings directly (`DeckMonitor`, `src/core/monitor.*`, shared with the program). Such a plug-in
   cannot be split over two computers by a host; DJ software does not do that.
-- **Parameters**: the 72 chain values, each with the program's slider positions as its host steps
+- **Parameters**: the 83 chain values (72 until the noise reduction, 2026-10-29), each with the program's slider positions as its host steps
   (`paramPositions` / `paramValueAt` / `paramPositionOf` in `params.*`: the same log scale for times and
   frequencies, "auto" / "off" at the left end), grouped by stage (14 units). Ids are a hash of the ini key (`pluginids.h`), so
   values can be added or reordered without breaking a host's project. Four more: the preset list and the colour list
@@ -824,7 +837,7 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   (`restartreplace`), never by closing that software.
 - **Tests**: `plugin_test` loads the built bundle like a host (the SDK's hosting classes) - bit-exact against a
   `DeckProcessor` with the same values for 8 s at block sizes 512 / 333 / 1024 / 64 / 1 with a target change
-  half-way; a state stored and loaded into a new instance (72 of 72 values, bit-exact output); Bypass = the input
+  half-way; a state stored and loaded into a new instance (83 of 83 values, bit-exact output); Bypass = the input
   delayed by the look-ahead, bit-exact; the latency at 1.5 and 3.0 ms. The SDK's validator: 47 tests, and 537 in
   its extended mode, all passed. The window was driven in the SDK's editor host (no audio): preset, Bypass, a slider;
   the two Edit buttons and a click on the meter's density row open the preset window (on its Density tab) and the

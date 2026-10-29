@@ -50,7 +50,7 @@ public:
 
 private:
     // compressor, loudness, gain, goniometer, correlation, width in, width out, scope; then a row per step of the chain
-    static constexpr int kGraphs = 8, kChainRows = 13, kParts = kGraphs + kChainRows;
+    static constexpr int kGraphs = 8, kChainRows = 14, kParts = kGraphs + kChainRows;
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
     void paint(HDC target);

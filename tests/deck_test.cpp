@@ -498,6 +498,15 @@ void noAllocations() {
         loadDefaultSplits(v, bands);
         cfgs.push_back(makeDeckConfig(v, DeckControl(), fs));
     }
+    // the noise reduction on, its band count and splits changed while it runs (the spare bank's crossfade)
+    for (int k = 0; k < 3; ++k) {
+        PresetValues v = shippedPresetValues(2);
+        v[pNoiseOn] = 1;
+        v[pNoiseThreshold] = -20;
+        v[pNoiseBands] = k == 1 ? 1 : 4;
+        v[pNoiseSplit2] = k == 2 ? 2000 : 1000;
+        cfgs.push_back(makeDeckConfig(v, DeckControl(), fs));
+    }
     DeckControl c;
     c.lookMs = 0.5;
     cfgs.push_back(makeDeckConfig(shippedPresetValues(4), c, fs));
@@ -642,17 +651,26 @@ void clicks() {
     // change then turns the leveller round at the change - a corner on a 60 Hz tone, not a click
     PresetValues autoBase = colourBase;
     autoBase[pAutoAmount] = 50;
+    // the noise reduction's values with the stage on: the tone (about the working level) keeps its bands open, so
+    // this checks the switch, the band count and the splits (the spare bank's crossfade); its gains moving on a tone
+    // under the threshold are checked by noise_test
+    PresetValues noiseBase = base;
+    noiseBase[pNoiseOn] = 1;
+    auto isNoiseParam = [](int p) { return p >= pNoiseOn && p <= pNoiseSplit3; };
     const DeckControl ctl;
     double worst = 0.0;
     int worstParam = -1;
     for (int p = 0; p < kParamCount; ++p) {
         const PresetValues& b = p == pAutoAmount || p == pAutoMax || p == pAutoTime ? autoBase
                                 : isColourParam(p)                                     ? colourBase
+                                : isNoiseParam(p)                                      ? noiseBase
                                                                                         : base;
         PresetValues v = b;
         v[static_cast<size_t>(p)] = changedValue(p, b[static_cast<size_t>(p)]);
         if (p == pDensBands) loadDefaultSplits(v, static_cast<int>(std::lround(v[pDensBands])));
         if (p >= pDensSplit1 && p <= pDensSplit6) enforceSplits(v, p - pDensSplit1);
+        if (p == pNoiseBands) v[pNoiseBands] = 1; // 1 or 4 only (30 % of the range would round back to 4)
+        if (p >= pNoiseSplit1 && p <= pNoiseSplit3) enforceNoiseSplits(v, p - pNoiseSplit1);
         const auto& t = tone(toneFor(p));
         const double ratio = clickRatio(b, ctl, {{frames(3.0), v, ctl}}, 3.0, 4.0, t.first, t.second);
         std::printf("   %-14s %-24s %8.2f -> %8.2f  (%5.0f Hz): %.2f\n", paramInfo(p).stage, paramInfo(p).name,
@@ -914,7 +932,7 @@ void cpuStages() {
     const PresetValues vl = shippedPresetValues(4);
     const double all = measure(vl, 1.5);
     std::printf("   all stages %.3f %%\n", all);
-    const Param sw[] = {pLevOn, pCompOn, pDensOn, pBassOn, pExcOn, pDessOn, pWidthOn, pClipOn, pLimOn};
+    const Param sw[] = {pLevOn, pNoiseOn, pCompOn, pDensOn, pBassOn, pExcOn, pDessOn, pWidthOn, pClipOn, pLimOn};
     for (Param p : sw) {
         PresetValues v = vl;
         v[p] = 1 - v[p];
@@ -1050,14 +1068,15 @@ void chainMeters() {
     {
         const PresetValues v = shippedPresetValues(4);
         const ChainRun run = chainRun(v, 1.5, l, r, frames(6));
-        const Param onOf[kStageCount] = {pLevOn, pCompOn, pDensOn, pBassOn, pExcOn, pDessOn, pWidthOn, pClipOn, pLimOn};
+        const Param onOf[kStageCount] = {pLevOn,  pNoiseOn, pCompOn, pDensOn, pBassOn,
+                                         pExcOn,  pDessOn,  pWidthOn, pClipOn, pLimOn};
         uint16_t want = 0;
         for (int s = 0; s < kStageCount; ++s)
             if (v[onOf[s]] >= 0.5) want = static_cast<uint16_t>(want | 1u << s);
         if (makeDeckConfig(v, DeckControl(), fs).colour.any()) want = static_cast<uint16_t>(want | 1u << kChainColourBit);
         std::printf("   Very Loud, 6-12 s, change at each step (dB):");
-        const char* names[kChainTaps] = {"in",      "leveller", "colour",  "comp",     "density", "bass",
-                                         "exciter", "de-ess",   "width",   "clipper",  "limiter", "out"};
+        const char* names[kChainTaps] = {"in",     "leveller", "noise",   "colour",  "comp",    "density", "bass",
+                                         "exciter", "de-ess",  "width",   "clipper", "limiter", "out"};
         for (int k = 1; k < kChainTaps; ++k)
             std::printf(" %s %+.2f", names[k], 10.0 * std::log10(run.e[k] / run.e[k - 1]));
         std::printf("\n   stages running %#x (preset %#x); last record: leveller %.3f dB, points %.3f dB; output "

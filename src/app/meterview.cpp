@@ -24,10 +24,10 @@ const COLORREF kBack = RGB(28, 30, 33), kWell = RGB(44, 47, 52), kText = RGB(214
 constexpr double kSpecTop = 0.0, kSpecBottom = -90.0; // spectrum scale (dB)
 
 constexpr double kTop = 3.0, kBottom = -40.0; // vertical bar scale (LUFS / dBTP)
-constexpr int kShownRows = 5;                  // stage rows drawn: the density row's place went to the spectrum
+constexpr int kShownRows = kMeterRows - 1;     // stage rows drawn: the density row's place went to the spectrum
 
-// Tooltip parts: the four bars, the six stage rows, the spectrum.
-enum TipPart { tInL, tInR, tOutL, tOutR, tRow0, tSpectrum = tRow0 + 6, kTipParts };
+// Tooltip parts: the four bars, the seven stage rows, the spectrum.
+enum TipPart { tInL, tInR, tOutL, tOutR, tRow0, tSpectrum = tRow0 + kMeterRows, kTipParts };
 const wchar_t* const kTips[kTipParts] = {
     L"Input, left channel, after the loudness preset's input gain (what enters the processing): its sample peak (dBFS, held, "
     L"falling 20 dB/s) as LEDs - amber from -6 dBFS, red from "
@@ -46,6 +46,8 @@ const wchar_t* const kTips[kTipParts] = {
     L"Leveller gain now: blue to the right = lifted, orange to the left = turned down; the ends of the bar are the "
     L"loudness preset's leveller range. A grey name: the stage is off in the loudness preset, or the deck is "
     L"bypassed.",
+    L"Noise reduction now: how far the most turned-down band is down (scale 0-24 dB) - hiss, hum or rumble under the "
+    L"loudness preset's noise threshold. Mostly empty while music plays; it fills in pauses and quiet passages.",
     L"Compressor gain reduction now (scale 0-12 dB, a tick every 3 dB).",
     L"",
     L"De-esser gain reduction now (scale 0-12 dB): how much sharp 's' sounds are turned down.",
@@ -247,12 +249,17 @@ void paint(HWND hwnd, HDC target, View& v) {
     struct Row {
         const char* name;
         int stage;
-        int kind; // 0 = reduction 0..12 dB, 1 = leveller +-range, 2 = density bands
+        int kind; // 0 = reduction 0..full dB, 1 = leveller +-range, 2 = density bands
         double value;
+        int full = 12; // a reduction row's scale
     };
-    const Row rows[] = {{"Leveller", sLeveller, 1, m.levellerDb}, {"Compressor", sCompressor, 0, m.compressorDb},
-                        {"Density", sDensity, 2, 0.0},           {"De-esser", sDeEsser, 0, m.deEsserDb},
-                        {"Clipper", sClipper, 0, m.clipperDb},    {"Limiter", sLimiter, 0, m.limiterDb}};
+    const Row rows[kMeterRows] = {{"Leveller", sLeveller, 1, m.levellerDb},
+                                  {"Noise", sNoise, 0, m.noiseMaxDb(), 24}, // its depth goes to 40 dB
+                                  {"Compressor", sCompressor, 0, m.compressorDb},
+                                  {"Density", sDensity, 2, 0.0},
+                                  {"De-esser", sDeEsser, 0, m.deEsserDb},
+                                  {"Clipper", sClipper, 0, m.clipperDb},
+                                  {"Limiter", sLimiter, 0, m.limiterDb}};
     const int rowsTop = margin, rowsBottom = H - bottomH - px(4);
     // each row: the bar, its scale under it (small font); the spectrum takes the rest of the height
     SelectObject(dc, v.small);
@@ -269,7 +276,7 @@ void paint(HWND hwnd, HDC target, View& v) {
         return std::string(b);
     };
     if (fullR - barL > px(40) && rowH > th) {
-        for (int i = 0, shown = 0; i < 6; ++i) {
+        for (int i = 0, shown = 0; i < kMeterRows; ++i) {
             if (rows[i].kind == 2) continue; // density: its bands are drawn in the spectrum
             const Row& r = rows[i];
             const int barR = fullR;
@@ -280,16 +287,17 @@ void paint(HWND hwnd, HDC target, View& v) {
             text(dc, gx, yc - th / 2, r.name, on ? kText : kDim);
             fill(dc, barL, bt, barR, bb, kWell);
             SelectObject(dc, v.small);
-            if (r.kind == 0) { // reduction 0 .. 12 dB
-                const double red = live && on ? std::min(12.0, std::max(0.0, r.value)) : 0.0;
-                fill(dc, barL, bt, barL + static_cast<int>((barR - barL) * red / 12.0), bb, kOrange);
+            if (r.kind == 0) { // reduction 0 .. full dB, a tick every quarter
+                const double full = r.full;
+                const double red = live && on ? std::min(full, std::max(0.0, r.value)) : 0.0;
+                fill(dc, barL, bt, barL + static_cast<int>((barR - barL) * red / full), bb, kOrange);
                 text(dc, barL, ly, "0", kDim);
-                for (int t = 3; t < 12; t += 3) {
-                    const int x = barL + (barR - barL) * t / 12;
+                for (int t = r.full / 4; t < r.full; t += r.full / 4) {
+                    const int x = barL + (barR - barL) * t / r.full;
                     fill(dc, x, bb, x + 1, bb + px(2), kDim);
                     text(dc, x, ly, "-" + std::to_string(t), kDim, TA_CENTER);
                 }
-                text(dc, barR, ly, "-12 dB", kDim, TA_RIGHT);
+                text(dc, barR, ly, "-" + std::to_string(r.full) + " dB", kDim, TA_RIGHT);
             } else if (r.kind == 1) { // leveller -range .. +range
                 const double range = std::max(1.0, d.levRange);
                 const int mid = (barL + barR) / 2;
@@ -362,7 +370,7 @@ void paint(HWND hwnd, HDC target, View& v) {
     DeleteDC(dc);
 }
 
-// What a click at pt opens (meterStage's numbering): a stage row 0..5, the In bars 6, the Out bars 7, the spectrum 8;
+// What a click at pt opens (meterStage's numbering): a stage row 0..6, the In bars 7, the Out bars 8, the spectrum 9;
 // -1 = nothing.
 // The parts as last painted (their tooltip rectangles).
 int clickTarget(const View& v, POINT pt) {
@@ -442,7 +450,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 } // namespace
 
 int meterViewMinHeight(UINT dpi) {
-    // paint()'s layout: the five stage rows at their full height, then a spectrum whose dB labels (every 12 dB of its
+    // paint()'s layout: the six stage rows at their full height, then a spectrum whose dB labels (every 12 dB of its
     // 96) do not touch each other, its title row above and the frequencies below
     NONCLIENTMETRICSW ncm{};
     ncm.cbSize = sizeof ncm;
@@ -468,8 +476,8 @@ int meterViewMinHeight(UINT dpi) {
 }
 
 const char* meterStage(int target) {
-    static const char* const tabs[kMeterTargets] = {"Leveller", "Compressor", "Density", "De-esser", "Soft clipper",
-                                                    "Limiter",  "General",    "Limiter", "Density"};
+    static const char* const tabs[kMeterTargets] = {"Leveller", "Noise",   "Compressor", "Density", "De-esser",
+                                                    "Soft clipper", "Limiter", "General", "Limiter", "Density"};
     return target >= 0 && target < kMeterTargets ? tabs[target] : "General";
 }
 

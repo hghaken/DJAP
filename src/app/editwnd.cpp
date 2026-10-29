@@ -77,6 +77,7 @@ bool visible(int p, const PresetValues& v, PresetKind kind) {
     const int bands = static_cast<int>(v[pDensBands]);
     if (p >= pDensSplit1 && p <= pDensSplit6) return p - pDensSplit1 < bands - 1;
     if (p >= pDensGain1 && p <= pDensGain7) return p - pDensGain1 < bands;
+    if (p >= pNoiseSplit1 && p <= pNoiseSplit3) return v[pNoiseBands] > 1.0; // wide-band: no splits
     return true;
 }
 
@@ -124,6 +125,14 @@ const StageSound kStageSound[] = {
      L"how fast a soft intro, a quiet song after a loud one or a new song after a pause comes up - shorter is sooner "
      L"but easier to hear, like a quick turn of the knob. Hold below keeps fades and pauses from being pumped up; a "
      L"quiet part that stays (a soft intro or verse, a breakdown) is levelled after Quiet wait."},
+    {"Noise",
+     L"Takes hiss, hum and rumble away where the music does not cover them: in pauses, fades and quiet passages. Each "
+     L"band (rumble / hum, low, mid, hiss - set by the three splits) is turned down when its level falls under the "
+     L"threshold; music above it passes untouched. A higher threshold takes more noise but can also dull quiet music "
+     L"(the hiss band closes first); a lower one only works in near silence. Depth is how far a band goes down, Ratio "
+     L"how hard (2 = gentle, 10 = nearly a gate). A short attack keeps the first beat after a pause; hold and release "
+     L"keep a band from chattering between notes and let a note's tail fade naturally. 1 band = one gate for the "
+     L"whole sound. Off in every shipped loudness preset: switch it on for old, noisy recordings."},
     {"Compressor",
      L"Evens out the loud parts within a song. A lower threshold and a higher ratio make the sound more even and "
      L"more 'in your face'; too much flattens the dynamics and sounds tired. A short attack catches drum hits (less "
@@ -962,10 +971,11 @@ bool EditWindow::setValue(int param, double value, bool save) {
         if (static_cast<int>(v[pDensBands]) != oldBands) loadDefaultSplits(v, static_cast<int>(v[pDensBands]));
     }
     if (param >= pDensSplit1 && param <= pDensSplit6) enforceSplits(v, param - pDensSplit1);
+    if (param >= pNoiseSplit1 && param <= pNoiseSplit3) enforceNoiseSplits(v, param - pNoiseSplit1);
     normaliseValues(v);
     onChange_(false, save);
     updateAbout(); // "some values are changed"
-    if (param == pDensBands) showRows(); // split and band-gain rows appear or go
+    if (param == pDensBands || param == pNoiseBands) showRows(); // split and band-gain rows appear or go
     if (isStageSwitch(param)) fillTabs();
     return true;
 }
@@ -994,7 +1004,7 @@ void EditWindow::slider(HWND bar, int code) {
     const Preset* now = settings_.find(current_, kind_);
     if (!now) return; // gone meanwhile (a save merged another writer's deletion)
     const double stored = now->values[static_cast<size_t>(i)];
-    if (i >= pDensSplit1 && i <= pDensSplit6) { // a split may push its neighbours
+    if ((i >= pDensSplit1 && i <= pDensSplit6) || (i >= pNoiseSplit1 && i <= pNoiseSplit3)) { // a split may push its neighbours
         for (size_t k = 0; k < rows_.size(); ++k) updateRow(k, static_cast<int>(k) != r || stored != v);
     } else {
         updateRow(static_cast<size_t>(r), stored != v);

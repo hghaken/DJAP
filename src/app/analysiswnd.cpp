@@ -65,14 +65,17 @@ struct ChainRow {
     int from, to;      // change rows: the points of the chain before and after the step
     const wchar_t* tip;
 };
-const ChainRow kChain[13] = {
+const ChainRow kChain[14] = { // AnalysisWindow::kChainRows
     {L"Input", RowKind::level, -1, 0, 0,
      L"Input: the deck's loudness as it enters the processing - after the loudness preset's input gain (blue bar: momentary, "
      L"400 ms, LUFS) - and its peak (white mark: sample peak in dBFS, held and falling 20 dB/s). Scale -40 .. 0."},
     {L"Leveller", RowKind::change, sLeveller, ctInput, ctLeveller,
      L"Leveller: how much the slow automatic gain turns the song up or down now, in dB. Turquoise = louder, orange = "
      L"quieter."},
-    {L"Colour", RowKind::change, kChainColourBit, ctLeveller, ctColour,
+    {L"Noise", RowKind::reduction, sNoise, 0, 0,
+     L"Noise reduction: how far its most turned-down band is down now (dB) - hiss, hum or rumble under the loudness "
+     L"preset's noise threshold. Mostly nothing while music plays; bars in pauses and quiet passages."},
+    {L"Colour", RowKind::change, kChainColourBit, ctNoise, ctColour,
      L"Colour: what the tone EQ, auto tone, sub bass and contour of the deck's colour do to the level (dB, "
      L"over 0.4 s). 'off' = a neutral colour."},
     {L"Compressor", RowKind::reduction, sCompressor, 0, 0,
@@ -104,10 +107,10 @@ const ChainRow kChain[13] = {
 };
 
 // The settings tab of each chain row (the preset window's stage; the colour row opens the colour window).
-const char* const kChainTab[13] = {"General",      "Leveller",    "Tone",    "Compressor",   "Density",
-                                   "Bass enhancer", "Exciter",     "De-esser", "Stereo width", "Soft clipper",
-                                   "Limiter",       "General",     "General"};
-constexpr int kColourRow = 2;
+const char* const kChainTab[14] = {
+    "General", "Leveller",     "Noise",        "Tone",    "Compressor", "Density", "Bass enhancer",
+    "Exciter", "De-esser",     "Stereo width", "Soft clipper", "Limiter", "General", "General"};
+constexpr int kColourRow = 3;
 
 void fill(HDC dc, const RECT& r, COLORREF c) {
     HBRUSH b = CreateSolidBrush(c);
@@ -834,7 +837,8 @@ void AnalysisWindow::paintChain(HDC dc, int d, const RECT& p, bool live) {
             if (known) val = 10.0 * std::log10(met.chain[row.to] / met.chain[row.from]) - (i == 1 ? inGain : 0.0);
         } else {
             const double red = row.bit == sCompressor ? met.compressorDb : row.bit == sDeEsser ? met.deEsserDb
-                               : row.bit == sClipper  ? met.clipperDb   : met.limiterDb;
+                               : row.bit == sClipper  ? met.clipperDb   : row.bit == sNoise ? met.noiseMaxDb()
+                                                                                             : met.limiterDb;
             val = -red;
         }
         const bool acting = known && on && row.kind != RowKind::level && std::fabs(val) >= 0.1;

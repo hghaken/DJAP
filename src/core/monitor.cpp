@@ -16,7 +16,7 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
     MeterRecord recs[64];
     int n, total = 0;
     float tp[2] = {0, 0}, pin[2] = {0, 0};
-    double comp = 0, dess = 0, clip = 0, lim = 0;
+    double comp = 0, dess = 0, clip = 0, lim = 0, noise[kNoiseBands] = {};
     while ((n = deck.meters().pop(recs, 64)) > 0) {
         for (int i = 0; i < n; ++i) {
             const MeterRecord& r = recs[i];
@@ -30,6 +30,7 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
             dess = std::max(dess, static_cast<double>(r.deEsserDb));
             clip = std::max(clip, static_cast<double>(r.clipperDb));
             lim = std::max(lim, static_cast<double>(r.limiterDb));
+            for (int b = 0; b < kNoiseBands; ++b) noise[b] = std::max(noise[b], static_cast<double>(r.noiseDb[b]));
             m.levellerDb = r.levellerDb;
             m.compressorIn = r.compressorIn;
             m.bands = r.bands;
@@ -53,6 +54,7 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
         m.deEsserDb = dess;
         m.clipperDb = clip;
         m.limiterDb = lim;
+        for (int b = 0; b < kNoiseBands; ++b) m.noiseDb[b] = noise[b];
     }
     // true peak: the newest value, falling 20 dB/s when lower
     for (int c = 0; c < 2; ++c) {
@@ -74,6 +76,7 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
         m.levellerDb = m.compressorDb = m.deEsserDb = m.clipperDb = m.limiterDb = 0;
         m.compressorIn = kFloorDb;
         for (double& x : m.densityDb) x = 0;
+        for (double& x : m.noiseDb) x = 0;
         for (double& x : m.chain) x = 0;
     }
     drainTaps(deck, fs);

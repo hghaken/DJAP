@@ -18,7 +18,7 @@ DJAP's own, with its measurements in this manual and in `docs/design.md`.
 1. [Overview](#1-overview)
 2. [Building blocks](#2-building-blocks)
 3. [Measuring loudness](#3-measuring-loudness)
-4. [Leveller](#4-leveller)
+4. [Leveller](#4-leveller); [4a. Noise reduction](#4a-noise-reduction)
 5. [Colour](#5-colour)
 6. [Compressor](#6-compressor)
 7. [Density (multiband)](#7-density-multiband)
@@ -50,7 +50,8 @@ input (stereo)
  -> clean-up: non-finite or absurd samples (|x| > 1e6) -> 0; the input factor of the volume follower (14.4)
  -> [input meter: K-weighted energy, sample peak]            [dry path: the input delayed by the look-ahead]
  -> leveller gain x input gain                               (4)
- -> colour: sub bass, tone, auto tone, contour       (5)
+ -> noise reduction, 4 bands or 1                            (4a)
+ -> colour: sub bass, tone, auto tone, contour               (5)
  -> compressor                                               (6)
  -> density, 1-7 bands                                       (7)
  -> bass enhancer -> exciter -> de-esser                     (8-10)
@@ -100,7 +101,7 @@ thread (16.2). There:
 | bypass | a 20 ms crossfade between the processed and the dry path |
 | input and output gain, compressor make-up, width, bass width, bass enhancer amount, clipper drive | a one-pole glide with a 5 ms time constant |
 | filter frequencies of the compressor side chain, exciter and de-esser | new coefficients, filter memory kept |
-| density band count or splits; the width stage's bass split | a second, preallocated filter set is warmed up for 20 ms unheard (a filter started cold on running audio starts with a transient), then the output crossfades to it over 20 ms with a raised cosine (a linear fade's corner was audible on a 120 Hz tone) |
+| density or noise reduction band count or splits; the width stage's bass split | a second, preallocated filter set is warmed up for 20 ms unheard (a filter started cold on running audio starts with a transient), then the output crossfades to it over 20 ms with a raised cosine (a linear fade's corner was audible on a 120 Hz tone) |
 | bass enhancer frequency | the enhancer fades out (20 ms), takes the new filters, fades back in |
 | colour filters | coefficients ramped per sample from the old design to the new one (5.1) |
 | look-ahead | fade out 5 ms, change the delay, refill it, fade in 5 ms |
@@ -295,6 +296,45 @@ enough not to follow the phrases of a song.
 A leveller that measures before the compressor and density aims the *unprocessed* level at the target; the stages
 after it then change the loudness again, and the output misses the target by however much they compress or lift.
 Measuring after them (the handbook's "measure what you control") puts the output on target for every loudness preset.
+
+## 4a. Noise reduction
+
+A downward expander in four bands or one (`NoiseBank` in `src/core/deck.cpp`; client, 2026-10-29). It takes hiss,
+hum and rumble away where the music does not cover them - pauses, fades, quiet passages - and leaves music above its
+threshold untouched. It sits right after the leveller and input gain, so its threshold can be relative to the target
+like the compressor's and the de-esser's (the leveller has brought every song to the same level), and before the
+colour, so a treble boost does not lift the hiss into its detector. Off in every shipped loudness preset.
+
+1. **Bands.** Three LR4 splits (default 80 Hz, 1 kHz, 5 kHz: rumble and hum, low, mid, hiss), built like the density
+   bank (7.1): the two lower bands pass the all-passes of the splits above them, so the four bands sum to an all-pass.
+   Or one band: the gain on the whole signal, no filters.
+2. **Level.** Per band the mean square of both channels, averaged with a one-pole over one period of the band's lowest
+   frequency (at least 5 ms; the lowest band and the wide band from 30 Hz: 33 ms), on the loudness scale. A shorter
+   average let a bass tone's own ripple open and close its band; a detector that jumped to every 16-sample block's
+   peak read noise 6-8 dB too loud.
+3. **Gain computer.** With `u` = how far the level is under the threshold (target + Threshold setting, -80..-20 LU,
+   default -45) and the ratio 1:R, the reduction is `(R - 1) u`, with a 6 dB quadratic knee around the threshold as
+   the compressor's (6), at most Depth (0..40 dB, default 12).
+4. **Times.** The reduction is smoothed in dB once per control block: it shrinks (the band opens) with the Attack time
+   (0.5..50 ms, default 2); before it grows, the band waits Hold (0..500 ms, default 50) - started again by every
+   control block in which the band asks to open - and then follows the Release time (20..2000 ms, default 250). The
+   gain is ramped linearly across the next control block. A band that is open again within 0.0001 dB is set to
+   exactly 0 dB, so a wide band at rest passes the signal bit for bit.
+5. **Changes.** A new band count or new splits run in the spare bank with the 20 ms warm-up and 20 ms raised-cosine
+   crossfade of the density bank (7.4); the spare bank starts from the running bank's levels and reductions (from 1
+   band to 4 every band gets the wide band's, from 4 to 1 the wide band gets the least reduced band's), so the
+   crossfade does not swell.
+
+It has no noise-floor estimate and no signal-to-noise ratio: the user's fixed threshold decides, per band. Within
+about an octave of a split a loud band leaks into its neighbour through the LR4 slopes and holds it open (a 2 kHz
+tone at -20 dBFS reaches the band above 5 kHz at about -53), as music does: the hiss band closes under quiet music,
+not under a full mix. Its splits add their phase (1.5) only while the stage is on. Measured (`noise_test`): open, the
+four bands sum flat within 0.0001 dB from 40 Hz to 12 kHz; pink noise 19 dB under the threshold comes down by the
+depth (-11.98 dB at 12, -29.94 at 30); a 500 Hz tone at -20 dBFS with hiss under it keeps its level within 0.005 dB
+while the hiss above 8 kHz goes down 18.8 dB (one band: the tone holds it open, the hiss stays); after a drop the
+band waits the detector's fall and the hold, then reaches 63 % of the depth one release time later; no change of
+any value clicks (worst click ratio 1.00). Cost with four bands: about 0.16 % of one core per deck (`deck_test --cpu`);
+nothing while it is off.
 
 ## 5. Colour
 
@@ -666,13 +706,14 @@ DJAP follows that volume itself, when the option is on:
 
 Every 10 ms each deck writes a record into a lock-free ring (16.2): the K-weighted energy of input and output, the
 sample peak of the input, the true peak of the output (4x detector), the gain of every stage (leveller gain;
-compressor, de-esser and limiter reduction; density gain per band; how far the clipper reduced the deepest peak),
-and the energy at 12 points of the chain (`MeterRecord::chain`). The GUI reads the ring 20 times a second.
+compressor, de-esser and limiter reduction; the noise reduction's largest reduction per band; density gain per band;
+how far the clipper reduced the deepest peak), and the energy at 13 points of the chain (`MeterRecord::chain`). The GUI reads the ring 20 times a second.
 
 ### 15.2 Signal-chain bars
 
 For the analysis window the GUI averages the chain energies over 0.4 s and shows, per step, the level after the step
-against the level before it. The compressor, de-esser, clipper and limiter show their own gain reduction instead,
+against the level before it. The noise reduction (its most reduced band), compressor, de-esser, clipper and limiter
+show their own gain reduction instead,
 because their level change hides it (make-up gain, the clipper's drive). The bars use a square-root scale so 0.5 dB
 is visible and 12 dB fills the bar.
 
@@ -853,7 +894,7 @@ buffers.
 - **One object.** Processor and controller are one object (the SDK's single-component effect), so the plug-in's
   window reads the deck's meter and tap rings itself through the same `DeckMonitor` (`src/core/monitor.*`) the
   program uses: one reader per ring, as the rings require (16.2).
-- **Parameters.** The 72 values of the chain plus the loudness preset and colour lists, Bypass and the look-ahead. A value's
+- **Parameters.** The 83 values of the chain plus the loudness preset and colour lists, Bypass and the look-ahead. A value's
   normalised position (0..1) maps to the program's slider positions (`paramPositions`, `paramValueAt`,
   `paramPositionOf`): linear in the value's steps, logarithmic (300 positions) for times and frequencies spanning
   a factor of 8 or more. A parameter's id is an FNV-1a hash of its settings key plus 1000, so ids stay the same
@@ -931,6 +972,7 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Limiter | +12 dBFS single samples at several look-aheads; +6 dBFS sine; fs/4 square; +9.5 dBFS noise bursts | sample peak <= ceiling; true peak (16x reference) <= ceiling + 0.1 dB |
 | Bypass | processing off | the input delayed by the look-ahead, bit-exact |
 | Density | band-sum flatness for every band count 1..7 | 0.01 dB |
+| Noise reduction | band sum while open; pink noise under the threshold; a tone with hiss under it (4 bands and 1); hold / release / attack; every value changed on a tone it turns down; the split rule | 0.001 dB (one band bit-exact); the depth within 0.3 dB; the tone within 0.05 dB, the hiss down by about the depth; the times; no click; rising, 1.25x apart |
 | Band count | 3 -> 7 -> 1 bands on a sine while playing | no step larger than the signal's own |
 | Clicks | every parameter changed on a sine in its own band | no step larger than the signal's own |
 | Colour | every section against its analogue prototype; contour; neutral; auto tone; sub bass | 0.02 dB; +8.9 / +3.9 dB; bit-exact; reference - balance; 30 Hz -2.3 dB |
@@ -943,7 +985,7 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Inputs on another clock | simulated clocks -500..+500 ppm, late callbacks, pauses | no xruns, drift within 3 ppm, fill within 0.5 ms |
 | Graphs | FFT against a DFT; sines 50 Hz - 18 kHz; correlation and width of known signals | 1e-12; within a bin; +-0.05 / 1 % |
 | Offline | synthetic songs through every loudness preset, checked with an independent meter | integrated loudness within 1 LU of the target, true peak <= ceiling |
-| Plug-in | loaded like a host: against the deck at block sizes 1..1024 with a change; state stored and loaded; Bypass; latency; parameter ids; the SDK's validator | bit-exact; 72 of 72 values, bit-exact; bit-exact; 72 / 144 samples; unique; 47 + 537 tests passed |
+| Plug-in | loaded like a host: against the deck at block sizes 1..1024 with a change; state stored and loaded; Bypass; latency; parameter ids; the SDK's validator | bit-exact; 83 of 83 values, bit-exact; bit-exact; 72 / 144 samples; unique; 47 + 537 tests passed |
 | Slider positions | every value's positions: range, order, every shipped value back within a step | exact ends, rising, within a step (2 % on log scales) |
 
 The offline render check runs the real deck code on synthetic songs (fades, pauses, loud entries) and measures the

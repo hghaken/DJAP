@@ -37,6 +37,27 @@ const ParamInfo kInfo[kParamCount] = {
      "How long a steady quiet part (more than Hold below under the target: a soft intro) waits before it is "
      "levelled; short = a soft intro comes up sooner, long = fades and breakdowns are surer to be left alone"},
 
+    {"NoiseOn", "Noise", "On", "", 0, 1, 0, 1, 0, true,
+     "Noise reduction: a band whose level falls under the threshold is turned down (hiss, hum, rumble between and "
+     "under the music)"},
+    {"NoiseBands", "Noise", "Bands", "", 1, 4, 4, 3, 0, false,
+     "4 = each band (rumble, low, mid, hiss) is turned down on its own; 1 = one wide-band gate"},
+    {"NoiseThreshold", "Noise", "Threshold", "LU", -80, -20, -45, 1, 0, false,
+     "Relative to the target: a band quieter than this is turned down; higher = more noise goes, but quiet music may "
+     "lose its highs or lows too"},
+    {"NoiseDepth", "Noise", "Depth", "dB", 0, 40, 12, 1, 0, false, "Largest reduction of a band"},
+    {"NoiseRatio", "Noise", "Ratio 1:", "", 1.5, 10, 2, 0.1, 1, false,
+     "Under the threshold every dB less in gives this many dB less out (2 = 1:2, gentle; 10 = nearly a gate)"},
+    {"NoiseAttack", "Noise", "Attack", "ms", 0.5, 50, 2, 0.5, 1, false,
+     "Time to open when the music comes back; short keeps the first beat, too short may tick on deep bass"},
+    {"NoiseHold", "Noise", "Hold", "ms", 0, 500, 50, 10, 0, false,
+     "Time a band stays open after its level fell under the threshold (no chatter between notes)"},
+    {"NoiseRelease", "Noise", "Release", "ms", 20, 2000, 250, 10, 0, false,
+     "Time to turn a band down after the hold; long = a natural decay, short = the noise is gone sooner"},
+    {"NoiseSplit1", "Noise", "Split 1", "Hz", 20, 16000, 80, 5, 0, false, "Between rumble / hum and the low band"},
+    {"NoiseSplit2", "Noise", "Split 2", "Hz", 20, 16000, 1000, 10, 0, false, "Between the low and the mid band"},
+    {"NoiseSplit3", "Noise", "Split 3", "Hz", 20, 16000, 5000, 50, 0, false, "Between the mid band and the hiss band"},
+
     {"CompressorOn", "Compressor", "On", "", 0, 1, 1, 1, 0, true, "Wide-band compressor (soft knee, feed-forward)"},
     {"CompressorThreshold", "Compressor", "Threshold", "LU", -10, 15, 2, 0.5, 1, false,
      "Relative to the target: material louder than this is compressed"},
@@ -313,12 +334,13 @@ void loadDefaultSplits(PresetValues& v, int bands) {
     }
 }
 
-void enforceSplits(PresetValues& v, int changed) {
-    const int used = static_cast<int>(v[pDensBands]) - 1;
+namespace {
+// The split rule on `used` splits from parameter `first`: rising, >= kSplitRatio apart, within 20 Hz .. 16 kHz.
+void enforceSplitsAt(PresetValues& v, int first, int used, int changed) {
     if (used <= 0) return;
     if (changed < 0) changed = 0;
     if (changed >= used) changed = used - 1;
-    auto s = [&](int k) -> double& { return v[static_cast<size_t>(pDensSplit1 + k)]; };
+    auto s = [&](int k) -> double& { return v[static_cast<size_t>(first + k)]; };
     const double lo = kSplitMin * std::pow(kSplitRatio, changed);
     const double hi = kSplitMax / std::pow(kSplitRatio, used - 1 - changed);
     if (s(changed) < lo) s(changed) = lo;
@@ -339,6 +361,13 @@ void enforceSplits(PresetValues& v, int changed) {
         if (s(j) < floor) s(j) = floor;
     }
 }
+} // namespace
+
+void enforceSplits(PresetValues& v, int changed) {
+    enforceSplitsAt(v, pDensSplit1, static_cast<int>(v[pDensBands]) - 1, changed);
+}
+
+void enforceNoiseSplits(PresetValues& v, int changed) { enforceSplitsAt(v, pNoiseSplit1, kNoiseSplits, changed); }
 
 double attackFromFastDown(double fastDown, double speed) {
     return 10.0 / (fastDown > 0.0 ? fastDown : std::max(0.1, speed));
@@ -354,9 +383,11 @@ void normaliseValues(PresetValues& v) {
         if (info.isSwitch) x = x >= 0.5 ? 1.0 : 0.0;
     }
     v[pDensBands] = std::round(v[pDensBands]);
+    v[pNoiseBands] = v[pNoiseBands] >= 2.5 ? kNoiseBands : 1; // 1 or 4, nothing between
     if (v[pCompSideHpf] > 0 && v[pCompSideHpf] < 40) v[pCompSideHpf] = 40;
     if (v[pCompMakeup] < 0) v[pCompMakeup] = -1;
     enforceSplits(v, 0);
+    enforceNoiseSplits(v, 0);
 }
 
 namespace {

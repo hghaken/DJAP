@@ -20,6 +20,18 @@ enum Param : int {
     pLevRelease,   // s per 10 dB up while clearly too soft, and after a pause (was a fixed fast-up and "Catch up")
     pLevHold,
     pLevQuietWait, // s a steady quiet section waits before it is levelled
+    // noise reduction: a downward expander in 1 or 4 bands (client, 2026-10-29)
+    pNoiseOn,
+    pNoiseBands,     // 1 or 4
+    pNoiseThreshold, // LU re the working level
+    pNoiseDepth,
+    pNoiseRatio,     // 1:x under the threshold
+    pNoiseAttack,
+    pNoiseHold,
+    pNoiseRelease,
+    pNoiseSplit1,
+    pNoiseSplit2,
+    pNoiseSplit3,
     // compressor
     pCompOn,
     pCompThreshold,
@@ -98,6 +110,8 @@ inline bool isColourParam(int p) { return p >= kFirstColourParam; }
 
 constexpr int kMaxBands = 7;
 constexpr int kMaxSplits = kMaxBands - 1;
+constexpr int kNoiseBands = 4; // the noise reduction's bands when it is not wide-band
+constexpr int kNoiseSplits = kNoiseBands - 1;
 
 struct ParamInfo {
     const char* key;   // ini key
@@ -159,6 +173,8 @@ double attackFromFastDown(double fastDownDbPerS, double speedDbPerS);
 void loadDefaultSplits(PresetValues& v, int bands);
 // Moves the other splits when one split was changed, so splits keep rising and >= 1.25x apart.
 void enforceSplits(PresetValues& v, int changedSplit);
+// The same rule for the noise reduction's three splits (changedSplit 0..2).
+void enforceNoiseSplits(PresetValues& v, int changedSplit);
 
 // The level the leveller aims at before the clipper: target + input gain - clipper drive (when the clipper is on).
 // Compressor and de-esser thresholds are relative to it; the clipper's drive brings the output back to the target.

@@ -92,6 +92,7 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.freeze = ctl.freeze;
     auto on = [&](Param p) { return v[p] >= 0.5; };
     c.on[sLeveller] = on(pLevOn);
+    c.on[sNoise] = on(pNoiseOn);
     c.on[sCompressor] = on(pCompOn);
     c.on[sDensity] = on(pDensOn);
     c.on[sBass] = on(pBassOn);
@@ -123,6 +124,28 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.aFast = onePoleCoeff(0.4, ctrlRate);
     c.aMid = onePoleCoeff(1.5, ctrlRate);
     c.aSlow = onePoleCoeff(3.0, ctrlRate);
+
+    // noise reduction: the threshold relative to the working level (the music sits there after the leveller)
+    c.noiseBands = static_cast<int>(v[pNoiseBands]);
+    for (int s = 0; s < kNoiseSplits; ++s) {
+        const double f = v[static_cast<size_t>(pNoiseSplit1 + s)];
+        c.noiseLp[s] = design::lowPass(fs, f);
+        c.noiseHp[s] = design::highPass(fs, f);
+        c.noiseAp[s] = design::allPass(fs, f);
+    }
+    c.noiseThr = c.aim + v[pNoiseThreshold];
+    c.noiseDepth = v[pNoiseDepth];
+    c.noiseSlope = v[pNoiseRatio] - 1.0;
+    c.noiseAtt = onePoleCoeff(v[pNoiseAttack] / 1000.0, ctrlRate);
+    c.noiseRel = onePoleCoeff(v[pNoiseRelease] / 1000.0, ctrlRate);
+    c.noiseHold = v[pNoiseHold] / 1000.0;
+    // the detector averages the power over one period of the band's lowest frequency (at least 5 ms; the lowest
+    // band and the wide band from 30 Hz): a bass tone's ripple moves its level about 0.3 dB, and a peak detector read
+    // noise 6-8 dB too loud (its 16-frame blocks' ups)
+    for (int b = 0; b < kNoiseBands; ++b) {
+        const double low = c.noiseBands == 1 || b == 0 ? 30.0 : v[static_cast<size_t>(pNoiseSplit1 + b - 1)];
+        c.noiseDet[b] = onePoleCoeff(std::max(0.005, 1.0 / low), ctrlRate);
+    }
 
     // compressor
     c.compHpfOn = v[pCompSideHpf] > 0.0;
@@ -319,10 +342,155 @@ struct DeckProcessor::DensityBank {
 };
 
 // ---------------------------------------------------------------------------------------------------------------
+// Noise reduction: a downward expander per band (client, 2026-10-29). Each band's level - mean square of both
+// channels, averaged over one period of the band's lowest frequency (at least 5 ms) - is compared
+// with one fixed threshold (relative to the working level); under it the band goes down (ratio - 1) dB per dB, with a
+// 6 dB soft knee, at most Depth. Opening at the Attack speed; closing waits Hold, then follows the Release. No noise
+// floor estimate, no signal-to-noise ratio: the user sets the threshold. 4 bands: three LR4 splits, the lower bands
+// through the all-passes of the splits above them (a flat sum, as the density bank); 1 band: the gain on the signal.
+
+struct DeckProcessor::NoiseBank {
+    static constexpr double kKneeDb = 6.0;
+    int bands = kNoiseBands;
+    StereoBiquad2 lp[kNoiseSplits], hp[kNoiseSplits];
+    StereoBiquad ap[kNoiseSplits]; // band 1: split 2, split 3; band 2: split 3
+    double acc[kNoiseBands] = {}, det[kNoiseBands] = {}, red[kNoiseBands] = {}, hold[kNoiseBands] = {};
+    double gPrev[kNoiseBands] = {1, 1, 1, 1}, gNext[kNoiseBands] = {1, 1, 1, 1};
+    double maxRed[kNoiseBands] = {}; // the largest reduction since the meter record began
+    BiquadCoeffs splitSet[kNoiseSplits];
+
+    bool matches(const DeckConfig& c) const {
+        if (bands != c.noiseBands) return false;
+        if (bands == 1) return true;
+        for (int s = 0; s < kNoiseSplits; ++s)
+            if (!sameCoeffs(splitSet[s], c.noiseLp[s])) return false;
+        return true;
+    }
+
+    // Takes over the levels and reductions of the running bank. Another band count: 1 -> 4 gives every band the wide
+    // band's reduction and a quarter of its level, 4 -> 1 the wide band the least reduced band's and the levels'
+    // sum - a start near where the new count settles, so the crossfade does not swell (a new bank started open did).
+    void copyState(const NoiseBank& o) {
+        if (o.bands == bands) {
+            for (int b = 0; b < kNoiseBands; ++b) {
+                det[b] = o.det[b];
+                red[b] = o.red[b];
+                hold[b] = o.hold[b];
+            }
+        } else if (bands == 1) {
+            det[0] = o.det[0] + o.det[1] + o.det[2] + o.det[3];
+            red[0] = std::min(std::min(o.red[0], o.red[1]), std::min(o.red[2], o.red[3]));
+            hold[0] = std::max(std::max(o.hold[0], o.hold[1]), std::max(o.hold[2], o.hold[3]));
+        } else {
+            for (int b = 0; b < kNoiseBands; ++b) {
+                det[b] = 0.25 * o.det[0];
+                red[b] = o.red[0];
+                hold[b] = o.hold[0];
+            }
+        }
+        for (int b = 0; b < kNoiseBands; ++b) gPrev[b] = gNext[b] = fastDbToLin(-red[b]);
+    }
+
+    // A clean bank starts open: music already playing when the stage is switched on is not cut for an attack time.
+    void reset(const DeckConfig& c) {
+        for (int s = 0; s < kNoiseSplits; ++s) {
+            lp[s].reset();
+            hp[s].reset();
+            ap[s].reset();
+        }
+        for (int b = 0; b < kNoiseBands; ++b) {
+            acc[b] = det[b] = red[b] = maxRed[b] = 0.0;
+            hold[b] = c.noiseHold; // no closing in its first moments: the detector starts from 0
+            gPrev[b] = gNext[b] = 1.0;
+        }
+    }
+
+    void setCoeffs(const DeckConfig& c) {
+        bands = c.noiseBands;
+        for (int s = 0; s < kNoiseSplits; ++s) {
+            splitSet[s] = c.noiseLp[s];
+            lp[s].set(c.noiseLp[s]);
+            hp[s].set(c.noiseHp[s]);
+        }
+        ap[0].set(c.noiseAp[1]);
+        ap[1].set(c.noiseAp[2]);
+        ap[2].set(c.noiseAp[2]);
+    }
+
+    inline void run(double l, double r, double frac, double& outL, double& outR) {
+        const Pair x = makePair(l, r);
+        if (bands == 1) {
+            const Pair sq = _mm_mul_pd(x, x);
+            acc[0] += leftOf(sq) + rightOf(sq);
+            const double g = gPrev[0] + (gNext[0] - gPrev[0]) * frac;
+            outL = l * g;
+            outR = r * g;
+            return;
+        }
+        Pair p[kNoiseBands];
+        Pair rest = x;
+        for (int s = 0; s < kNoiseSplits; ++s) {
+            p[s] = lp[s].process(rest);
+            rest = hp[s].process(rest);
+        }
+        p[kNoiseSplits] = rest;
+        p[0] = ap[1].process(ap[0].process(p[0]));
+        p[1] = ap[2].process(p[1]);
+        Pair out = _mm_setzero_pd();
+        for (int b = 0; b < kNoiseBands; ++b) {
+            const Pair sq = _mm_mul_pd(p[b], p[b]);
+            acc[b] += leftOf(sq) + rightOf(sq);
+            const double g = gPrev[b] + (gNext[b] - gPrev[b]) * frac;
+            out = _mm_add_pd(out, _mm_mul_pd(p[b], _mm_set1_pd(g)));
+        }
+        outL = leftOf(out);
+        outR = rightOf(out);
+    }
+
+    void control(const DeckConfig& c, double dt) {
+        for (int b = 0; b < bands; ++b) {
+            const double ms = acc[b] / kControlBlock;
+            acc[b] = 0.0;
+            det[b] = toward(det[b], ms, c.noiseDet[bands == 1 ? 0 : b]);
+            // dB under the threshold -> reduction: (ratio - 1) dB per dB, a quadratic knee around the threshold
+            const double under = c.noiseThr - fastPowerToLufs(det[b]);
+            double target = 0.0;
+            if (under >= 0.5 * kKneeDb)
+                target = c.noiseSlope * under;
+            else if (under > -0.5 * kKneeDb)
+                target = c.noiseSlope * (under + 0.5 * kKneeDb) * (under + 0.5 * kKneeDb) / (2.0 * kKneeDb);
+            target = std::min(target, c.noiseDepth);
+            if (target <= red[b]) { // open (at the attack speed) or stay: the hold starts again
+                red[b] = toward(red[b], target, c.noiseAtt);
+                hold[b] = c.noiseHold;
+            } else if (hold[b] > 0.0) {
+                hold[b] -= dt;
+            } else {
+                red[b] = toward(red[b], target, c.noiseRel);
+            }
+            if (red[b] < 1e-4) red[b] = 0.0; // fully open again: the gain exactly 1 (a one-pole never arrives)
+            if (red[b] > maxRed[b]) maxRed[b] = red[b];
+            gPrev[b] = gNext[b];
+            gNext[b] = fastDbToLin(-red[b]);
+        }
+    }
+
+    bool finite() const {
+        for (int b = 0; b < kNoiseBands; ++b)
+            if (!std::isfinite(det[b]) || !std::isfinite(red[b])) return false;
+        for (int s = 0; s < kNoiseSplits; ++s)
+            if (!lp[s].finite() || !hp[s].finite() || !ap[s].finite()) return false;
+        return true;
+    }
+};
+
+// ---------------------------------------------------------------------------------------------------------------
 
 DeckProcessor::DeckProcessor() : meters_(new MeterRing()), taps_(new TapRing()) {
     banks_[0].reset(new DensityBank());
     banks_[1].reset(new DensityBank());
+    noise_[0].reset(new NoiseBank());
+    noise_[1].reset(new NoiseBank());
 }
 
 DeckProcessor::~DeckProcessor() = default;
@@ -356,6 +524,17 @@ void DeckProcessor::prepare(double fs) {
 }
 
 void DeckProcessor::configureBank(DensityBank& b, const DeckConfig& c) { b.setCoeffs(c); }
+
+// The same for the noise reduction's bands.
+void DeckProcessor::startNoiseFade(const DeckConfig& c) {
+    const NoiseBank& now = *noise_[noiseActive_];
+    NoiseBank& next = *noise_[1 - noiseActive_];
+    next.reset(c);
+    next.setCoeffs(c);
+    next.copyState(now);
+    noiseXf_ = -1.0;
+    noiseFading_ = true;
+}
 
 // A new band count or new splits run in the spare bank; the output crossfades to it (20 ms).
 void DeckProcessor::startBankFade(const DeckConfig& c) {
@@ -428,6 +607,9 @@ void DeckProcessor::applyConfig(const DeckConfig& c) {
         configureBank(*banks_[activeBank_], c);
         bankFading_ = false;
         bankPending_ = false;
+        noise_[noiseActive_]->reset(c);
+        noise_[noiseActive_]->setCoeffs(c);
+        noiseFading_ = noisePending_ = false;
         for (int s = 0; s < kStageCount; ++s) {
             mix_[s] = c.on[s] ? 1.0 : 0.0;
             running_[s] = c.on[s];
@@ -457,6 +639,17 @@ void DeckProcessor::applyConfig(const DeckConfig& c) {
     } else if (!banks_[activeBank_]->matches(c)) {
         startBankFade(c);
     }
+
+    // noise reduction band count / splits
+    if (!running_[sNoise]) {
+        noise_[noiseActive_]->reset(c);
+        noise_[noiseActive_]->setCoeffs(c);
+        noiseFading_ = noisePending_ = false;
+    } else if (noiseFading_) {
+        if (!noise_[1 - noiseActive_]->matches(c)) noisePending_ = true;
+    } else if (!noise_[noiseActive_]->matches(c)) {
+        startNoiseFade(c);
+    }
 }
 
 void DeckProcessor::resetStage(int s) {
@@ -466,6 +659,12 @@ void DeckProcessor::resetStage(int s) {
         levGainLin_ = 1.0;
         catching_ = catchPending_ = fastDown_ = fastUp_ = fell_ = false;
         quietSteady_ = 0.0;
+        break;
+    case sNoise:
+        noise_[0]->reset(cfg_);
+        noise_[1]->reset(cfg_);
+        noise_[noiseActive_]->setCoeffs(cfg_);
+        noiseFading_ = noisePending_ = false;
         break;
     case sCompressor:
         compHpf_.reset();
@@ -554,7 +753,7 @@ bool DeckProcessor::statesFinite() const {
         return false;
     if (!colour_.finite()) return false;
     if (!limiter_.finite() || !kIn_.finite() || !kPost_.finite() || !kOut_.finite()) return false;
-    if (!banks_[0]->finite() || !banks_[1]->finite()) return false;
+    if (!banks_[0]->finite() || !banks_[1]->finite() || !noise_[0]->finite() || !noise_[1]->finite()) return false;
     if (!bassLp4_.finite() || !bassHp_.finite() || !bassLp_.finite() || !excHp_.finite() || !excHp2_.finite() || !excOs_.finite() || !clipOs_.finite()) return false;
     if (!dessHp_.finite() || !dessShelf_.finite() || !width_[0].finite() || !width_[1].finite()) return false;
     return compHpf_.finite();
@@ -697,6 +896,12 @@ void DeckProcessor::controlUpdate() {
         levGainLin_ = 1.0;
     }
 
+    // noise reduction
+    if (running_[sNoise]) {
+        noise_[noiseActive_]->control(c, dt);
+        if (noiseFading_) noise_[1 - noiseActive_]->control(c, dt);
+    }
+
     // density
     if (running_[sDensity]) {
         DensityBank& a = *banks_[activeBank_];
@@ -818,6 +1023,33 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         const double g = levGainLin_ * inGain_;
         double l = xl * g, r = xr * g;
         tap(ctLeveller, l, r);
+
+        // noise reduction: a downward expander per band, before the colour (a treble boost does not lift the hiss
+        // into the detector) and after the leveller (the threshold is relative to the level the music is brought to)
+        if (running_[sNoise]) {
+            double yl, yr;
+            noise_[noiseActive_]->run(l, r, frac, yl, yr);
+            if (noiseFading_) {
+                double zl, zr;
+                noise_[1 - noiseActive_]->run(l, r, frac, zl, zr);
+                noiseXf_ = std::min(1.0, noiseXf_ + c.switchStep);
+                const double xf = crossfadeWeight(noiseXf_);
+                yl += xf * (zl - yl);
+                yr += xf * (zr - yr);
+                if (noiseXf_ >= 1.0) {
+                    noiseActive_ = 1 - noiseActive_;
+                    noiseFading_ = false;
+                    if (noisePending_) {
+                        noisePending_ = false;
+                        if (!noise_[noiseActive_]->matches(c)) startNoiseFade(c);
+                    }
+                }
+            }
+            const double m = mix_[sNoise];
+            l += m * (yl - l);
+            r += m * (yr - r);
+        }
+        tap(ctNoise, l, r);
 
         // colour: the auto tone measures the deck's input; sub bass, tone, loudness
         colour_.measure(0.5 * (xl + xr));
@@ -1047,6 +1279,11 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             if (c.colour.any()) rec_.active = static_cast<uint16_t>(rec_.active | 1u << kChainColourBit);
             rec_.levellerDb = static_cast<float>(levGainDb_ * mix_[sLeveller]);
             rec_.compressorIn = static_cast<float>(running_[sCompressor] ? fastPowerToLufs(compDet_) : kFloorDb);
+            NoiseBank& nb = *noise_[noiseActive_];
+            for (int b = 0; b < kNoiseBands; ++b) {
+                rec_.noiseDb[b] = running_[sNoise] && b < nb.bands ? static_cast<float>(nb.maxRed[b] * mix_[sNoise]) : 0.0f;
+                nb.maxRed[b] = 0.0;
+            }
             const DensityBank& bank = *banks_[activeBank_];
             rec_.bands = static_cast<uint8_t>(running_[sDensity] ? bank.bands : 0);
             for (int b = 0; b < kMaxBands; ++b)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // One deck's processing chain (docs/design.md section 2):
-// leveller gain + input gain -> colour (sub bass, tone, loudness) -> compressor -> density (1-7 bands) -> bass
+// leveller gain + input gain -> noise reduction -> colour (sub bass, tone, loudness) -> compressor -> density (1-7 bands) -> bass
 // enhancer -> exciter -> de-esser -> stereo width -> [leveller detector] -> soft clipper -> look-ahead true-peak
 // limiter -> output gain -> clip guard -> [volume].
 #pragma once
@@ -20,7 +20,7 @@
 
 namespace ap {
 
-enum Stage : int { sLeveller, sCompressor, sDensity, sBass, sExciter, sDeEsser, sWidth, sClipper, sLimiter, kStageCount };
+enum Stage : int { sLeveller, sNoise, sCompressor, sDensity, sBass, sExciter, sDeEsser, sWidth, sClipper, sLimiter, kStageCount };
 
 constexpr double kMaxLookMs = 5.0;
 constexpr double kMaxInputVolume = 100.0; // largest input factor of setVolume (+40 dB)
@@ -91,6 +91,11 @@ struct DeckConfig {
            catchStep = 0.0, quietWait = 3.0;
     double levDetMax = 1e30; // the most power one control block may add to the leveller detector
     double aFast = 0.0, aMid = 0.0, aSlow = 0.0;
+    // noise reduction (control rate): 1 or 4 bands, LR4 splits with phase-aligning all-passes (flat sum)
+    int noiseBands = 4;
+    BiquadCoeffs noiseLp[kNoiseSplits], noiseHp[kNoiseSplits], noiseAp[kNoiseSplits];
+    double noiseThr = -59.0, noiseDepth = 12.0, noiseSlope = 1.0, noiseAtt = 0.0, noiseRel = 0.0, noiseHold = 0.05;
+    double noiseDet[kNoiseBands] = {}; // each band's detector fall (one-pole per control block)
     // compressor (per sample)
     BiquadCoeffs compHpf;
     bool compHpfOn = true;
@@ -135,6 +140,7 @@ double softClip(double u);
 enum ChainTap : int {
     ctInput,
     ctLeveller, // leveller gain and input gain
+    ctNoise,
     ctColour,
     ctCompressor,
     ctDensity,
@@ -159,6 +165,7 @@ struct MeterRecord {
     float levellerDb = 0;              // leveller gain
     float compressorDb = 0;            // largest compressor reduction (dB, >= 0)
     float compressorIn = -120;         // compressor detector level at the record's end (same scale as compThr)
+    float noiseDb[kNoiseBands] = {};   // largest noise reduction per band (band 0 only when wide-band)
     float densityDb[kMaxBands] = {};   // density band gains (dynamic part)
     float autoToneDb[4] = {};          // the auto tone's corrections now: bass, low-mid, presence, treble
     float deEsserDb = 0;               // largest de-esser reduction
@@ -225,6 +232,7 @@ public:
 
 private:
     struct DensityBank;
+    struct NoiseBank;
     void applyConfig(const DeckConfig& c);
     void resetStates();
     void resetStage(int s);
@@ -232,6 +240,7 @@ private:
     bool statesFinite() const;
     void configureBank(DensityBank& b, const DeckConfig& c);
     void startBankFade(const DeckConfig& c);
+    void startNoiseFade(const DeckConfig& c);
 
     double fs_ = 48000.0;
     int maxLook_ = 0;
@@ -279,6 +288,12 @@ private:
     double riseHist_[4] = {kFloorDb, kFloorDb, kFloorDb, kFloorDb}; // 0.4 s level (LUFS) every 0.25 s
     int riseIdx_ = 0, riseBlocks_ = 0;
     double levGainDb_ = 0.0, levGainLin_ = 1.0;
+
+    // noise reduction: two banks for click-free changes of the band count or the splits (as density)
+    std::unique_ptr<NoiseBank> noise_[2];
+    int noiseActive_ = 0;
+    bool noiseFading_ = false, noisePending_ = false;
+    double noiseXf_ = 0.0; // -1..0: the new bank warms up unheard; 0..1: crossfade
 
     // compressor
     StereoBiquad compHpf_;

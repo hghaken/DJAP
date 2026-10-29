@@ -42,6 +42,7 @@ Each deck runs the same chain of processing stages:
 | Step | What it does for you |
 |---|---|
 | **Leveller** | A slow, automatic hand on the volume: quiet and loud songs come out at the same loudness. It does not follow the music within a song and holds still during fades and pauses; a quiet part that stays (a soft verse, a breakdown) comes up to the target after a few seconds. |
+| **Noise** | Noise reduction (off unless you switch it on): hiss, hum and rumble are turned down in pauses and quiet passages, in four bands; the music above its threshold passes untouched. |
 | **Colour** | The tone of the music: bass, low-mid, presence and treble, an automatic tone correction per song, a sub-bass generator and a contour for quiet listening. |
 | **Compressor** | Evens out the loud parts within a song. |
 | **Density** | A multiband stage (1 to 7 frequency bands): a band that sticks out is turned down, one that falls away is lifted - the full, dense "radio" sound. |
@@ -354,7 +355,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 
 ## 4. The main window
 
-![The main window with two decks](images/main.jpg)
+![The main window with two decks: deck A in a pause between songs, its noise reduction holding the hiss down (Noise row); deck B playing](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
 no menu bar: **right-click anywhere in it** for *Setup...*, *About DJAP...* (the version, the settings file in use,
@@ -404,6 +405,8 @@ white line can be compared with the bars and with the target directly.
 **Stage rows, right.** What each stage does now:
 
 - **Leveller** - its gain, up (right of 0) or down (left), over its range.
+- **Noise** - how far the noise reduction has turned its most reduced band down, 0 to 24 dB (6.3). Mostly empty
+  while music plays; it fills in pauses and quiet passages.
 - **Compressor**, **De-esser**, **Clipper**, **Limiter** - gain reduction, 0 to 12 dB.
 
 A stage that is switched off in the loudness preset is shown greyed out.
@@ -539,7 +542,7 @@ These values are starting points; change them to taste.
 
 ### 6.2 The loudness window
 
-![The loudness window](images/preset.jpg)
+![The loudness window on the Noise tab of an own loudness preset](images/preset.jpg)
 
 Click **Edit...** next to a deck's loudness preset. At the top:
 
@@ -592,6 +595,26 @@ Defaults below are those of Medium (the general defaults of a new own preset).
 Attack and Release never move slower than Speed. After a pause (a stopped deck) the next song is caught up at the
 Release speed (up) or the Attack speed (down). The defaults were chosen on 18 songs with soft intros: they bring such
 an intro to the target about a quarter sooner than before, without a song coming in louder at its loud part.
+
+**Noise** - the noise reduction: takes hiss, hum and rumble away where the music does not cover them. Off in every
+shipped loudness preset; switch it on for old or noisy recordings (tape hiss, vinyl transfers, a hum).
+
+| Value | Unit | Range | Default | What it does |
+|---|---|---|---|---|
+| On | | | off | |
+| Bands | | 1 or 4 | 4 | 4: rumble / hum, low, mid and hiss are each turned down on their own, so music in one band does not keep the noise in another. 1: one gate for the whole sound (for example the pauses between songs). |
+| Threshold | LU | -80 .. -20 | -45 | Relative to the target loudness: a band quieter than this is turned down. Higher takes more noise but can also take the highs (or lows) of quiet music; lower works only in near silence. |
+| Depth | dB | 0 .. 40 | 12 | How far a band goes down at most. 12 dB takes hiss out of hearing in a pause; 30-40 dB is a gate. |
+| Ratio 1: | | 1.5 .. 10 | 2 | How hard: under the threshold every dB less in gives this many dB less out. 2 is gentle (the band fades as the music fades), 10 nearly a gate. |
+| Attack | ms | 0.5 .. 50 | 2 | How fast a band opens when the music comes back. Short keeps the first beat after a pause; too short can tick on deep bass. |
+| Hold | ms | 0 .. 500 | 50 | How long a band stays open after its level fell under the threshold, so it does not chatter between notes. |
+| Release | ms | 20 .. 2000 | 250 | How fast a band goes down after the hold. Long lets a note's tail fade naturally; short takes the noise away sooner. |
+| Split 1 / 2 / 3 | Hz | 20 .. 16000 | 80 / 1000 / 5000 | Where the bands meet: rumble and hum under split 1, hiss above split 3. Always rising and at least 1.25x apart; hidden with 1 band. |
+
+It adds no delay. It sits right after the leveller, so the threshold means the same for a quiet and a loud song.
+Within about an octave of a split, loud music in one band also keeps the next band open - the hiss band closes under
+quiet music and in pauses, not under a full mix. Watch the **Noise** row in the meter panel (4.3) while setting the
+threshold: it should fill in the pauses, not while the music plays.
 
 **Compressor** - evens out the loud parts within a song.
 
@@ -748,8 +771,8 @@ deck with six panels:
 
 1. **Signal chain** - a row per step in chain order, from *Input* to *Output*. Each step has a lamp (lit when the step
    changes the level by 0.1 dB or more; turquoise = up, orange = down) and a bar against a dB scale from -12 to +12
-   (a square-root scale, so small changes are visible). The compressor, de-esser, clipper and limiter show their own
-   gain reduction; the other steps show the level after the step against the level before it. *Input* and *Output*
+   (a square-root scale, so small changes are visible). The noise reduction (*Noise*: its most reduced band),
+   compressor, de-esser, clipper and limiter show their own gain reduction; the other steps show the level after the step against the level before it. *Input* and *Output*
    show the momentary loudness as a bar (-40 .. 0 LUFS) and the peak as a white mark; the output's target is the
    yellow mark. A step that is switched off says "off". **Click a row** to open that step's settings (the loudness
    window on its tab, or the colour window).
@@ -891,7 +914,7 @@ The window is one deck strip of the program:
 - Choosing a loudness preset or colour loads its values. Choosing the one that is already chosen loads its values again -
   back to the loudness preset after changes. "(other values)" means the values match no loudness preset in the list (for example a
   project made on another computer).
-- **Every value is a parameter** the DJ software can show and automate: the 72 values of the loudness preset and colour
+- **Every value is a parameter** the DJ software can show and automate: the 83 values of the loudness preset and colour
   (named "Stage: value", for example "Compressor: Threshold", grouped by stage), the loudness preset and colour lists, Bypass
   and the look-ahead. They move in the same steps as the program's sliders.
 - A **project** (or a preset of the DJ software) stores the values themselves, not only the loudness preset's name: it
@@ -1104,6 +1127,7 @@ old file stays.
 | **Look-ahead** | The limiter delays the audio slightly so it sees a peak coming and can turn down smoothly before it arrives. |
 | **Threshold, ratio, knee, attack, release** | Where a compressor starts, how strongly it works, how gradually it starts, how fast it reacts and how fast it lets go. |
 | **Multiband** | Processing the audio in separate frequency bands. |
+| **Downward expander, gate** | The opposite of a compressor: what is quieter than its threshold is made quieter still - the noise reduction's way of taking hiss and hum out of pauses. A gate is a hard one: under the threshold, (nearly) nothing passes. |
 | **Bypass** | The deck's input goes out unprocessed. |
 | **ASIO** | A low-latency audio driver standard for audio interfaces. |
 | **WASAPI** | Windows' own audio system; *exclusive* mode takes a device for one program. |

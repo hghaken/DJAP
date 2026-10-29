@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The nine stage switches of a preset: their parameters, names and tooltips (preset window check boxes, meter rows).
+// The ten stage switches of a preset: their parameters, names and tooltips (preset window check boxes, meter rows).
 #pragma once
 
 #include "deck.h"
@@ -7,15 +7,18 @@
 
 namespace ap {
 
-inline constexpr Param kStageParam[kStageCount] = {pLevOn,  pCompOn,  pDensOn, pBassOn, pExcOn,
-                                                   pDessOn, pWidthOn, pClipOn, pLimOn};
-inline constexpr const wchar_t* kStageName[kStageCount] = {L"Leveller", L"Compressor", L"Density",
-                                                           L"Bass",     L"Exciter",    L"De-esser",
-                                                           L"Width",    L"Clipper",    L"Limiter"};
+inline constexpr Param kStageParam[kStageCount] = {pLevOn, pNoiseOn, pCompOn,  pDensOn, pBassOn,
+                                                   pExcOn, pDessOn,  pWidthOn, pClipOn, pLimOn};
+inline constexpr const wchar_t* kStageName[kStageCount] = {L"Leveller", L"Noise",    L"Compressor", L"Density",
+                                                           L"Bass",     L"Exciter",  L"De-esser",   L"Width",
+                                                           L"Clipper",  L"Limiter"};
 inline constexpr const wchar_t* kStageTip[kStageCount] = {
     L"Leveller: slow automatic gain that brings each song to the loudness preset's target loudness (EBU R 128). It holds "
     L"during fades, breakdowns and pauses, and catches up quickly when the deck starts again after silence. "
     L"Freeze leveller (main window) holds it by hand.",
+    L"Noise reduction: a downward expander in 4 bands (rumble / hum, low, mid, hiss; or 1 wide band). A band whose "
+    L"level falls under the threshold is turned down, so hiss, hum and rumble go in pauses and quiet passages while "
+    L"music above the threshold passes untouched. No delay.",
     L"Compressor: wide-band, soft knee. Its threshold sits relative to the target loudness, so it only works on the "
     L"loudest parts and evens out the level within a song. Bass does not trigger it (side-chain high-pass).",
     L"Density: multiband dynamics (1-7 bands, flat sum). Each band is compared with its own recent level and turned "
