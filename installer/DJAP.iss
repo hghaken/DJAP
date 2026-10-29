@@ -105,12 +105,12 @@ OpenVacPage=Open the VAC download page
 DeleteSettings=Also delete your DJAP settings and own presets?%n%n%1
 StartupGroup=When Windows starts:
 StartupTask=Start DJAP in the notification area, with the audio devices used last
-TypeFull=DJAP and the plug-in for DJ software
+TypeFull=DJAP and the VST® plug-in for DJ software
 TypeProgram=Only the DJAP program
-TypePlugin=Only the plug-in for DJ software
+TypePlugin=Only the VST® plug-in for DJ software
 TypeCustom=Custom
 CompProgram=DJAP - the program (two decks or one channel, in the notification area)
-CompPlugin=Plug-in for DJ software (one deck per plug-in, the same presets and colours)
+CompPlugin=VST® plug-in for DJ software (one deck per plug-in, the same presets and colours)
 
 [Types]
 Name: "full"; Description: "{cm:TypeFull}"

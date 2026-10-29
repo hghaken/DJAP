@@ -95,7 +95,7 @@ The setup checks the computer first and shows what it found on the last page bef
 
 Options on the way:
 
-- **Select Components**: *DJAP* (the program) and the *Plug-in for DJ software* (chapter 9); both are chosen by
+- **Select Components**: *DJAP* (the program) and the *VST® plug-in for DJ software* (chapter 9); both are chosen by
   default, each can be left out.
 - **Create a desktop shortcut** (off by default).
 - **Start DJAP in the notification area when Windows starts, with the audio devices used last** (on by default).
@@ -846,7 +846,7 @@ keeps the audio interface; DJAP only processes what passes through it.
 
 ### 9.1 Installing and finding it
 
-Choose "Plug-in for DJ software" on the setup's "Select Components" page (it is chosen by default). It needs an
+Choose "VST® plug-in for DJ software" on the setup's "Select Components" page (it is chosen by default). It needs an
 installation for all users (the normal one): the plug-in goes into the computer's plug-in folder,
 `C:\Program Files\Common Files\VST3\DJAP\DJAP.vst3` (one file in a folder of its own), where DJ software looks for
 plug-ins. If the DJ software does not
@@ -1085,7 +1085,7 @@ old file stays.
 | **Limiter works hard all the time** | Lower the input gain, the clipper drive or the target, or use a quieter loudness preset. |
 | **DJAP does not start with Windows** | Check the option in the Setup window and Windows' startup apps list. |
 | **The update failed** | The Setup window says why; `%TEMP%\DJAP-update\setup.log` has the setup's log. The setup can always be downloaded from the GitHub page and run by hand. |
-| **The DJ software does not list the plug-in** | Was "Plug-in for DJ software" chosen in the setup, in an installation for all users? Is `C:\Program Files\Common Files\VST3\DJAP\DJAP.vst3` there? Let the DJ software scan its plug-ins again and restart it. The DJ software must be 64-bit. |
+| **The DJ software does not list the plug-in** | Was "VST® plug-in for DJ software" chosen in the setup, in an installation for all users? Is `C:\Program Files\Common Files\VST3\DJAP\DJAP.vst3` there? Let the DJ software scan its plug-ins again and restart it. The DJ software must be 64-bit. |
 | **The plug-in's loudness preset list lacks my own loudness presets** | The plug-in reads the program's settings in `%APPDATA%\DJAP\DJAP.ini` when it is loaded and when its loudness window is opened: click Edit... once, or load the plug-in again. A portable program (settings next to `DJAP.exe`) is not seen. |
 | **DJAP closed unexpectedly** | Start `DJAP.exe --diag <file.txt>` from a command prompt; when it happens again, the file holds a report that helps to find the cause. |
 
