@@ -374,7 +374,7 @@ void PluginView::create() {
     // SS_NOTIFY for its tooltip only: a click on it does nothing (client, 2026-10-30: "a single click on the window
     // opens About - that should be the right-click only"; the line runs across the window's top row)
     version_ = make(L"STATIC", wide(AP_VERSION_STRING).c_str(), SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, idVersion);
-    graphs_ = make(L"BUTTON", L"Graphs", BS_OWNERDRAW | WS_TABSTOP, idGraphs);
+    graphs_ = make(L"BUTTON", L"Analysis", BS_OWNERDRAW | WS_TABSTOP, idGraphs); // the window's name (was "Graphs")
     bypass_ = make(L"BUTTON", L"Bypass Off", BS_OWNERDRAW | WS_TABSTOP, idBypass);
     presetLabel_ = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
     preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
@@ -429,8 +429,8 @@ void PluginView::layout() {
     GetClientRect(hwnd_, &rc);
     const int m = px(12), gap = px(6), rowH = px(28), W = rc.right - 2 * m;
     int y = m;
-    // DJAP  0.1.x (update note) ..................................... [Graphs] [Bypass]
-    const int bypassW = px(80), graphsW = px(72);
+    // DJAP  0.1.x (update note) ..................................... [Analysis] [Bypass]
+    const int bypassW = px(80), graphsW = px(80);
     MoveWindow(title_, m, y, px(70), rowH, TRUE);
     MoveWindow(version_, m + px(74), y + px(2), W - px(74) - graphsW - bypassW - 2 * gap, rowH, TRUE);
     MoveWindow(graphs_, m + W - bypassW - gap - graphsW, y, graphsW, rowH, TRUE);

@@ -312,9 +312,15 @@ void Plugin::addParameters() {
     // only the values that differ would otherwise skip an equal one), and a restore without it is a set from before
     // 0.1.253; checkStamp sets the real stamp
     parameters.addParameter(STR16("Preset state"), nullptr, 0, 1.0, 0, kStampId);
+    // the start's values (the instance's kept preset and colour) are also the chain values' defaults (client,
+    // 2026-10-30: "the leveller starts at -12 and does not come back"): the DJ program sets every parameter that is not
+    // at its default back to the default at its start, and hands that to the processing too - the window showed the
+    // kept preset while the sound ran the parameters' generic defaults. With these defaults it has nothing to set.
     for (int p = 0; p < kParamCount; ++p) {
         auto* param = new ChainParameter(p, unitOf(p));
-        param->setNormalized(normalizedOf(p, values_[static_cast<size_t>(p)]));
+        const ParamValue start = normalizedOf(p, values_[static_cast<size_t>(p)]);
+        param->getInfo().defaultNormalizedValue = start;
+        param->setNormalized(start);
         parameters.addParameter(param);
     }
 }

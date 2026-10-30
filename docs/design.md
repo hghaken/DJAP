@@ -414,7 +414,7 @@ tone's correction at 100 %; calibrates the reference, 3.3), `--ca` / `--cb <colo
 GUI main window (`mainwnd`, `meterview`): two deck strips side by side. Each strip (client, 2026-10-25): on the
 title row the route on two lines (client, 2026-10-27: "in and out on 2 lines, on a small screen it does not fit"):
 "In: WASAPI: Line 1 (virtual cable)" above "Out: ASIO: outputs 7-8", each side with its API, each line ending in "..."
-when too long, right after the deck's name; the Graphs and Bypass buttons at the right (Bypass: green "Bypass Off" while processing, red "Bypass On" while bypassed - client, 2026-10-29; saved as `Processing`);
+when too long, right after the deck's name; the Analysis (until 0.1.263 "Graphs"; client, 2026-10-30) and Bypass buttons at the right (Bypass: green "Bypass Off" while processing, red "Bypass On" while bypassed - client, 2026-10-29; saved as `Processing`);
 then the preset choice with its "Edit..." button and the colour choice (3.3) with its "Edit..." button; and a meter panel without buttons (its R - reset meters - and F - freeze leveller - buttons were removed,
 client 2026-10-25: "not needed"). With linked presets there is one
 set of controls (client, 2026-10-25): deck A's preset and colour, Edit and Bypass
@@ -479,7 +479,7 @@ shows the bands the same way (lines); a click on its spectrum opens the Density 
 The meter panel's spectrum: 4096-point FFT, Hann window, a frame every 2048 samples, power averaged over
 0.3 s, shown at 256 log-spaced points (the loudest bin in a point's band; interpolated where the bins are wider
 than the points, below about 300 Hz). A sine of amplitude A reads 20 log10(A) dB (on a bin; up to 1.42 dB less
-between bins). The Graphs button left of Bypass in each strip (client, 2026-10-25; it replaced the View menu) opens a window with a row per deck - first the signal chain (client, 2026-10-25:
+between bins). The Analysis button ("Graphs" until 0.1.263) left of Bypass in each strip (client, 2026-10-25; it replaced the View menu) opens a window with a row per deck - first the signal chain (client, 2026-10-25:
 "for every step a bar, to see whether a step does anything; begin and end with an input / output volume bar"): a
 row per step in chain order - Input, Leveller (with the input gain), Noise, Colour, Compressor, Density, Bass enhancer,
 Exciter, De-esser, Stereo width, Soft clipper, Limiter, Output gain, Output - each with a lamp (lit at 0.1 dB or
@@ -854,8 +854,13 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   written for that number in the settings file's `[Plugin]` section (`Loudness1=`, `Colour1=`, `LookAhead1=`,
   `Oversampling1=`, `Mono1=`; `Settings::pluginSlots`, merged per instance by `saveMerged`, kept by the program), and
   read at the next `initialize`. Look-ahead, oversampling and Mono start there and are also those parameters'
-  defaults (as the lists' are), so such a host's reset leaves them; the chain values it sets back to their defaults are
-  taken from the kept preset again at activation (`checkStamp`). Only the window's choices are kept - a host's
+  defaults (as the lists' are), so such a host's reset leaves them. In 0.1.261 / 0.1.263 the chain values kept their
+  generic defaults: the host set them back at its start and the controller took the kept preset again at activation
+  (`checkStamp`) - but the host also hands its reset to the processing with the first block, so the window showed the
+  kept preset while the sound ran the generic defaults (client, 2026-10-30: "the leveller starts at -12 and does not
+  come back"). Since then the start's values - the kept preset and colour - are every chain parameter's default too:
+  such a host has nothing to set back (`plugin_test` 4f: a host that hands its reset to the processing, bit-exact
+  against the program's deck with the kept preset). Only the window's choices are kept - a host's
   automation or a project load never writes the file; a project's `setState` still sets its own choices
   (`plugin_test` 4f).
 - **Window** (`pluginview.*`, 600 px wide at 96 DPI and as high as the program's smallest one-channel window without its status bar (client, 2026-10-29; was 820 x 640), scaled to the host window's DPI): the program's deck strip -
@@ -881,7 +886,7 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
 - **Fewer controls** (client, 2026-10-29: "they can all go, they are in other windows"): the bass sliders, the
   oversampling and look-ahead lists and the About button left the window - they are in the spectrum window, the
   Setup window and the right-click menu. The window: DJAP and the version (a newer version's note; until 0.1.261
-  a click on it opened About - client, 2026-10-30: "that should be the right-click only"), Graphs, Bypass, the two lists with their Edit buttons, the meter panel.
+  a click on it opened About - client, 2026-10-30: "that should be the right-click only"), Analysis (until 0.1.263 "Graphs"), Bypass, the two lists with their Edit buttons, the meter panel.
 - **About and updates** (client, 2026-10-28: "an About (with the update) in the plug-in" - an installation of the
   plug-in alone has no program to report updates): About DJAP (the right-click menu; an About button until 0.1.237) opens the program's
   About window (`aboutwnd.*`, plug-in mode: not modal, its own placement `PluginAbout`) with the version, the settings

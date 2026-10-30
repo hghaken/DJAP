@@ -382,7 +382,8 @@ void MainWindow::createControls() {
         s.routeOut = make(L"STATIC", L"", SS_LEFT | SS_ENDELLIPSIS | SS_NOPREFIX | SS_NOTIFY, 0);
         // checked = bypassed: "Bypass On", red (theme::setBypass)
         s.processing = make(L"BUTTON", L"Bypass Off",BS_OWNERDRAW | WS_TABSTOP, idOf(d, iProcessing));
-        s.graphs = make(L"BUTTON", L"Graphs", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iGraphs));
+        // "Analysis", the window's name (client, 2026-10-30; was "Graphs")
+        s.graphs = make(L"BUTTON", L"Analysis", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iGraphs));
         s.presetLabel = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
         s.preset = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iPreset));
         s.edit = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iEdit));
@@ -468,7 +469,7 @@ void MainWindow::layout() {
         Strip& s = strips_[d];
         const int x0 = m + d * (stripW + m);
         int y = m;
-        // Deck A  route .......... [Graphs] [Bypass]
+        // Deck A  route .......... [Analysis] [Bypass]
         const int bypassW = px(90), graphsW = px(90);
         // the route as two lines, In and Out, right after the title (client, 2026-10-27: "in and out on 2 lines, on a
         // small screen it does not fit - and more to the left")

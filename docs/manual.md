@@ -368,7 +368,7 @@ that still shows every meter row and a readable spectrum.
 - **Title row.** The deck's name and its route on two lines, for example `In: ASIO: inputs 1-2` above `Out: ASIO:
   outputs 1-2`, or with other APIs the device names (a name too long for the window ends in "..."; the Setup window
   shows it whole). With linked presets deck B shows "linked to deck A".
-- **Graphs** opens the analysis window (8.1).
+- **Analysis** opens the analysis window (8.1).
 - **Bypass Off / Bypass On.** Green "Bypass Off": the deck is processed. Red "Bypass On": the deck's input goes out
   unchanged, delayed by the look-ahead. A click switches it; saved per deck.
 - **Loudness** and its **Edit...** button: the deck's loudness preset (the loudness and dynamics) and the loudness window
@@ -770,7 +770,7 @@ The auto tone holds still during breakdowns and fades, so a quiet part does not 
 
 ![The analysis window](images/analysis.png)
 
-Click **Graphs** on a deck strip (or in the plug-in's window, 9.2: one row for its channel). The window has a row per
+Click **Analysis** on a deck strip (or in the plug-in's window, 9.2: one row for its channel). The window has a row per
 deck with six panels (with one row - one channel, the plug-in - the compressor's curve and the stereo graph stand
 one above the other, so the histories and the scope get the width):
 
@@ -894,7 +894,7 @@ The program and the plug-in can be installed and used together or apart.
 The window is one deck strip of the program:
 
 - **DJAP** and the version. When a newer version exists, the line says so; right-click for About DJAP.
-- **Graphs** - the analysis window (8.1) for this channel: one row with the signal chain, the compressor's curve,
+- **Analysis** - the analysis window (8.1) for this channel: one row with the signal chain, the compressor's curve,
   loudness and gains of the last 60 s, the scope and the goniometer. A click on a step of the chain opens its tab, as
   in the program.
 - **Bypass Off / Bypass On** - green "Bypass Off": the channel is processed; red "Bypass On": the input goes out

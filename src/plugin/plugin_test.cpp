@@ -665,11 +665,48 @@ int main(int argc, char** argv) {
             }
             a.start();
             const State r = a.state();
-            std::printf("-- the host set %d parameters back to their defaults: %s with %s, %s\n", reset,
+            std::printf("-- the host had %d parameters to set back to their defaults: %s with %s, %s\n", reset,
                         r.preset.c_str(), r.colour.c_str(), r.values == sa.values ? "Loud's values" : "OTHER values");
-            CHECK(reset > 0 && r.preset == "Loud" && r.values == sa.values);
+            CHECK(reset == 0 && r.preset == "Loud" && r.values == sa.values); // the kept values are the defaults
             a.close();
             b.close();
+        }
+        // the same host, which also hands its reset to the processing with the first block (client, 2026-10-30: "the
+        // leveller starts at -12 and does not come back" - the window showed the kept preset, the sound ran the
+        // defaults): the processing runs exactly the kept preset's values, bit for bit against the program's deck
+        {
+            Instance a;
+            CHECK(a.open(module, &host));
+            const State sa = a.state();
+            ParameterChanges resetChanges(ap::kParamCount + 8);
+            for (int32 k = 0; k < a.controller->getParameterCount(); ++k) {
+                ParameterInfo info{};
+                a.controller->getParameterInfo(k, info);
+                if (a.controller->getParamNormalized(info.id) == info.defaultNormalizedValue) continue;
+                a.controller->setParamNormalized(info.id, info.defaultNormalizedValue);
+                int32 qi = 0, pi = 0;
+                if (IParamValueQueue* q = resetChanges.addParameterData(info.id, qi))
+                    q->addPoint(0, info.defaultNormalizedValue, pi);
+            }
+            a.start();
+            const int n = static_cast<int>(kRate * 4);
+            ap::DeckProcessor ref;
+            ref.prepare(kRate);
+            configure(ref, sa);
+            ref.startFadeIn();
+            std::vector<float> pl(static_cast<size_t>(n)), pr(static_cast<size_t>(n)), rl(inL.begin(), inL.begin() + n),
+                rr(inR.begin(), inR.begin() + n);
+            for (int pos = 0; pos < n; pos += 512) {
+                const int len = std::min(512, n - pos);
+                a.run(&inL[static_cast<size_t>(pos)], &inR[static_cast<size_t>(pos)], &pl[static_cast<size_t>(pos)],
+                      &pr[static_cast<size_t>(pos)], len, pos == 0 ? &resetChanges : nullptr);
+            }
+            ref.process(rl.data(), rr.data(), n);
+            const int diff = differences(pl, rl) + differences(pr, rr);
+            std::printf("-- the host's reset also handed to the processing: %d samples differ from the kept preset\n",
+                        diff);
+            CHECK(diff == 0);
+            a.close();
         }
         // look-ahead, oversampling and mono (the plug-in's Setup window) kept the same way - as those parameters'
         // defaults too, so the host's reset leaves them
