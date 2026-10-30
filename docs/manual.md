@@ -399,8 +399,10 @@ The dark panel under the Loudness and Colour lists shows what the deck is doing.
 R* is the output level (true peak in dBTP). Lit segments show the level; the zone colours show amber and red near the
 top (input: amber from -6, red from -1 dBFS; output: amber in the last 3 dB below the ceiling, red above it). A
 single LED holds the peak for 1.5 s. Across each pair a **white** line shows the momentary loudness and a **yellow**
-line the target loudness. The scale on the left is in dB, the one on the right in LUFS; they share one axis, so the
-white line can be compared with the bars and with the target directly.
+line the target loudness. Across *In* a **blue** line shows the loudness preset's input gain (dB: at -3 dB the input's
+0 dBFS lands there); across *Out* a **red** line shows the limiter's ceiling, whose value (for example -1.0 dBTP) is
+also written under the **Limiter** row. The scale on the left is in dB, the one on the right in LUFS; they share one
+axis, so the white line can be compared with the bars and with the target directly.
 
 **Stage rows, right.** What each stage does now:
 
@@ -912,7 +914,11 @@ The window is one deck strip of the program:
     2, 3 or 5 ms (see 5.1), a list of these five in the DJ software too; the DJ software is told the new delay (an old
     project's 0.5 or 1.0 ms runs as 1.5 ms); **Oversampling** - 2x, 4x (default) or 8x, stored with the DJ software's
     project; **Mono** - this channel's left and right mixed, the same sound on both outputs (as in the program, 5.2),
-    a parameter stored with the project, off by default; **Show tooltips** and the **update check** - these two are shared with the program (the same settings
+    a parameter stored with the project, off by default; **Deck 1 and deck 2 keep the same settings** - the plug-ins
+    open in the DJ software (deck 1 is the first one opened) keep the same loudness preset, colour, every value,
+    look-ahead, oversampling and Mono: switched on, deck 2 takes deck 1's, and after that a change in either plug-in
+    sets both (as "Deck A and deck B use the same loudness preset and colour" in the program, 5.2); Bypass stays each
+    deck's own; **Show tooltips** and the **update check** - these two are shared with the program (the same settings
     file). There are no audio devices: the DJ software chooses the plug-in's input and output.
   - **About DJAP** - the version, the settings file in use, the copyright and licences, the update check (9.4), a
     Disclaimer button and a link to DJAP's GitHub page.

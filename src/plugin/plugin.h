@@ -66,6 +66,10 @@ public:
     bool snapToBands() const { return settings_.snapToBands; }   // the spectrum window's start (not saved by the plug-in)
     // The plug-in's Setup window: the two switches it shares with the program, merged into the settings file.
     void setSwitches(bool tooltips, bool checkUpdates);
+    // The plug-in's Setup window: the plug-ins open in this DJ program keep the same settings (Settings::pluginLink);
+    // switched on, every one takes the first one's.
+    bool linked() const { return settings_.pluginLink; }
+    void setLinked(bool on);
     const std::filesystem::path& iniFile() const { return ini_; } // (not "settingsFile": plugin.cpp's own function)
     const std::vector<Preset>& colours() const { return settings_.colours; }
     int presetIndex() const; // in its list; the list's size = "(other values)"
@@ -105,6 +109,11 @@ private:
     // The window's choice of preset, colour, look-ahead, oversampling or mono: kept for this instance in the settings
     // file (Settings::pluginSlots), read at its next start; true when it changed (saved when `save`).
     bool rememberChoice(bool save);
+    // Linked (Settings::pluginLink): this instance's whole state - the lists' choices, every chain value, look-ahead,
+    // oversampling, Mono; not Bypass - to every other instance in the process (a change in either window sets both),
+    // and the receiving side of it.
+    void shareState();
+    void takeState(Plugin& from);
     int slot_ = 0; // this instance's number in the process (1 = the first one open); 0 before initialize
     void setLatencyFrom(double lookMs);
     void publishConfig(); // audio thread (or while inactive)

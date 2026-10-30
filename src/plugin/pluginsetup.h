@@ -36,8 +36,8 @@ private:
     int px(int v) const { return MulDiv(v, static_cast<int>(dpi_), 96); }
 
     Plugin*& plugin_; // the plug-in window's (nullptr after it ended)
-    HWND hwnd_ = nullptr, look_ = nullptr, oversampling_ = nullptr, mono_ = nullptr, tooltips_ = nullptr,
-         updates_ = nullptr, close_ = nullptr;
+    HWND hwnd_ = nullptr, look_ = nullptr, oversampling_ = nullptr, mono_ = nullptr, link_ = nullptr,
+         tooltips_ = nullptr, updates_ = nullptr, close_ = nullptr;
     HFONT font_ = nullptr;
     UINT dpi_ = 96;
     theme::Metal metal_;

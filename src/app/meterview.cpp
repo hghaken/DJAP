@@ -20,6 +20,7 @@ const COLORREF kBack = RGB(28, 30, 33), kWell = RGB(44, 47, 52), kText = RGB(214
                kDim = RGB(120, 126, 134), kGreen = RGB(70, 190, 110), kAmber = RGB(235, 170, 60),
                kRed = RGB(230, 70, 60), kBlue = RGB(80, 160, 235), kOrange = RGB(240, 130, 50),
                kTarget = RGB(250, 220, 90), kWhite = RGB(240, 240, 240), kTeal = RGB(80, 215, 195),
+               kGainLine = RGB(40, 140, 255), // the input gain (the blue of the windows' sliders)
                kPurple = RGB(175, 145, 245);
 constexpr double kSpecTop = 0.0, kSpecBottom = -90.0; // spectrum scale (dB)
 
@@ -32,16 +33,18 @@ const wchar_t* const kTips[kTipParts] = {
     L"Input, left channel, after the loudness preset's input gain (what enters the processing): its sample peak (dBFS, held, "
     L"falling 20 dB/s) as LEDs - amber from -6 dBFS, red from "
     L"-1 dBFS (near clipping); the single lit LED above holds the highest peak for 1.5 s. White line across In L / R: "
-    L"the input's loudness (momentary, 400 ms, LUFS - right scale); yellow line: the loudness preset's target.",
+    L"the input's loudness (momentary, 400 ms, LUFS - right scale); yellow line: the loudness preset's target; blue "
+    L"line: the loudness preset's input gain (dB - left scale).",
     L"Input, right channel, after the loudness preset's input gain (what enters the processing): its sample peak (dBFS, held, "
     L"falling 20 dB/s) as LEDs - amber from -6 dBFS, red from "
     L"-1 dBFS (near clipping); the single lit LED above holds the highest peak for 1.5 s. White line across In L / R: "
-    L"the input's loudness (momentary, 400 ms, LUFS - right scale); yellow line: the loudness preset's target.",
+    L"the input's loudness (momentary, 400 ms, LUFS - right scale); yellow line: the loudness preset's target; blue "
+    L"line: the loudness preset's input gain (dB - left scale).",
     L"Output, left channel: its true peak (dBTP: peaks between the samples included, falling 20 dB/s) as LEDs - "
-    L"amber in the last 3 dB under the limiter's ceiling (red line), red over it; the single lit LED above holds the "
+    L"amber in the last 3 dB under the limiter's ceiling (red line; its value under the Limiter row), red over it; the single lit LED above holds the "
     L"highest peak for 1.5 s. White line across Out L / R: the output's loudness (momentary, LUFS); yellow: the target.",
     L"Output, right channel: its true peak (dBTP: peaks between the samples included, falling 20 dB/s) as LEDs - "
-    L"amber in the last 3 dB under the limiter's ceiling (red line), red over it; the single lit LED above holds the "
+    L"amber in the last 3 dB under the limiter's ceiling (red line; its value under the Limiter row), red over it; the single lit LED above holds the "
     L"highest peak for 1.5 s. White line across Out L / R: the output's loudness (momentary, LUFS); yellow: the target.",
     L"Leveller gain now: blue to the right = lifted, orange to the left = turned down; the ends of the bar are the "
     L"loudness preset's leveller range. A grey name: the stage is off in the loudness preset, or the deck is "
@@ -52,7 +55,8 @@ const wchar_t* const kTips[kTipParts] = {
     L"",
     L"De-esser gain reduction now (scale 0-12 dB): how much sharp 's' sounds are turned down.",
     L"Soft clipper gain reduction now (scale 0-12 dB): how much the peaks are rounded off.",
-    L"Limiter gain reduction now (scale 0-12 dB). Often busy means the input is far louder than the loudness preset expects.",
+    L"Limiter gain reduction now (scale 0-12 dB). Often busy means the input is far louder than the loudness preset expects. "
+    L"Under the name: the limiter's ceiling (dBTP), the red line across the Out bars.",
     L"Spectrum of this deck, 20 Hz - 20 kHz, averaged over about 0.3 s: orange = the original (the deck's input), "
     L"turquoise = processed (the output). The scale is dB of a sine's level (0 dB = full scale). Where the turquoise "
     L"line lies above the orange one the processing lifts that range. Purple: the density stage's bands (dashed: "
@@ -223,10 +227,18 @@ void paint(HWND hwnd, HDC target, View& v) {
                 const bool lit = val > kBottom && val >= mid;
                 fill(dc, x, yt, x + barW, yb, lit || k == heldLed ? zone(mid) : unlit(zone(mid)));
             }
-            if (i >= 2) { // the limiter's ceiling
-                const int yc = yOf(d.ceiling);
-                fill(dc, x - px(1), yc, x + barW + px(1), yc + px(1), kRed);
-            }
+        }
+        // across Out L / R: the limiter's ceiling (red; 2 px across the pair as the other lines - client, 2026-10-30:
+        // "at the output it is not quite clear where the limiter is set in dB"; its value is under the Limiter row)
+        {
+            const int yc = yOf(d.ceiling);
+            fill(dc, barX(2) - px(2), yc, barX(3) + barW + px(2), yc + px(2), kRed);
+        }
+        // across In L / R: the input gain on the dB scale (blue; client, 2026-10-30: "a line at the In meter for the
+        // input gain that is set") - where the input's 0 dBFS lands after it
+        {
+            const int yg = yOf(d.inputGain);
+            fill(dc, barX(0) - px(2), yg, barX(1) + barW + px(2), yg + px(2), kGainLine);
         }
         // across each pair: the target (yellow) and the loudness now (white, momentary LUFS)
         for (int pair = 0; pair < 2; ++pair) {
@@ -287,6 +299,11 @@ void paint(HWND hwnd, HDC target, View& v) {
             text(dc, gx, yc - th / 2, r.name, on ? kText : kDim);
             fill(dc, barL, bt, barR, bb, kWell);
             SelectObject(dc, v.small);
+            if (r.stage == sLimiter) { // its ceiling, under the name (the red line on the Out bars)
+                char c[24];
+                std::snprintf(c, sizeof c, "%.1f dBTP", d.ceiling);
+                text(dc, gx, ly, c, on ? kRed : kDim);
+            }
             if (r.kind == 0) { // reduction 0 .. full dB, a tick every quarter
                 const double full = r.full;
                 const double red = live && on ? std::min(full, std::max(0.0, r.value)) : 0.0;

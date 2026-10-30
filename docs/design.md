@@ -434,7 +434,9 @@ the preset window (client, 2026-10-25; they were on the strips). The meter panel
 needed"): LED bars In L / R (sample peak, dBFS, after the preset's input gain - client: "the input slider should move the In bar"; shown by adding the gain to the measurement, which stays the deck's raw input for the offline report) and Out L / R (true peak, dBTP), segments of 5 px lit up to the
 value, unlit ones dark in their zone's colour (input: amber from -6, red from -1 dBFS; output: amber in the last
 3 dB under the ceiling, red over it) and a peak-hold LED for 1.5 s; across each pair the momentary loudness (white)
-and the target (yellow); one axis -40..+3 with a dB scale on the left and a LUFS scale on the right; the gain of each stage (a click on a row opens the preset window on that stage's tab, a click on the In bars the General tab, on the Out bars the Limiter tab - client 2026-10-25; leveller up / down over
+and the target (yellow); across In the preset's input gain (blue; client, 2026-10-30: "a line at the In meter for the
+input gain that is set"), across Out the limiter's ceiling (red, 2 px across the pair; its value in dBTP under the
+Limiter row - client, 2026-10-30: "at the output it is not quite clear where the limiter is set"); one axis -40..+3 with a dB scale on the left and a LUFS scale on the right; the gain of each stage (a click on a row opens the preset window on that stage's tab, a click on the In bars the General tab, on the Out bars the Limiter tab - client 2026-10-25; leveller up / down over
 its range, compressor / de-esser / clipper / limiter reduction 0..12 dB, the noise reduction's most reduced band
 0..24 dB (a row after the leveller, 2026-10-29: the panel one row taller); the density row was removed 2026-10-26 - the density
 bands are lines in the spectrum) and the
@@ -863,6 +865,15 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   against the program's deck with the kept preset). Only the window's choices are kept - a host's
   automation or a project load never writes the file; a project's `setState` still sets its own choices
   (`plugin_test` 4f).
+- **Linked plug-ins** (client, 2026-10-30: "a check box in the Setup window that keeps all audio settings of deck A
+  and deck B the same - deck A leading - as in the program"): the plug-in's Setup window has "Deck 1 and deck 2 keep
+  the same settings". `[Plugin] Link=1` (`Settings::pluginLink`, merged three-way as the two shared switches). The
+  instances of one process find each other through the registry of their numbers; linked, every one starts with
+  instance 1's kept choices, switching the link on gives every instance the first one's whole state, and a change in
+  any instance's windows - a list choice, a value (bass slider, spectrum window, preset window), look-ahead,
+  oversampling, Mono - is handed to the others (`shareState` / `takeState`: the names, every chain value exactly,
+  told to each host and published to each processing). Bypass stays per deck. `plugin_test` 4g: two instances,
+  linked and not.
 - **Window** (`pluginview.*`, 600 px wide at 96 DPI and as high as the program's smallest one-channel window without its status bar (client, 2026-10-29; was 820 x 640), scaled to the host window's DPI): the program's deck strip -
   DJAP and the version, oversampling, look-ahead, Graphs, Bypass, About; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same

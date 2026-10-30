@@ -679,6 +679,7 @@ void merged(const fs::path& dir) {
     one.oversampling = 8;
     one.mono = true;
     plugin.pluginSlots[1] = one;
+    plugin.pluginLink = true; // the plug-ins' Setup window: linked
     CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
     Settings other, otherBase; // a second plug-in instance's copy, read before the first one saved
     other = otherBase = programBase;
@@ -689,6 +690,7 @@ void merged(const fs::path& dir) {
     CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
     CHECK(check.load(file));
     CHECK(check.pluginSlots.size() == 2 && check.pluginSlots[1] == one && check.pluginSlots[2] == two);
+    CHECK(check.pluginLink && program.pluginLink); // kept by the other plug-in's and the program's saves
     CHECK(program.pluginSlots.size() == 2);
     std::printf("   both kept each other's presets and colours; the program's settings untouched by the plug-in, "
                 "except the two switches it changed; the plug-in's choices per instance merged and kept\n");

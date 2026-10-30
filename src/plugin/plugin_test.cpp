@@ -739,6 +739,66 @@ int main(int argc, char** argv) {
         std::filesystem::remove(ini, ec);
     }
 
+    // 4g. linked plug-ins (client, 2026-10-30: "keep all audio settings of deck A and deck B the same, deck A leading"):
+    // both start with the first one's kept choices, and a choice in either window sets both - every value with it; not
+    // linked, each keeps its own
+    {
+        const std::filesystem::path ini = std::filesystem::temp_directory_path() / "djap_plugin_test_link.ini";
+        std::error_code ec;
+        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", ini.wstring().c_str());
+        SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", L"1");
+        auto pick = [](Instance& i, int listId, const wchar_t* name) {
+            HWND parent = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, nullptr, nullptr);
+            IPtr<IPlugView> view = owned(i.controller->createView(ViewType::kEditor));
+            bool ok = false;
+            if (parent && view && view->attached(parent, kPlatformTypeHWND) == kResultOk) {
+                HWND w = FindWindowExW(parent, nullptr, nullptr, nullptr);
+                HWND list = w ? GetDlgItem(w, listId) : nullptr;
+                const LRESULT k = list ? SendMessageW(list, CB_FINDSTRINGEXACT, static_cast<WPARAM>(-1),
+                                                      reinterpret_cast<LPARAM>(name))
+                                       : CB_ERR;
+                if (k != CB_ERR) {
+                    SendMessageW(list, CB_SETCURSEL, static_cast<WPARAM>(k), 0);
+                    SendMessageW(w, WM_COMMAND, MAKEWPARAM(listId, CBN_SELENDOK), reinterpret_cast<LPARAM>(list));
+                    ok = true;
+                }
+                view->removed();
+            }
+            if (parent) DestroyWindow(parent);
+            return ok;
+        };
+        for (const bool link : {true, false}) {
+            {
+                std::ofstream f(ini);
+                f << "[Plugin]\nLink=" << (link ? 1 : 0) << "\nLoudness1=Loud\nColour1=Warm\nLoudness2=Gentle\nMono1=1\n";
+            }
+            Instance a, b;
+            CHECK(a.open(module, &host) && b.open(module, &host));
+            const State b0 = b.state();
+            CHECK(pick(a, 1, L"Very Loud"));
+            const State b1 = b.state();
+            CHECK(pick(b, 2, L"Bright"));
+            const State a2 = a.state(), b2 = b.state();
+            std::printf("-- %s: deck 2 started on %s with %s (mono %.0f); deck 1 chose Very Loud: deck 2 %s; deck 2 chose "
+                        "Bright: deck 1 %s\n",
+                        link ? "linked" : "not linked", b0.preset.c_str(), b0.colour.c_str(),
+                        b.controller->getParamNormalized(ap::plugin::kMonoId), b1.preset.c_str(), a2.colour.c_str());
+            if (link) {
+                CHECK(b0.preset == "Loud" && b0.colour == "Warm" && b.controller->getParamNormalized(ap::plugin::kMonoId) == 1.0);
+                CHECK(b1.preset == "Very Loud" && b2.colour == "Bright" && a2.colour == "Bright");
+                CHECK(a2.values == b2.values);
+            } else {
+                CHECK(b0.preset == "Gentle" && b0.colour == "Neutral");
+                CHECK(b1.preset == "Gentle" && a2.colour == "Warm" && b2.colour == "Bright");
+            }
+            a.close();
+            b.close();
+        }
+        SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", nullptr);
+        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
+        std::filesystem::remove(ini, ec);
+    }
+
     // 5. an input the host marks silent may hold anything: it is processed as silence
     {
         Instance a;

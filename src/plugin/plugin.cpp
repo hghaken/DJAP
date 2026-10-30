@@ -21,7 +21,8 @@
 #include <filesystem>
 #include <memory>
 #include <mutex>
-#include <set>
+#include <map>
+#include <utility>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -223,19 +224,24 @@ private:
 // initialize - the first one open is 1 (deck 1 in a DJ program that opens its decks' plug-ins in order) - and frees
 // it at terminate.
 std::mutex g_slotLock;
-std::set<int> g_slots;
+std::map<int, Plugin*> g_slots; // the instances by number (the linked ones share their state through it)
 
-int takeSlot() {
+int takeSlot(Plugin* p) {
     const std::lock_guard<std::mutex> lock(g_slotLock);
     int n = 1;
     while (g_slots.count(n)) ++n;
-    g_slots.insert(n);
+    g_slots[n] = p;
     return n;
 }
 
 void freeSlot(int n) {
     const std::lock_guard<std::mutex> lock(g_slotLock);
     g_slots.erase(n);
+}
+
+std::vector<std::pair<int, Plugin*>> liveInstances() { // by number, the first one open first
+    const std::lock_guard<std::mutex> lock(g_slotLock);
+    return {g_slots.begin(), g_slots.end()};
 }
 
 } // namespace
@@ -264,7 +270,8 @@ void Plugin::loadLists() {
     settings_.deck[0] = DeckSettings();
     // this instance's last choices (client, 2026-10-30: the DJ program keeps no plug-in state - after a restart the
     // plug-in was back on Medium and Neutral); a preset or colour no longer in the lists: Medium, Neutral
-    const auto kept = settings_.pluginSlots.find(slot_);
+    // linked: every instance starts with the first one's choices
+    const auto kept = settings_.pluginSlots.find(settings_.pluginLink ? 1 : slot_);
     if (kept != settings_.pluginSlots.end()) {
         const PluginSlot& c = kept->second;
         if (settings_.find(c.preset)) settings_.deck[0].preset = c.preset;
@@ -330,7 +337,7 @@ tresult PLUGIN_API Plugin::initialize(FUnknown* context) {
     if (r != kResultOk) return r;
     addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
-    if (slot_ <= 0) slot_ = takeSlot();
+    if (slot_ <= 0) slot_ = takeSlot(this);
     loadLists();
     addParameters();
     setLatencyFrom(lookMs_);
@@ -755,6 +762,7 @@ void Plugin::edited(bool listChanged, bool save) {
     }
     if (listChanged) listsChanged();
     if (save || kept) saveSettings();
+    if (!changed.empty() || listChanged || kept) shareState();
     if (view_) view_->refresh();
 }
 
@@ -813,6 +821,53 @@ void Plugin::edit(ParamID id, ParamValue normalized) {
     setParamNormalized(id, normalized);
     publishToProcessor();
     if (id == kPresetId || id == kColourId || id == kLookId || id == kOversamplingId || id == kMonoId) rememberChoice(true);
+    if (id != kBypassId) shareState(); // Bypass stays each deck's own
+}
+
+void Plugin::setLinked(bool on) {
+    for (const auto& [n, p] : liveInstances()) p->settings_.pluginLink = on; // every instance's copy
+    saveSettings(); // merged into the file three-way, as the two switches
+    if (!on) return;
+    const auto live = liveInstances();
+    if (!live.empty()) live.front().second->shareState(); // the first one open leads
+}
+
+void Plugin::shareState() {
+    if (!settings_.pluginLink || slot_ <= 0) return;
+    for (const auto& [n, p] : liveInstances())
+        if (p != this) p->takeState(*this);
+}
+
+void Plugin::takeState(Plugin& from) {
+    saveSettings(); // the lists as the file has them now (the other one may just have changed a preset)
+    auto own = [](const std::vector<Preset>& items, const std::string& name) {
+        for (const Preset& p : items)
+            if (p.name == name) return name;
+        return std::string(); // not in this instance's lists: "(other values)"
+    };
+    settings_.deck[0].preset = own(settings_.presets, from.settings_.deck[0].preset);
+    settings_.deck[0].colour = own(settings_.colours, from.settings_.deck[0].colour);
+    exact_ = from.exact_;
+    std::vector<ParamID> changed;
+    loading_ = true;
+    auto set = [&](ParamID id, ParamValue v) {
+        if (getParamNormalized(id) == v) return;
+        SingleComponentEffect::setParamNormalized(id, v);
+        changed.push_back(id);
+    };
+    set(kPresetId, static_cast<double>(presetIndex()) / settings_.presets.size());
+    set(kColourId, static_cast<double>(colourIndex()) / settings_.colours.size());
+    for (const ParamID id : {kLookId, kOversamplingId, kMonoId}) set(id, from.getParamNormalized(id));
+    for (int p = 0; p < kParamCount; ++p) set(paramId(p), normalizedOf(p, exact_[static_cast<size_t>(p)]));
+    loading_ = false;
+    applied_ = chosenValues();
+    updateStamp(true);
+    setLatencyFrom(plainOf(kLookId));
+    if (componentHandler) componentHandler->restartComponent(kParamValuesChanged);
+    for (const ParamID id : changed) tellHost(id); // the host keeps them, as the window's own changes
+    publishToProcessor();
+    rememberChoice(true);
+    if (view_) view_->refresh();
 }
 
 bool Plugin::rememberChoice(bool save) {
@@ -852,6 +907,7 @@ void Plugin::choose(bool colour, int index) {
         // already chosen: its values again (after changes), exactly, to the controller and the processing
         loadPresetIntoController(colour);
         publishToProcessor();
+        shareState();
     }
     fromWindow_ = false;
 }

@@ -103,6 +103,9 @@ public:
     // the plug-in's choices by instance number: 1 = the first instance open in a host (deck 1 in a DJ program), 2 =
     // the second, ...; written by the plug-in only, kept by the program
     std::map<int, PluginSlot> pluginSlots;
+    // the plug-ins in one DJ program keep the same settings (client, 2026-10-30: "a check box in the Setup window that
+    // keeps all audio settings of deck A and deck B the same - deck A leading - as in the program"): instance 1 leads
+    bool pluginLink = false;
     // An audio device was chosen in the Audio window (an ASIO driver, or a device of another API for a deck);
     // false at the first start: the program then opens the Audio window.
     bool audioConfigured() const;

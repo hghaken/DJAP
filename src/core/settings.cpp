@@ -328,8 +328,10 @@ std::string Settings::toText() const {
     o << "[Updates]\n; 1 = ask GitHub once a day for a newer version (installed only after a click)\nCheckUpdates="
       << (checkUpdates ? 1 : 0) << "\n";
     if (!updateUrl.empty()) o << "; where to ask instead of the public repository (tests)\nUrl=" << updateUrl << "\n";
-    if (!pluginSlots.empty()) {
-        o << "\n[Plugin]\n; What each plug-in instance last chose - 1 = the first one open (deck 1 in a DJ program), 2 = the\n"
+    if (!pluginSlots.empty() || pluginLink) {
+        o << "\n[Plugin]\n; 1 = the plug-ins keep the same settings (the first one open leads)\nLink=" << (pluginLink ? 1 : 0)
+          << "\n";
+        o << "; What each plug-in instance last chose - 1 = the first one open (deck 1 in a DJ program), 2 = the\n"
              "; second, ...: loudness preset, colour, look-ahead (ms), oversampling, 1 = mono; taken at its next start\n";
         for (const auto& [n, c] : pluginSlots)
             o << "Loudness" << n << "=" << c.preset << "\nColour" << n << "=" << c.colour << "\nLookAhead" << n << "="
@@ -482,6 +484,7 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Updates", "CheckUpdates")) checkUpdates = toInt(*v, 1) != 0;
     if (auto v = get("Updates", "Url")) updateUrl = *v;
     // the plug-in's choices: "Loudness1", "Colour1", ... - a key and its instance number
+    if (auto v = get("Plugin", "Link")) pluginLink = toInt(*v, 0) != 0;
     for (const auto& [key, value] : sections["Plugin"]) {
         const size_t digits = key.find_first_of("0123456789");
         if (digits == std::string::npos || digits == 0) continue;
@@ -681,7 +684,7 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
     out.sortPresets();
     // the switches both can change (the plug-in's Setup window, client 2026-10-29): three-way like the lists - a
     // change this writer made since `base` is written, else the file's value stays (the other may have changed it)
-    for (bool Settings::*f : {&Settings::showTooltips, &Settings::checkUpdates}) {
+    for (bool Settings::*f : {&Settings::showTooltips, &Settings::checkUpdates, &Settings::pluginLink}) {
         out.*f = this->*f != base.*f ? this->*f : now.*f;
         this->*f = base.*f = out.*f;
     }
