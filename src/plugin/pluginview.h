@@ -58,6 +58,9 @@ private:
     void command(int id, int code);
     void updateNote(); // the version line: a newer version when the check found one
     void followFrame(); // the host's frame around this window: to its remembered place once, then its place noted
+    // "DJAP Deck 1" for the first plug-in open (client, 2026-10-30: "the deck number in the spectrum's and the
+    // analysis window's title bar"; the DJ program names its frames "Deck 1", "Deck 2" alike)
+    std::wstring deckName() const;
     int px(int v) const { return MulDiv(v, static_cast<int>(dpi_), 96); }
     static Steinberg::ViewRect sizeFor(UINT dpi);
     // where the meter panel starts: the margin and the two rows above it (the program's MainWindow::meterTop)
@@ -86,6 +89,7 @@ private:
         PresetValues values(int) const override;
         std::wstring title(int) const override;
         bool processing(int) const override;
+        std::wstring windowTitle() const override { return L"Analysis: " + view_.deckName(); }
 
     private:
         const PluginView& view_;
@@ -103,7 +107,7 @@ private:
         double sampleRate() const override;
         PresetValues values(int d) const override { return view_.graphsSource_.values(d); }
         bool processing(int d) const override { return view_.graphsSource_.processing(d); }
-        std::wstring deckName(int) const override { return L"DJAP"; }
+        std::wstring deckName(int) const override { return view_.deckName(); }
         std::vector<std::string> names(bool colour) const override;
         int chosen(int d, bool colour) const override;
         std::string chosenName(int d, bool colour) const override;

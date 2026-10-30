@@ -29,6 +29,7 @@ public:
     virtual PresetValues values(int d) const = 0; // the deck's chain values: its loudness preset with its colour
     virtual std::wstring title(int d) const = 0;  // "Deck A   Medium"
     virtual bool processing(int d) const = 0;     // false: bypassed
+    virtual std::wstring windowTitle() const { return L"Analysis"; } // the plug-in's names its deck
 };
 
 class AnalysisWindow {

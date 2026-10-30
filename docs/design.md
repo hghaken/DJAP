@@ -539,7 +539,9 @@ half a second (`placement::note`, from the window's 50 ms timer; a drag writes t
 host's window (the DLL may be unloaded while it lives on), and only a frame little larger than the plug-in's window
 (at most 100 x 200 px more at 96 DPI): a host that shows the plug-in inside its main window is never moved.
 `plugin_test --frames` (not in `run_tests.ps1`: it shows two small windows for two seconds) moves two such frames,
-closes and opens them again. The name prompt and every message box
+closes and opens them again. The plug-in's spectrum and analysis windows name their deck in the title bar ("Spectrum:
+DJAP Deck 1 (loudness ..., colour ...)", "Analysis: DJAP Deck 2" - client, 2026-10-30; `AnalysisSource::windowTitle`,
+the plug-in's `deckName` from its instance number); `--frames` checks both titles of instance 2. The name prompt and every message box
 stay centred on the window that asks (a CBT hook moves the box), kept inside that monitor's work area; while the
 main window is minimised or in the notification area its normal position counts.
 

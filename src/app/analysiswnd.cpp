@@ -206,7 +206,7 @@ void AnalysisWindow::show(HWND owner) {
             wc.lpszClassName = kClass;
             g_registered = RegisterClassExW(&wc) != 0;
         }
-        hwnd_ = CreateWindowExW(0, kClass, L"Analysis", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+        hwnd_ = CreateWindowExW(0, kClass, source_.windowTitle().c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                                 CW_USEDEFAULT, owner, nullptr, inst, this);
         if (!hwnd_) return;
         RECT r{0, 0, px(1560), px(640)};

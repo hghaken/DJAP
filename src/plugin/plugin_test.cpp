@@ -950,6 +950,26 @@ int main(int argc, char** argv) {
             std::printf("-- the host's windows opened again: instance 1 at %d,%d, instance 2 at %d,%d\n", pa.first,
                         pa.second, pb.first, pb.second);
             CHECK(pa == std::make_pair(200, 210) && pb == std::make_pair(420, 430));
+            // the spectrum and the analysis window of instance 2 name its deck (client, 2026-10-30)
+            HWND view = FindWindowExW(fb.frame, nullptr, nullptr, nullptr);
+            HWND meter = view ? GetDlgItem(view, 20) : nullptr, graphs = view ? GetDlgItem(view, 6) : nullptr;
+            if (meter) SendMessageW(view, WM_COMMAND, MAKEWPARAM(20, 19), reinterpret_cast<LPARAM>(meter));
+            if (graphs) SendMessageW(view, WM_COMMAND, MAKEWPARAM(6, BN_CLICKED), reinterpret_cast<LPARAM>(graphs));
+            pump(300);
+            std::vector<std::wstring> titles;
+            EnumThreadWindows(GetCurrentThreadId(), [](HWND w, LPARAM l) -> BOOL {
+                wchar_t t[256] = {};
+                GetWindowTextW(w, t, 256);
+                reinterpret_cast<std::vector<std::wstring>*>(l)->push_back(t);
+                return TRUE;
+            }, reinterpret_cast<LPARAM>(&titles));
+            bool spectrum = false, analysis = false;
+            for (const std::wstring& t : titles) {
+                if (t.rfind(L"Spectrum: DJAP Deck 2 (", 0) == 0) spectrum = true;
+                if (t == L"Analysis: DJAP Deck 2") analysis = true;
+                if (t.rfind(L"Spectrum", 0) == 0 || t.rfind(L"Analysis", 0) == 0) std::printf("-- title: %ls\n", t.c_str());
+            }
+            CHECK(spectrum && analysis);
             hide(fa);
             hide(fb);
             a.close();

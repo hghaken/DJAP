@@ -92,6 +92,11 @@ ViewRect PluginView::sizeFor(UINT dpi) {
     return ViewRect(0, 0, px(600), meterTop(dpi) + meterViewMinHeight(dpi) + px(12));
 }
 
+std::wstring PluginView::deckName() const {
+    const int n = plugin_ ? plugin_->slot() : 0;
+    return n > 0 ? L"DJAP Deck " + std::to_wstring(n) : std::wstring(L"DJAP");
+}
+
 bool PluginView::Graphs::audioActive() const { return view_.plugin_ && view_.plugin_->active(); }
 
 PresetValues PluginView::Graphs::values(int) const {
