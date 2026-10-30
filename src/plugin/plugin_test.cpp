@@ -965,7 +965,7 @@ int main(int argc, char** argv) {
             }, reinterpret_cast<LPARAM>(&titles));
             bool spectrum = false, analysis = false;
             for (const std::wstring& t : titles) {
-                if (t.rfind(L"Spectrum: DJAP Deck 2 (", 0) == 0) spectrum = true;
+                if (t == L"Spectrum: DJAP Deck 2") spectrum = true;
                 if (t == L"Analysis: DJAP Deck 2") analysis = true;
                 if (t.rfind(L"Spectrum", 0) == 0 || t.rfind(L"Analysis", 0) == 0) std::printf("-- title: %ls\n", t.c_str());
             }

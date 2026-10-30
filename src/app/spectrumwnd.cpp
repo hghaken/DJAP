@@ -214,12 +214,9 @@ void SpectrumWindow::refresh() {
 
 void SpectrumWindow::setTitle() {
     if (!hwnd_) return;
-    auto name = [&](bool colour) {
-        const std::string n = source_.chosenName(deck_, colour);
-        return n.empty() ? std::wstring(L"(other values)") : fromUtf8(n);
-    };
-    const std::wstring title = L"Spectrum: " + source_.deckName(deck_) + L" (loudness " + name(false) + L", colour " +
-                               name(true) + L")";
+    // the deck only (client, 2026-10-30: "(loudness FM Station, colour Oldies) is superfluous" - the window's own
+    // lists show them)
+    const std::wstring title = L"Spectrum: " + source_.deckName(deck_);
     if (title == title_) return; // only when it changed (refresh() asks 20 times a second)
     title_ = title;
     SetWindowTextW(hwnd_, title.c_str());
