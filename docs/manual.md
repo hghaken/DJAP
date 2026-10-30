@@ -955,8 +955,9 @@ the spectrum window, the Setup window and the right-click menu now.
   own data still wins. A loudness preset or colour deleted since: Medium and Neutral.
 - **Window places.** The plug-in's windows (loudness, colour, spectrum, analysis, Setup, About) open where they were
   last. The plug-in's main window is a window of the DJ software; when the DJ software opens it somewhere else, the
-  plug-in moves it back to its last place (it never changes its size). The spectrum and analysis windows name their
-  deck in the title bar ("Spectrum: DJAP Deck 1", "Analysis: DJAP Deck 2"; deck 1 is the first plug-in opened).
+  plug-in moves it back to its last place (it never changes its size). The plug-in's windows name their deck in the title
+  bar: "Settings Loudness: DJAP Deck 1", "Settings Colour: DJAP Deck 1", "Spectrum: DJAP Deck 1", "Analysis: DJAP
+  Deck 2" - deck 1 is the first plug-in opened.
 
 ### 9.4 Updates
 

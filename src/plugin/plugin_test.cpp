@@ -955,6 +955,9 @@ int main(int argc, char** argv) {
             HWND meter = view ? GetDlgItem(view, 20) : nullptr, graphs = view ? GetDlgItem(view, 6) : nullptr;
             if (meter) SendMessageW(view, WM_COMMAND, MAKEWPARAM(20, 19), reinterpret_cast<LPARAM>(meter));
             if (graphs) SendMessageW(view, WM_COMMAND, MAKEWPARAM(6, BN_CLICKED), reinterpret_cast<LPARAM>(graphs));
+            for (const int edit : {4, 5}) // the loudness and the colour window (Edit... buttons)
+                if (HWND button = view ? GetDlgItem(view, edit) : nullptr)
+                    SendMessageW(view, WM_COMMAND, MAKEWPARAM(edit, BN_CLICKED), reinterpret_cast<LPARAM>(button));
             pump(300);
             std::vector<std::wstring> titles;
             EnumThreadWindows(GetCurrentThreadId(), [](HWND w, LPARAM l) -> BOOL {
@@ -963,13 +966,15 @@ int main(int argc, char** argv) {
                 reinterpret_cast<std::vector<std::wstring>*>(l)->push_back(t);
                 return TRUE;
             }, reinterpret_cast<LPARAM>(&titles));
-            bool spectrum = false, analysis = false;
+            bool spectrum = false, analysis = false, loudness = false, colourWnd = false;
             for (const std::wstring& t : titles) {
                 if (t == L"Spectrum: DJAP Deck 2") spectrum = true;
                 if (t == L"Analysis: DJAP Deck 2") analysis = true;
-                if (t.rfind(L"Spectrum", 0) == 0 || t.rfind(L"Analysis", 0) == 0) std::printf("-- title: %ls\n", t.c_str());
+                if (t == L"Settings Loudness: DJAP Deck 2") loudness = true;
+                if (t == L"Settings Colour: DJAP Deck 2") colourWnd = true;
+                if (t.find(L"DJAP Deck") != std::wstring::npos) std::printf("-- title: %ls\n", t.c_str());
             }
-            CHECK(spectrum && analysis);
+            CHECK(spectrum && analysis && loudness && colourWnd);
             hide(fa);
             hide(fb);
             a.close();

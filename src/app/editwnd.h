@@ -36,6 +36,9 @@ public:
     HWND hwnd() const { return hwnd_; }
     // What the window calls deck A (the plug-in: "this plug-in").
     void setDeckName(const std::wstring& name) { deckA_ = name; }
+    // A fixed title bar instead of "Loudness: <preset>" (the plug-in: "Settings Loudness: DJAP Deck 1" - client, 2026-10-30:
+    // the preset's name in the title is superfluous, the list shows it).
+    void setWindowTitle(const std::wstring& title) { windowTitle_ = title; }
     // The module whose window classes these are: the program (by default), or the plug-in DLL - which removes them
     // before it is unloaded (a class left behind would point into freed code).
     static void setModule(HINSTANCE instance);
@@ -102,6 +105,7 @@ private:
     std::string current_;
     int deck_ = 0;
     std::wstring deckA_ = L"deck A";
+    std::wstring windowTitle_; // empty: "Loudness: <preset>" / "Colour: <colour>"
     std::vector<std::string> tabStages_; // the stage of each tab
     std::string tab_;                    // the stage shown
     std::vector<Row> rows_;

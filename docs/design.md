@@ -541,7 +541,9 @@ host's window (the DLL may be unloaded while it lives on), and only a frame litt
 `plugin_test --frames` (not in `run_tests.ps1`: it shows two small windows for two seconds) moves two such frames,
 closes and opens them again. The plug-in's spectrum and analysis windows name their deck in the title bar ("Spectrum:
 DJAP Deck 1", "Analysis: DJAP Deck 2"; in 0.1.272 also the loudness preset and colour, which the window's lists show - client, 2026-10-30; `AnalysisSource::windowTitle`,
-the plug-in's `deckName` from its instance number); `--frames` checks both titles of instance 2. The name prompt and every message box
+the plug-in's `deckName` from its instance number); the loudness and colour windows likewise: "Settings Loudness: DJAP
+Deck 1", "Settings Colour: DJAP Deck 1" (client: the preset's name in the title is superfluous; `EditWindow::setWindowTitle`, the
+program keeps "Loudness: <preset>"); `--frames` checks the four titles of instance 2. The name prompt and every message box
 stay centred on the window that asks (a CBT hook moves the box), kept inside that monitor's work area; while the
 main window is minimised or in the notification area its normal position counts.
 

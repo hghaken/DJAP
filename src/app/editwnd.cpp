@@ -878,7 +878,8 @@ void EditWindow::select(const std::string& preset) {
     fillPresets();
     showRows();
     updateRows();
-    const std::wstring title = (colour() ? L"Colour: " : L"Loudness: ") + fromUtf8(current_);
+    const std::wstring title =
+        !windowTitle_.empty() ? windowTitle_ : (colour() ? L"Colour: " : L"Loudness: ") + fromUtf8(current_);
     SetWindowTextW(hwnd_, title.c_str());
     updateButtons();
 }
