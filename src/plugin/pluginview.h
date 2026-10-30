@@ -67,6 +67,7 @@ private:
     // the DJ program's own window around this one (null: none of its own - the host's main window, which is never
     // moved); its rectangle at the last tick and for how many ticks it has stood still
     HWND frame_ = nullptr;
+    std::string frameName_; // its place's name: "Window1" for instance 1 (deck 1), "Window2", ...
     bool frameChecked_ = false;
     RECT frameRect_{};
     int frameStill_ = 0;

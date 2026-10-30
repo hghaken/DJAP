@@ -531,10 +531,13 @@ other line stays), so the program and the plug-ins keep each other's places; the
 `[Window]` (it read a fixed list of the program's names, so `PluginAbout` was never read back). The plug-in's own
 window is the DJ software's frame, which the client's DJ program opens where it likes after every restart (client,
 2026-10-30: "the main window does not keep its place"): when that frame is first shown, the plug-in moves it - never
-sizes it - to the place kept as `PluginWindow` (`placement::moveTo`), and notes its place once it has stood still for
+sizes it - to the place kept for its instance, `PluginWindow1`, `PluginWindow2`, ... (`placement::moveTo`; in 0.1.261
+one `PluginWindow` for all, so both decks' windows came back at deck 2's place), and notes its place once it has stood still for
 half a second (`placement::note`, from the window's 50 ms timer; a drag writes the file once). No subclass on the
 host's window (the DLL may be unloaded while it lives on), and only a frame little larger than the plug-in's window
-(at most 100 x 200 px more at 96 DPI): a host that shows the plug-in inside its main window is never moved. The name prompt and every message box
+(at most 100 x 200 px more at 96 DPI): a host that shows the plug-in inside its main window is never moved.
+`plugin_test --frames` (not in `run_tests.ps1`: it shows two small windows for two seconds) moves two such frames,
+closes and opens them again. The name prompt and every message box
 stay centred on the window that asks (a CBT hook moves the box), kept inside that monitor's work area; while the
 main window is minimised or in the notification area its normal position counts.
 
@@ -877,16 +880,16 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   removed with the last one (a class left behind would point into an unloaded DLL).
 - **Fewer controls** (client, 2026-10-29: "they can all go, they are in other windows"): the bass sliders, the
   oversampling and look-ahead lists and the About button left the window - they are in the spectrum window, the
-  Setup window and the right-click menu. The window: DJAP and the version (a newer version's note; a click opens
-  About), Graphs, Bypass, the two lists with their Edit buttons, the meter panel.
+  Setup window and the right-click menu. The window: DJAP and the version (a newer version's note; until 0.1.261
+  a click on it opened About - client, 2026-10-30: "that should be the right-click only"), Graphs, Bypass, the two lists with their Edit buttons, the meter panel.
 - **About and updates** (client, 2026-10-28: "an About (with the update) in the plug-in" - an installation of the
   plug-in alone has no program to report updates): About DJAP (the right-click menu; an About button until 0.1.237) opens the program's
   About window (`aboutwnd.*`, plug-in mode: not modal, its own placement `PluginAbout`) with the version, the settings
   file, the licences, the GitHub link and the update check. One `Updater` per DLL (created with the window classes,
   removed with them); it asks GitHub once per load of the DLL, when a window first opens and `[Updates]
   CheckUpdates` in the settings file is on (default; hosts open and close a plug-in often, and GitHub answers 60
-  questions an hour per network), and on Check now. A newer version is named on the version line (a click opens
-  About; until 0.1.237 the About button turned into a lit "Update").
+  questions an hour per network), and on Check now. A newer version is named on the version line (About DJAP from
+  the right-click menu has the details; until 0.1.237 the About button turned into a lit "Update").
   The plug-in never downloads or runs a setup (it lives inside the DJ software, whose module the setup can only
   replace at the next Windows start): Download opens the release's GitHub page, only a `https://github.com/` page.
   `DJAP_NO_UPDATE_CHECK` in the environment stops the automatic check (tests with the editor host).

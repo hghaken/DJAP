@@ -3,7 +3,9 @@
 // exactly like the program's deck: bit-exact against a DeckProcessor with the same values, at odd block sizes,
 // after a parameter change, after a project's state is stored and loaded into a new instance, in Bypass; and that
 // it tells the host its latency. No audio device: everything runs in memory.
-// Usage: plugin_test [path to DJAP.vst3]   (default: the bundle of the same build)
+// Usage: plugin_test [--frames] [path to DJAP.vst3]   (default: the bundle of the same build)
+//   --frames: also the places of the host's windows around two plug-in windows (shows two small windows for 2 s;
+//   not in tools\run_tests.ps1)
 #include "check.h"
 #include "deck.h"
 #include "params.h"
@@ -167,9 +169,11 @@ int differences(const std::vector<float>& a, const std::vector<float>& b, size_t
 int main(int argc, char** argv) {
     // the bundle the build made next to this program (tools\run_tests.ps1 runs it without arguments)
     std::string path;
-    if (argc >= 2) {
-        path = argv[1];
-    } else {
+    bool hostFrames = false;
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--frames") == 0) hostFrames = true;
+        else path = argv[i];
+    if (path.empty()) {
         char exe[MAX_PATH] = {};
         GetModuleFileNameA(nullptr, exe, MAX_PATH);
         const std::string self = exe;
@@ -776,5 +780,88 @@ int main(int argc, char** argv) {
         CHECK(alike == 0);
         for (Instance& x : inst) x.close();
     }
+    // 9. (--frames) the host's own window around each plug-in window keeps its place, one place per instance (client,
+    // 2026-10-30: "both come back at the same place - deck 2's"): two frames moved, closed, opened again
+    if (hostFrames) {
+        const std::filesystem::path ini = std::filesystem::temp_directory_path() / "djap_plugin_test_frames.ini";
+        std::error_code ec;
+        std::filesystem::remove(ini, ec);
+        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", ini.wstring().c_str());
+        SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", L"1");
+        auto pump = [](DWORD ms) {
+            const ULONGLONG end = GetTickCount64() + ms;
+            MSG m;
+            while (GetTickCount64() < end) {
+                while (PeekMessageW(&m, nullptr, 0, 0, PM_REMOVE)) {
+                    TranslateMessage(&m);
+                    DispatchMessageW(&m);
+                }
+                Sleep(10);
+            }
+        };
+        struct Shown {
+            HWND frame = nullptr;
+            IPtr<IPlugView> view;
+        };
+        auto show = [](Instance& i, int x, int y) { // a host's small window of its own around the plug-in's
+            Shown s;
+            s.frame = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, L"STATIC", L"frame",
+                                      WS_POPUP | WS_CAPTION, x, y, 200, 150, nullptr, nullptr, nullptr, nullptr);
+            s.view = owned(i.controller->createView(ViewType::kEditor));
+            if (s.frame && s.view) s.view->attached(s.frame, kPlatformTypeHWND);
+            ShowWindow(s.frame, SW_SHOWNOACTIVATE);
+            return s;
+        };
+        auto hide = [](Shown& s) {
+            if (s.view) s.view->removed();
+            s.view = nullptr;
+            if (s.frame) DestroyWindow(s.frame);
+        };
+        auto at = [](HWND w) {
+            RECT r{};
+            GetWindowRect(w, &r);
+            return std::make_pair(static_cast<int>(r.left), static_cast<int>(r.top));
+        };
+        {
+            Instance a, b;
+            CHECK(a.open(module, &host) && b.open(module, &host));
+            Shown fa = show(a, 100, 100), fb = show(b, 140, 140);
+            pump(300);
+            SetWindowPos(fa.frame, nullptr, 200, 210, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            SetWindowPos(fb.frame, nullptr, 420, 430, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            pump(900);
+            hide(fa);
+            hide(fb);
+            a.close();
+            b.close();
+        }
+        std::string text;
+        {
+            std::ifstream f(ini);
+            std::stringstream t;
+            t << f.rdbuf();
+            text = t.str();
+        }
+        CHECK(text.find("PluginWindow1=200,210,") != std::string::npos);
+        CHECK(text.find("PluginWindow2=420,430,") != std::string::npos);
+        {
+            Instance a, b;
+            CHECK(a.open(module, &host) && b.open(module, &host));
+            Shown fa = show(a, 100, 100), fb = show(b, 140, 140);
+            pump(300);
+            const auto pa = at(fa.frame), pb = at(fb.frame);
+            std::printf("-- the host's windows opened again: instance 1 at %d,%d, instance 2 at %d,%d\n", pa.first,
+                        pa.second, pb.first, pb.second);
+            CHECK(pa == std::make_pair(200, 210) && pb == std::make_pair(420, 430));
+            hide(fa);
+            hide(fb);
+            a.close();
+            b.close();
+        }
+        SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", nullptr);
+        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
+        std::filesystem::remove(ini, ec);
+    }
+
     return test::finish("plugin_test");
 }

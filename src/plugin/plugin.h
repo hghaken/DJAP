@@ -84,6 +84,7 @@ public:
     void closeEditors();
     void viewClosed(PluginView* view);
     static ParamValue normalizedOf(int p, double plain);
+    int slot() const { return slot_; } // this instance's number in the process (1 = the first one open)
 
 private:
     struct Snapshot { // a whole state for the audio thread (setState, a preset loaded by the window)

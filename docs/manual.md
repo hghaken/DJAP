@@ -893,7 +893,7 @@ The program and the plug-in can be installed and used together or apart.
 
 The window is one deck strip of the program:
 
-- **DJAP** and the version. When a newer version exists, the line says so; a click on it opens About.
+- **DJAP** and the version. When a newer version exists, the line says so; right-click for About DJAP.
 - **Graphs** - the analysis window (8.1) for this channel: one row with the signal chain, the compressor's curve,
   loudness and gains of the last 60 s, the scope and the goniometer. A click on a step of the chain opens its tab, as
   in the program.
@@ -960,8 +960,8 @@ Windows starts.
 The plug-in looks for a new version itself too, so an installation without the program is not left behind: once each
 time the DJ software loads it (the first time its window opens), when "Check GitHub for a new version once a day" is
 on in the program's settings file (on by default, also without the program). **Check now** in its About window asks
-at once. When a newer version exists, the version line at the top of the plug-in's window says so (a click on it
-opens About); the About window's **Download** button opens
+at once. When a newer version exists, the version line at the top of the plug-in's window says so (right-click the
+window for About DJAP); the About window's **Download** button opens
 the release's page on GitHub, where the setup can be downloaded. The plug-in never installs anything itself: close
 the DJ software, then run the setup.
 

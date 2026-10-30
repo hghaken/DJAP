@@ -199,7 +199,7 @@ void PluginView::teardown() {
     setupWnd_.close();
     if (hwnd_) {
         KillTimer(hwnd_, 1);
-        if (frame_ && IsWindow(frame_)) placement::note(frame_, "Window"); // a move not noted yet (still under 0.5 s)
+        if (frame_ && IsWindow(frame_)) placement::note(frame_, frameName_.c_str()); // a move not noted yet (< 0.5 s)
         frame_ = nullptr;
         frameChecked_ = false;
         DestroyWindow(hwnd_);
@@ -371,6 +371,8 @@ void PluginView::create() {
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), ghInst, nullptr);
     };
     title_ = make(L"STATIC", L"DJAP", SS_LEFT | SS_CENTERIMAGE, 0);
+    // SS_NOTIFY for its tooltip only: a click on it does nothing (client, 2026-10-30: "a single click on the window
+    // opens About - that should be the right-click only"; the line runs across the window's top row)
     version_ = make(L"STATIC", wide(AP_VERSION_STRING).c_str(), SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, idVersion);
     graphs_ = make(L"BUTTON", L"Graphs", BS_OWNERDRAW | WS_TABSTOP, idGraphs);
     bypass_ = make(L"BUTTON", L"Bypass Off", BS_OWNERDRAW | WS_TABSTOP, idBypass);
@@ -389,7 +391,7 @@ void PluginView::create() {
     tips_.add(version_, L"DJAP processes this channel like one deck of the program, with the same presets and "
                         L"colours. Every value is also a parameter in the host's own list, and can be automated.\n\n"
                         L"Right-click anywhere on the window: Setup (look-ahead, oversampling, tooltips, the update "
-                        L"check) and About DJAP. When a newer version exists it says so here; a click opens About.");
+                        L"check) and About DJAP. When a newer version exists it says so here (About DJAP has the details).");
     tips_.add(preset_, L"The loudness preset: the target loudness and every stage's values. The list holds the program's "
                        L"loudness presets and your own (from the settings file the program and the plug-in share). The "
                        L"project keeps the values themselves, so it sounds the same on a computer without that "
@@ -509,7 +511,7 @@ void PluginView::meters() {
 
 // The DJ program opens its window around the plug-in's where it likes and forgets the place (client, 2026-10-30: "the
 // main window does not keep its place after a restart of VDJ"): when it is first shown, that window goes to the place
-// remembered as "PluginWindow" - moved, never sized - and from then on its place is noted once it has stood still for
+// remembered for this instance ("PluginWindow1" for the first one open) - moved, never sized - and from then on its place is noted once it has stood still for
 // half a second (a drag writes the file once, not at every tick). Only a window of the host's that holds little more
 // than this one: in a host that shows the plug-in inside its own main window nothing is moved.
 void PluginView::followFrame() {
@@ -525,7 +527,9 @@ void PluginView::followFrame() {
                          r.bottom - r.top <= mine.bottom - mine.top + px(200);
         if (!own) return;
         frame_ = root;
-        placement::moveTo(frame_, "Window");
+        // one place per instance (client, 2026-10-30: "both come back at the same place - deck 2's")
+        frameName_ = "Window" + std::to_string(plugin_ ? plugin_->slot() : 0);
+        placement::moveTo(frame_, frameName_.c_str());
         GetWindowRect(frame_, &frameRect_);
         frameStill_ = 10; // where it was put: nothing to note
         return;
@@ -537,7 +541,7 @@ void PluginView::followFrame() {
         frameRect_ = r;
         frameStill_ = 0;
     } else if (frameStill_ < 10 && ++frameStill_ == 10) {
-        placement::note(frame_, "Window");
+        placement::note(frame_, frameName_.c_str());
     }
 }
 
@@ -554,8 +558,6 @@ void PluginView::command(int id, int code) {
         fill();
     } else if (id == idGraphs && code == BN_CLICKED) {
         graphsWnd_.show(GetAncestor(hwnd_, GA_ROOT));
-    } else if (id == idVersion && code == STN_CLICKED) { // the version (with its update note): About
-        aboutWnd_.show(GetAncestor(hwnd_, GA_ROOT), plugin_->iniFile());
     } else if ((id == idEdit || id == idEditColour) && code == BN_CLICKED) {
         plugin_->openEditor(id == idEditColour, GetAncestor(hwnd_, GA_ROOT));
     } else if (id == idMeter && code == kMeterOpenRow + kMeterSpectrum) { // the spectrum: the spectrum window
