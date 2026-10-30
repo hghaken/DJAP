@@ -36,6 +36,14 @@ void setStore(std::map<std::string, WindowPlace>* places, std::function<void()> 
 // From then on every move, resize, maximise or restore is remembered and saved (a drag once, when it ends).
 void remember(HWND wnd, const char* name, HWND owner);
 
+// A window of the host (the DJ program's frame around the plug-in's window - client, 2026-10-30: "the main window
+// does not keep its place after a restart"): moved - never sized - to the place remembered under `name`, if there is
+// one and its title bar is on a monitor; else nothing happens. True when it moved.
+bool moveTo(HWND wnd, const char* name);
+// Its place now into the store under `name`, saved when it changed (no subclass on a host's window: the plug-in's
+// DLL may be unloaded while the window lives on - the plug-in calls this itself).
+void note(HWND wnd, const char* name);
+
 // The ShowWindow command that shows the window as remembered: restored when minimised, maximised the first time
 // when it was maximised last, else normal (a window already shown stays as it is).
 int showCommand(HWND wnd);

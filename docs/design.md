@@ -529,7 +529,12 @@ only centred) are remembered the same way under names of their own - `PluginSpec
 saved as a guest: `Settings::saveMerged` merges the places per window (a window the writer moved is written, every
 other line stays), so the program and the plug-ins keep each other's places; the loader reads every place line of
 `[Window]` (it read a fixed list of the program's names, so `PluginAbout` was never read back). The plug-in's own
-window is the DJ software's frame: the host places it. The name prompt and every message box
+window is the DJ software's frame, which the client's DJ program opens where it likes after every restart (client,
+2026-10-30: "the main window does not keep its place"): when that frame is first shown, the plug-in moves it - never
+sizes it - to the place kept as `PluginWindow` (`placement::moveTo`), and notes its place once it has stood still for
+half a second (`placement::note`, from the window's 50 ms timer; a drag writes the file once). No subclass on the
+host's window (the DLL may be unloaded while it lives on), and only a frame little larger than the plug-in's window
+(at most 100 x 200 px more at 96 DPI): a host that shows the plug-in inside its main window is never moved. The name prompt and every message box
 stay centred on the window that asks (a CBT hook moves the box), kept inside that monitor's work area; while the
 main window is minimised or in the notification area its normal position counts.
 
@@ -835,6 +840,21 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   set kept before 0.1.253 - also load the preset's values once; the real stamp is set at the first activation. Choosing
   the item that is already chosen in the window's lists (no CBN_SELCHANGE for it: CBN_SELENDOK) loads its values
   again.
+- **Choices per instance** (client, 2026-10-30: "noise and stereo are kept now, but not the loudness and colour preset"
+  - the plug-in came back on Medium and Neutral after every restart of the DJ program). A load log of the next release
+  showed what that program does: it keeps nothing of the plug-in - no state, no parameter values - and right after
+  `initialize` sets every parameter whose value is not its default back to the default (the values it "restored" were
+  the same at every start, and only those that differ from the parameters' defaults; never the lists, whose default is
+  the chosen item). So the plug-in keeps its own choices: each instance takes the lowest free number in the process at
+  `initialize` (1 = the first one open - deck 1 in a DJ program that opens its decks in order) and frees it at
+  `terminate`; a loudness preset, colour, look-ahead, oversampling or Mono chosen in its window or its Setup window is
+  written for that number in the settings file's `[Plugin]` section (`Loudness1=`, `Colour1=`, `LookAhead1=`,
+  `Oversampling1=`, `Mono1=`; `Settings::pluginSlots`, merged per instance by `saveMerged`, kept by the program), and
+  read at the next `initialize`. Look-ahead, oversampling and Mono start there and are also those parameters'
+  defaults (as the lists' are), so such a host's reset leaves them; the chain values it sets back to their defaults are
+  taken from the kept preset again at activation (`checkStamp`). Only the window's choices are kept - a host's
+  automation or a project load never writes the file; a project's `setState` still sets its own choices
+  (`plugin_test` 4f).
 - **Window** (`pluginview.*`, 600 px wide at 96 DPI and as high as the program's smallest one-channel window without its status bar (client, 2026-10-29; was 820 x 640), scaled to the host window's DPI): the program's deck strip -
   DJAP and the version, oversampling, look-ahead, Graphs, Bypass, About; preset and colour with their Edit buttons; the four bass sliders (as in the program: bass level
   in the colour, enhancer and width in the preset, bass frequency in both); the meter panel (`meterview.*`, the same

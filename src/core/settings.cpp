@@ -328,6 +328,14 @@ std::string Settings::toText() const {
     o << "[Updates]\n; 1 = ask GitHub once a day for a newer version (installed only after a click)\nCheckUpdates="
       << (checkUpdates ? 1 : 0) << "\n";
     if (!updateUrl.empty()) o << "; where to ask instead of the public repository (tests)\nUrl=" << updateUrl << "\n";
+    if (!pluginSlots.empty()) {
+        o << "\n[Plugin]\n; What each plug-in instance last chose - 1 = the first one open (deck 1 in a DJ program), 2 = the\n"
+             "; second, ...: loudness preset, colour, look-ahead (ms), oversampling, 1 = mono; taken at its next start\n";
+        for (const auto& [n, c] : pluginSlots)
+            o << "Loudness" << n << "=" << c.preset << "\nColour" << n << "=" << c.colour << "\nLookAhead" << n << "="
+              << compact(c.lookAheadMs) << "\nOversampling" << n << "=" << c.oversampling << "\nMono" << n << "="
+              << (c.mono ? 1 : 0) << "\n";
+    }
 
     for (const Preset& p : presets) {
         const int shipped = shippedPresetIndex(p.name);
@@ -473,6 +481,21 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Window", "TrayHintShown")) trayHintShown = toInt(*v, 0) != 0;
     if (auto v = get("Updates", "CheckUpdates")) checkUpdates = toInt(*v, 1) != 0;
     if (auto v = get("Updates", "Url")) updateUrl = *v;
+    // the plug-in's choices: "Loudness1", "Colour1", ... - a key and its instance number
+    for (const auto& [key, value] : sections["Plugin"]) {
+        const size_t digits = key.find_first_of("0123456789");
+        if (digits == std::string::npos || digits == 0) continue;
+        const int n = toInt(key.substr(digits), 0);
+        if (n < 1 || n > 64) continue;
+        const std::string what = key.substr(0, digits);
+        PluginSlot& c = pluginSlots[n];
+        double d = 0;
+        if (what == "Loudness") c.preset = value;
+        else if (what == "Colour") c.colour = value;
+        else if (what == "LookAhead" && parseDouble(value, d)) c.lookAheadMs = std::min(5.0, std::max(0.0, d));
+        else if (what == "Oversampling") c.oversampling = toInt(value, 4) >= 6 ? 8 : toInt(value, 4) >= 3 ? 4 : 2;
+        else if (what == "Mono") c.mono = toInt(value, 0) != 0;
+    }
 
     const std::string prefix = kPresetPrefix;
     for (const std::string& s : order) {
@@ -670,6 +693,13 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
         if (b == base.windows.end() || !(b->second == place)) out.windows[name] = place;
     }
     windows = base.windows = out.windows;
+    // the plug-in's choices, per instance, likewise (client, 2026-10-30)
+    out.pluginSlots = now.pluginSlots;
+    for (const auto& [n, slot] : pluginSlots) {
+        const auto b = base.pluginSlots.find(n);
+        if (b == base.pluginSlots.end() || !(b->second == slot)) out.pluginSlots[n] = slot;
+    }
+    pluginSlots = base.pluginSlots = out.pluginSlots;
     // nothing new (a guest only reading the other's presets): the file stays untouched
     const bool same = (existed || role == SaveRole::Guest) && out.toText() == now.toText();
     if (!same && !out.save(file)) return false;

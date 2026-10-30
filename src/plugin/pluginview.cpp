@@ -199,6 +199,9 @@ void PluginView::teardown() {
     setupWnd_.close();
     if (hwnd_) {
         KillTimer(hwnd_, 1);
+        if (frame_ && IsWindow(frame_)) placement::note(frame_, "Window"); // a move not noted yet (still under 0.5 s)
+        frame_ = nullptr;
+        frameChecked_ = false;
         DestroyWindow(hwnd_);
         hwnd_ = nullptr;
     }
@@ -329,6 +332,7 @@ LRESULT PluginView::handle(UINT msg, WPARAM wp, LPARAM lp) {
     }
     switch (msg) {
     case WM_TIMER:
+        followFrame();
         if (dirty_) fill();
         meters();
         graphsWnd_.refresh(); // after meters(): it read the deck's rings
@@ -501,6 +505,40 @@ void PluginView::meters() {
     for (int k = 0; k < 4; ++k) data.autoDb[k] = data.m.autoToneDb[k];
     data.fs = plugin_->active() && plugin_->sampleRate() > 0 ? plugin_->sampleRate() : 48000.0;
     setMeterView(meter_, data);
+}
+
+// The DJ program opens its window around the plug-in's where it likes and forgets the place (client, 2026-10-30: "the
+// main window does not keep its place after a restart of VDJ"): when it is first shown, that window goes to the place
+// remembered as "PluginWindow" - moved, never sized - and from then on its place is noted once it has stood still for
+// half a second (a drag writes the file once, not at every tick). Only a window of the host's that holds little more
+// than this one: in a host that shows the plug-in inside its own main window nothing is moved.
+void PluginView::followFrame() {
+    if (!hwnd_) return;
+    if (!frameChecked_) {
+        HWND root = GetAncestor(hwnd_, GA_ROOT);
+        if (!root || root == hwnd_ || !IsWindowVisible(root) || IsIconic(root)) return; // not shown yet
+        frameChecked_ = true;
+        RECT r, mine;
+        GetWindowRect(root, &r);
+        GetWindowRect(hwnd_, &mine);
+        const bool own = r.right - r.left <= mine.right - mine.left + px(100) &&
+                         r.bottom - r.top <= mine.bottom - mine.top + px(200);
+        if (!own) return;
+        frame_ = root;
+        placement::moveTo(frame_, "Window");
+        GetWindowRect(frame_, &frameRect_);
+        frameStill_ = 10; // where it was put: nothing to note
+        return;
+    }
+    if (!frame_ || !IsWindow(frame_) || !IsWindowVisible(frame_) || IsIconic(frame_)) return;
+    RECT r;
+    GetWindowRect(frame_, &r);
+    if (!EqualRect(&r, &frameRect_)) {
+        frameRect_ = r;
+        frameStill_ = 0;
+    } else if (frameStill_ < 10 && ++frameStill_ == 10) {
+        placement::note(frame_, "Window");
+    }
 }
 
 void PluginView::command(int id, int code) {

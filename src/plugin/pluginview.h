@@ -57,12 +57,19 @@ private:
     void meters();   // the meter panel from the deck
     void command(int id, int code);
     void updateNote(); // the version line: a newer version when the check found one
+    void followFrame(); // the host's frame around this window: to its remembered place once, then its place noted
     int px(int v) const { return MulDiv(v, static_cast<int>(dpi_), 96); }
     static Steinberg::ViewRect sizeFor(UINT dpi);
     // where the meter panel starts: the margin and the two rows above it (the program's MainWindow::meterTop)
     static int meterTop(UINT dpi) { return MulDiv(12 + 2 * (28 + 6), static_cast<int>(dpi), 96); }
 
     Plugin* plugin_;
+    // the DJ program's own window around this one (null: none of its own - the host's main window, which is never
+    // moved); its rectangle at the last tick and for how many ticks it has stood still
+    HWND frame_ = nullptr;
+    bool frameChecked_ = false;
+    RECT frameRect_{};
+    int frameStill_ = 0;
     HWND hwnd_ = nullptr, title_ = nullptr, version_ = nullptr, presetLabel_ = nullptr, preset_ = nullptr,
          colourLabel_ = nullptr, colour_ = nullptr, bypass_ = nullptr, meter_ = nullptr, edit_ = nullptr,
          editColour_ = nullptr, graphs_ = nullptr;

@@ -168,10 +168,38 @@ void setStore(std::map<std::string, WindowPlace>* places, std::function<void()> 
     g_prefix = prefix;
 }
 
+namespace {
+
+// the store's name: with the plug-in's prefix ("PluginAbout" has it already)
+std::string keyOf(const char* name) {
+    return std::string(name).compare(0, g_prefix.size(), g_prefix) == 0 ? name : g_prefix + name;
+}
+
+} // namespace
+
+bool moveTo(HWND wnd, const char* name) {
+    if (!wnd || !g_places) return false;
+    const auto it = g_places->find(keyOf(name));
+    if (it == g_places->end()) return false;
+    const WindowPlace& p = it->second;
+    RECT w;
+    GetWindowRect(wnd, &w);
+    const POINT title{p.x + (w.right - w.left) / 2, p.y + GetSystemMetricsForDpi(SM_CYCAPTION, GetDpiForWindow(wnd)) / 2 + 4};
+    MONITORINFO mi{};
+    mi.cbSize = sizeof mi;
+    HMONITOR mon = MonitorFromPoint(title, MONITOR_DEFAULTTONULL);
+    if (!mon || !GetMonitorInfoW(mon, &mi)) return false;
+    SetWindowPos(wnd, nullptr, p.x, std::max<int>(p.y, mi.rcWork.top), 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    return true;
+}
+
+void note(HWND wnd, const char* name) {
+    if (wnd) store(wnd, Tracked{keyOf(name)});
+}
+
 void remember(HWND wnd, const char* name, HWND owner) {
     if (!wnd) return;
-    // the store's name: with the plug-in's prefix ("PluginAbout" has it already)
-    const std::string key = std::string(name).compare(0, g_prefix.size(), g_prefix) == 0 ? name : g_prefix + name;
+    const std::string key = keyOf(name);
     const WindowPlace* p = nullptr;
     if (g_places) {
         auto it = g_places->find(key);

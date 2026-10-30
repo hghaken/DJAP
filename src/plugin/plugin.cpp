@@ -20,6 +20,8 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <set>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -217,10 +219,31 @@ private:
     const std::vector<Preset>* items_;
 };
 
+// The instance numbers in use in this process (Settings::pluginSlots): each instance takes the lowest free one at
+// initialize - the first one open is 1 (deck 1 in a DJ program that opens its decks' plug-ins in order) - and frees
+// it at terminate.
+std::mutex g_slotLock;
+std::set<int> g_slots;
+
+int takeSlot() {
+    const std::lock_guard<std::mutex> lock(g_slotLock);
+    int n = 1;
+    while (g_slots.count(n)) ++n;
+    g_slots.insert(n);
+    return n;
+}
+
+void freeSlot(int n) {
+    const std::lock_guard<std::mutex> lock(g_slotLock);
+    g_slots.erase(n);
+}
+
 } // namespace
 
 Plugin::Plugin() = default;
-Plugin::~Plugin() = default;
+Plugin::~Plugin() {
+    if (slot_ > 0) freeSlot(slot_); // a host that never called terminate
+}
 
 ParamValue Plugin::normalizedOf(int p, double plain) {
     return static_cast<double>(paramPositionOf(p, plain)) / paramPositions(p);
@@ -239,6 +262,17 @@ void Plugin::loadLists() {
     settings_.decks = 1;
     settings_.linkPresets = false;
     settings_.deck[0] = DeckSettings();
+    // this instance's last choices (client, 2026-10-30: the DJ program keeps no plug-in state - after a restart the
+    // plug-in was back on Medium and Neutral); a preset or colour no longer in the lists: Medium, Neutral
+    const auto kept = settings_.pluginSlots.find(slot_);
+    if (kept != settings_.pluginSlots.end()) {
+        const PluginSlot& c = kept->second;
+        if (settings_.find(c.preset)) settings_.deck[0].preset = c.preset;
+        if (settings_.find(c.colour, PresetKind::Colour)) settings_.deck[0].colour = c.colour;
+        lookMs_ = snapLook(c.lookAheadMs);
+        oversampling_ = snapOversampling(c.oversampling);
+        mono_ = c.mono;
+    }
     values_ = settings_.deckValues(0);
     exact_ = values_;
     applied_ = values_;
@@ -264,6 +298,15 @@ void Plugin::addParameters() {
     parameters.addParameter(new LookParameter(lookMs_));
     parameters.addParameter(new OversamplingParameter());
     parameters.addParameter(STR16("Mono"), nullptr, 1, 0.0, ParameterInfo::kCanAutomate, kMonoId); // 0 stereo, 1 mono
+    // the instance's kept choices (loadLists) are also these three parameters' defaults, as the lists' are: the DJ
+    // program sets every parameter back to its default at its start
+    for (const auto& [id, v] : {std::pair<ParamID, ParamValue>{kLookId, normalizedOfLook(lookMs_)},
+                                {kOversamplingId, oversampling_ == 8 ? 1.0 : oversampling_ == 4 ? 0.5 : 0.0},
+                                {kMonoId, mono_ ? 1.0 : 0.0}})
+        if (Parameter* param = parameters.getParameter(id)) {
+            param->getInfo().defaultNormalizedValue = v;
+            param->setNormalized(v);
+        }
     // not automatable: only for a host that keeps parameter values for its set (client, 2026-10-29)
     // it starts at 1, a value no stamp has: a host that kept a stamp for its set always restores it (one that restores
     // only the values that differ would otherwise skip an equal one), and a restore without it is a set from before
@@ -281,6 +324,7 @@ tresult PLUGIN_API Plugin::initialize(FUnknown* context) {
     if (r != kResultOk) return r;
     addAudioInput(STR16("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput(STR16("Stereo Out"), SpeakerArr::kStereo);
+    if (slot_ <= 0) slot_ = takeSlot();
     loadLists();
     addParameters();
     setLatencyFrom(lookMs_);
@@ -292,6 +336,8 @@ tresult PLUGIN_API Plugin::terminate() {
     // a host that ends the plug-in before its window: the window goes now and never calls the plug-in again
     if (view_) view_->detach();
     view_ = nullptr;
+    if (slot_ > 0) freeSlot(slot_);
+    slot_ = 0;
     return SingleComponentEffect::terminate();
 }
 
@@ -695,13 +741,14 @@ void Plugin::edited(bool listChanged, bool save) {
     loading_ = false;
     applied_ = now;
     updateStamp(true);
+    const bool kept = rememberChoice(false); // "Save as" moved the plug-in to its copy, a rename renamed the choice
     if (!changed.empty()) {
         if (componentHandler) componentHandler->restartComponent(kParamValuesChanged);
         for (const ParamID id : changed) tellHost(id); // the host keeps the preset window's changes for its set too
         publishToProcessor();
     }
     if (listChanged) listsChanged();
-    if (save) saveSettings();
+    if (save || kept) saveSettings();
     if (view_) view_->refresh();
 }
 
@@ -759,6 +806,22 @@ void Plugin::edit(ParamID id, ParamValue normalized) {
     endEdit(id);
     setParamNormalized(id, normalized);
     publishToProcessor();
+    if (id == kPresetId || id == kColourId || id == kLookId || id == kOversamplingId || id == kMonoId) rememberChoice(true);
+}
+
+bool Plugin::rememberChoice(bool save) {
+    if (slot_ <= 0) return false;
+    const auto old = settings_.pluginSlots.find(slot_);
+    PluginSlot c = old != settings_.pluginSlots.end() ? old->second : PluginSlot();
+    if (!settings_.deck[0].preset.empty()) c.preset = settings_.deck[0].preset; // "(other values)": the last name stays
+    if (!settings_.deck[0].colour.empty()) c.colour = settings_.deck[0].colour;
+    c.lookAheadMs = plainOf(kLookId);
+    c.oversampling = static_cast<int>(plainOf(kOversamplingId));
+    c.mono = plainOf(kMonoId) >= 0.5;
+    if (old != settings_.pluginSlots.end() && old->second == c) return false;
+    settings_.pluginSlots[slot_] = c;
+    if (save) saveSettings();
+    return true;
 }
 
 void Plugin::editPlain(ParamID id, double plain) {

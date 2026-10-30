@@ -38,6 +38,20 @@ struct WindowPlace {
     }
 };
 
+// What one plug-in instance last chose (client, 2026-10-30: "the loudness and colour preset are not kept after a
+// restart of the DJ program"): that program keeps no plug-in state - at every start it sets each parameter back to
+// its default - so the plug-in keeps its own choices here, per instance (Settings::pluginSlots).
+struct PluginSlot {
+    std::string preset = "Medium", colour = "Neutral";
+    double lookAheadMs = 1.5;
+    int oversampling = 4;
+    bool mono = false;
+    bool operator==(const PluginSlot& o) const {
+        return preset == o.preset && colour == o.colour && lookAheadMs == o.lookAheadMs &&
+               oversampling == o.oversampling && mono == o.mono;
+    }
+};
+
 class Settings {
 public:
     Settings(); // shipped presets, default audio settings
@@ -86,6 +100,9 @@ public:
     bool trayHintShown = false;  // the "still running in the notification area" balloon was shown once
     bool checkUpdates = true;    // ask GitHub once a day for a newer version (Setup window)
     std::string updateUrl;       // where to ask instead of the public repository (tests); empty = GitHub
+    // the plug-in's choices by instance number: 1 = the first instance open in a host (deck 1 in a DJ program), 2 =
+    // the second, ...; written by the plug-in only, kept by the program
+    std::map<int, PluginSlot> pluginSlots;
     // An audio device was chosen in the Audio window (an ASIO driver, or a device of another API for a deck);
     // false at the first start: the program then opens the Audio window.
     bool audioConfigured() const;
@@ -102,8 +119,9 @@ public:
     // since `base` (its lists as last read or written) are applied to them: presets it added or changed are written,
     // presets it deleted (or renamed away) are removed, everything else in the file stays. The program (Owner) writes
     // its other settings; the plug-in (Guest) keeps the file's - except the two switches both can change (Show
-    // tooltips, the daily update check: the plug-in's Setup window), merged three-way like the lists, and the windows'
-    // places, merged per window (the plug-in keeps its own under "Plugin..." names). Afterwards this object holds the
+    // tooltips, the daily update check: the plug-in's Setup window), merged three-way like the lists, the windows'
+    // places, merged per window (the plug-in keeps its own under "Plugin..." names), and the plug-in's choices, merged
+    // per instance. Afterwards this object holds the
     // merged lists (the other's new presets included), those switches and places, and `base` is set to them. False
     // when the file could not be written.
     enum class SaveRole { Owner, Guest };

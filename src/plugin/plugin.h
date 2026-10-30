@@ -101,6 +101,10 @@ private:
     void edited(bool listChanged, bool save);   // the preset window changed a preset or the choice
     PresetValues chosenValues() const;          // the chosen preset with the chosen colour (exact_ for "other")
     bool saveSettings();                        // the preset lists into the settings file, merged
+    // The window's choice of preset, colour, look-ahead, oversampling or mono: kept for this instance in the settings
+    // file (Settings::pluginSlots), read at its next start; true when it changed (saved when `save`).
+    bool rememberChoice(bool save);
+    int slot_ = 0; // this instance's number in the process (1 = the first one open); 0 before initialize
     void setLatencyFrom(double lookMs);
     void publishConfig(); // audio thread (or while inactive)
     // The controller's whole state to the processing (GUI thread). A host that never delivers parameter changes to

@@ -942,6 +942,14 @@ the spectrum window, the Setup window and the right-click menu now.
   a bass slider, a point dragged in the spectrum window, automation - stays as the project has it. DJ software that
   keeps the plug-in's parameter values for its set (instead of the plug-in's own project data) gets this too; a set
   saved with a version before 0.1.253 takes its loudness preset's and colour's values once when it is opened.
+- **Each plug-in remembers its own choices.** The loudness preset, colour, look-ahead, oversampling and Mono chosen in
+  the plug-in's window (or its Setup window) are kept in the settings file for that plug-in - the first one open in the
+  DJ software, the second, and so on (deck 1 and deck 2) - and come back when the DJ software starts again, also in DJ
+  software that keeps nothing of a plug-in between sessions. A project of the DJ software that stores the plug-in's
+  own data still wins. A loudness preset or colour deleted since: Medium and Neutral.
+- **Window places.** The plug-in's windows (loudness, colour, spectrum, graphs, Setup, About) open where they were
+  last. The plug-in's main window is a window of the DJ software; when the DJ software opens it somewhere else, the
+  plug-in moves it back to its last place (it never changes its size).
 
 ### 9.4 Updates
 

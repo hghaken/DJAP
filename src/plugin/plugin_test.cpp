@@ -12,6 +12,7 @@
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/vst/ivstaudioprocessor.h"
 #include "pluginterfaces/vst/ivstcomponent.h"
+#include "pluginterfaces/gui/iplugview.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
@@ -29,6 +30,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -592,6 +594,108 @@ int main(int argc, char** argv) {
         std::filesystem::remove(ini, ec);
         a.close();
         b.close();
+    }
+
+    // 4f. a host that keeps no plug-in state and sets every parameter back to its default at its start (the client's
+    // DJ program, a load log of 2026-10-30): each instance keeps its own choices in the settings file - the first one
+    // open as 1, the second as 2 - and takes them at its next start. The choices are made in the plug-in's window.
+    {
+        const std::filesystem::path ini = std::filesystem::temp_directory_path() / "djap_plugin_test_slots.ini";
+        std::error_code ec;
+        std::filesystem::remove(ini, ec);
+        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", ini.wstring().c_str());
+        SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", L"1");
+        // an item of the window's list chosen as a click chooses it (CBN_SELENDOK to the window)
+        auto pick = [](Instance& i, int listId, const wchar_t* name) {
+            HWND parent = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, nullptr, nullptr);
+            IPtr<IPlugView> view = owned(i.controller->createView(ViewType::kEditor));
+            bool ok = false;
+            if (parent && view && view->attached(parent, kPlatformTypeHWND) == kResultOk) {
+                HWND w = FindWindowExW(parent, nullptr, nullptr, nullptr);
+                HWND list = w ? GetDlgItem(w, listId) : nullptr;
+                const LRESULT k = list ? SendMessageW(list, CB_FINDSTRINGEXACT, static_cast<WPARAM>(-1),
+                                                      reinterpret_cast<LPARAM>(name))
+                                       : CB_ERR;
+                if (k != CB_ERR) {
+                    SendMessageW(list, CB_SETCURSEL, static_cast<WPARAM>(k), 0);
+                    SendMessageW(w, WM_COMMAND, MAKEWPARAM(listId, CBN_SELENDOK), reinterpret_cast<LPARAM>(list));
+                    ok = true;
+                }
+                view->removed();
+            }
+            if (parent) DestroyWindow(parent);
+            return ok;
+        };
+        auto fileText = [&ini] {
+            std::ifstream f(ini);
+            std::stringstream t;
+            t << f.rdbuf();
+            return t.str();
+        };
+        {
+            Instance a, b; // instances 1 and 2 (deck 1 and deck 2)
+            CHECK(a.open(module, &host) && b.open(module, &host));
+            CHECK(pick(a, 1, L"Loud"));
+            CHECK(pick(b, 2, L"Warm"));
+            a.close();
+            b.close();
+        }
+        const std::string text = fileText();
+        CHECK(text.find("Loudness1=Loud\n") != std::string::npos && text.find("Colour2=Warm\n") != std::string::npos);
+        {
+            Instance a, b;
+            CHECK(a.open(module, &host) && b.open(module, &host));
+            const State sa = a.state(), sb = b.state();
+            std::printf("-- the next start: instance 1 %s with %s, instance 2 %s with %s\n", sa.preset.c_str(),
+                        sa.colour.c_str(), sb.preset.c_str(), sb.colour.c_str());
+            CHECK(sa.preset == "Loud" && sa.colour == "Neutral");
+            CHECK(sb.preset == "Medium" && sb.colour == "Warm");
+            // the host's reset: every parameter to its default, then activated - the kept preset's values again
+            int reset = 0;
+            for (int32 k = 0; k < a.controller->getParameterCount(); ++k) {
+                ParameterInfo info{};
+                a.controller->getParameterInfo(k, info);
+                if (a.controller->getParamNormalized(info.id) == info.defaultNormalizedValue) continue;
+                a.controller->setParamNormalized(info.id, info.defaultNormalizedValue);
+                ++reset;
+            }
+            a.start();
+            const State r = a.state();
+            std::printf("-- the host set %d parameters back to their defaults: %s with %s, %s\n", reset,
+                        r.preset.c_str(), r.colour.c_str(), r.values == sa.values ? "Loud's values" : "OTHER values");
+            CHECK(reset > 0 && r.preset == "Loud" && r.values == sa.values);
+            a.close();
+            b.close();
+        }
+        // look-ahead, oversampling and mono (the plug-in's Setup window) kept the same way - as those parameters'
+        // defaults too, so the host's reset leaves them
+        {
+            std::ofstream f(ini);
+            f << "[Plugin]\nLoudness1=Very Loud\nColour1=Bright\nLookAhead1=3\nOversampling1=8\nMono1=1\n";
+        }
+        {
+            Instance a;
+            CHECK(a.open(module, &host));
+            const State sa = a.state();
+            ParameterInfo mono{};
+            for (int32 k = 0; k < a.controller->getParameterCount(); ++k) {
+                ParameterInfo info{};
+                a.controller->getParameterInfo(k, info);
+                if (info.id == ap::plugin::kMonoId) mono = info;
+            }
+            std::printf("-- kept: %s with %s, look-ahead %.1f ms, oversampling %.0f, mono %.0f (default %.0f)\n",
+                        sa.preset.c_str(), sa.colour.c_str(), sa.look,
+                        a.controller->getParamNormalized(ap::plugin::kOversamplingId) * 2,
+                        a.controller->getParamNormalized(ap::plugin::kMonoId), mono.defaultNormalizedValue);
+            CHECK(sa.preset == "Very Loud" && sa.colour == "Bright" && sa.look == 3.0);
+            CHECK(a.controller->getParamNormalized(ap::plugin::kOversamplingId) == 1.0);
+            CHECK(a.controller->getParamNormalized(ap::plugin::kMonoId) == 1.0 && mono.defaultNormalizedValue == 1.0);
+            CHECK(a.processor->getLatencySamples() == static_cast<uint32>(std::lround(3.0 * kRate / 1000.0)));
+            a.close();
+        }
+        SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", nullptr);
+        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
+        std::filesystem::remove(ini, ec);
     }
 
     // 5. an input the host marks silent may hold anything: it is processed as silence
