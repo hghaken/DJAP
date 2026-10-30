@@ -50,7 +50,7 @@ double normalizedOfLook(double ms) {
 }
 
 // The stages as the host's groups (units), in chain order; the extra parameters stay in the root.
-const char* const kStages[] = {"General",      "Leveller",      "Compressor", "Density",  "Bass enhancer",
+const char* const kStages[] = {"General",      "Leveller",      "Compressor", "MB Compressor",  "Bass enhancer",
                                "Exciter",      "De-esser",      "Stereo width", "Soft clipper", "Limiter",
                                "Tone",         "Auto tone",     "Sub bass",   "Loudness"};
 constexpr int kStageUnits = static_cast<int>(sizeof kStages / sizeof kStages[0]);

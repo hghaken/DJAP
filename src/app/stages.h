@@ -9,7 +9,7 @@ namespace ap {
 
 inline constexpr Param kStageParam[kStageCount] = {pLevOn, pNoiseOn, pCompOn,  pDensOn, pBassOn,
                                                    pExcOn, pDessOn,  pWidthOn, pClipOn, pLimOn};
-inline constexpr const wchar_t* kStageName[kStageCount] = {L"Leveller", L"Noise",    L"Compressor", L"Density",
+inline constexpr const wchar_t* kStageName[kStageCount] = {L"Leveller", L"Noise",    L"Compressor", L"MB Compressor",
                                                            L"Bass",     L"Exciter",  L"De-esser",   L"Width",
                                                            L"Clipper",  L"Limiter"};
 inline constexpr const wchar_t* kStageTip[kStageCount] = {
@@ -21,7 +21,7 @@ inline constexpr const wchar_t* kStageTip[kStageCount] = {
     L"music above the threshold passes untouched. No delay.",
     L"Compressor: wide-band, soft knee. Its threshold sits relative to the target loudness, so it only works on the "
     L"loudest parts and evens out the level within a song. Bass does not trigger it (side-chain high-pass).",
-    L"Density: multiband dynamics (1-7 bands, flat sum). Each band is compared with its own recent level and turned "
+    L"MB Compressor: multiband dynamics (1-7 bands, flat sum). Each band is compared with its own recent level and turned "
     L"down when it sticks out or lifted when it falls away: a denser, more even sound. The band gains also work as "
     L"a tone control.",
     L"Bass enhancer: adds overtones to the bass below its frequency, so the bass is heard on small speakers too "

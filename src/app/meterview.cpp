@@ -59,7 +59,7 @@ const wchar_t* const kTips[kTipParts] = {
     L"Under the name: the limiter's ceiling (dBTP), the red line across the Out bars.",
     L"Spectrum of this deck, 20 Hz - 20 kHz, averaged over about 0.3 s: orange = the original (the deck's input), "
     L"turquoise = processed (the output). The scale is dB of a sine's level (0 dB = full scale). Where the turquoise "
-    L"line lies above the orange one the processing lifts that range. Purple: the density stage's bands (dashed: "
+    L"line lies above the orange one the processing lifts that range. Purple: the MB Compressor's bands (dashed: "
     L"their splits, with the band numbers) and a line per band at its gain now, +-12 dB over the height - blue = "
     L"lifted, red = turned down.",
 };
@@ -268,7 +268,7 @@ void paint(HWND hwnd, HDC target, View& v) {
     const Row rows[kMeterRows] = {{"Leveller", sLeveller, 1, m.levellerDb},
                                   {"Noise", sNoise, 0, m.noiseMaxDb(), 24}, // its depth goes to 40 dB
                                   {"Compressor", sCompressor, 0, m.compressorDb},
-                                  {"Density", sDensity, 2, 0.0},
+                                  {"MB Compressor", sDensity, 2, 0.0},
                                   {"De-esser", sDeEsser, 0, m.deEsserDb},
                                   {"Clipper", sClipper, 0, m.clipperDb},
                                   {"Limiter", sLimiter, 0, m.limiterDb}};
@@ -493,8 +493,8 @@ int meterViewMinHeight(UINT dpi) {
 }
 
 const char* meterStage(int target) {
-    static const char* const tabs[kMeterTargets] = {"Leveller", "Noise",   "Compressor", "Density", "De-esser",
-                                                    "Soft clipper", "Limiter", "General", "Limiter", "Density"};
+    static const char* const tabs[kMeterTargets] = {"Leveller", "Noise",   "Compressor", "MB Compressor", "De-esser",
+                                                    "Soft clipper", "Limiter", "General", "Limiter", "MB Compressor"};
     return target >= 0 && target < kMeterTargets ? tabs[target] : "General";
 }
 

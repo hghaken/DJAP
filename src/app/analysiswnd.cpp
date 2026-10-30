@@ -40,7 +40,7 @@ const wchar_t* const kTips[8] = {
     L"input), turquoise = processed (the output), -30 .. +18 LU. The processed line should stay close to the target line; the "
     L"original shows how much the songs' levels differ.",
     L"Gains of the last 60 s: leveller (blue; up = lifted), compressor (turquoise; its reduction, 0 or down), "
-    L"density (purple; the average of its bands) and noise (pink; how far the noise reduction turned its most reduced "
+    L"MB Compressor (purple; the average of its bands) and noise (pink; how far the noise reduction turned its most reduced "
     L"band down - it dips in pauses and quiet passages, a deeper cut than 18 dB lies on the bottom edge). Scale "
     L"-18 .. +18 dB.",
     L"Goniometer of the output (the last 43 ms): mono is a vertical line, left alone lies on the L diagonal, right "
@@ -83,8 +83,8 @@ const ChainRow kChain[14] = { // AnalysisWindow::kChainRows
      L"over 0.4 s). 'off' = a neutral EQ."},
     {L"Compressor", RowKind::reduction, sCompressor, 0, 0,
      L"Compressor: its gain reduction now (dB). Bars only when the music is over its threshold."},
-    {L"Density", RowKind::change, sDensity, ctCompressor, ctDensity,
-     L"Density (multiband): what its bands do to the level together (dB, over 0.4 s): turquoise = lifts quiet "
+    {L"MB Compressor", RowKind::change, sDensity, ctCompressor, ctDensity,
+     L"MB Compressor (multiband): what its bands do to the level together (dB, over 0.4 s): turquoise = lifts quiet "
      L"parts, orange = holds loud bands down."},
     {L"Bass enhancer", RowKind::change, sBass, ctDensity, ctBass,
      L"Bass enhancer: how much level its added bass harmonics bring (dB, over 0.4 s)."},
@@ -111,7 +111,7 @@ const ChainRow kChain[14] = { // AnalysisWindow::kChainRows
 
 // The settings tab of each chain row (the preset window's stage; the colour row opens the colour window).
 const char* const kChainTab[14] = {
-    "General", "Leveller",     "Noise",        "Tone",    "Compressor", "Density", "Bass enhancer",
+    "General", "Leveller",     "Noise",        "Tone",    "Compressor", "MB Compressor", "Bass enhancer",
     "Exciter", "De-esser",     "Stereo width", "Soft clipper", "Limiter", "General", "General"};
 constexpr int kColourRow = 3;
 
@@ -544,7 +544,7 @@ void AnalysisWindow::paintDeck(HDC dc, int d, const RECT& area) {
         if (which == 0) text(dc, r, Y(0) - th - px(1), L"target", kDim, TA_RIGHT);
         { // legend, bottom left
             const wchar_t* names[2][4] = {{L"original", L"processed", nullptr, nullptr},
-                                          {L"leveller", L"compressor", L"density", L"noise"}};
+                                          {L"leveller", L"compressor", L"MB", L"noise"}};
             const COLORREF cols[2][4] = {{kOrange, kTeal, 0, 0}, {kBlue, kTeal, kPurple, kPink}};
             int xl = p.left + px(6);
             for (int k = 0; k < 4 && names[which][k]; ++k) {

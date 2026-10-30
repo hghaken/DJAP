@@ -49,7 +49,7 @@ const char* const kUsage =
     "        --keep-delay       keep the look-ahead delay in the output, like a live device (default: removed)\n"
     "        --pcm24            write 24-bit PCM (default: 32-bit float, lossless)\n"
     "        --trace <file.csv> deck A every 100 ms: loudness in / out (momentary, short-term), the leveller's gain\n"
-    "                           and state, compressor, density bands, de-esser, clipper and limiter (dB)\n"
+    "                           and state, compressor, MB Compressor bands, de-esser, clipper and limiter (dB)\n"
     "  --presets            lists the loudness presets and EQs (shipped and own) with their main values\n"
     "  --tone <file> [more files]\n"
     "        Long-term tone balance (60 Hz, 250 Hz, 3 kHz, 10 kHz against 1 kHz) and what the auto tone would\n"

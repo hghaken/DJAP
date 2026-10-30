@@ -139,7 +139,7 @@ const StageSound kStageSound[] = {
      L"punch), a longer one lets them through (more punch). A short release sounds lively but can pump, a long one "
      L"is smooth. Bass under the side-chain high-pass does not make it work, so a heavy kick does not pull the whole "
      L"mix down."},
-    {"Density",
+    {"MB Compressor",
      L"Works per frequency band: a band that sticks out is turned down, one that falls away is lifted, so the sound "
      L"gets denser, fuller and more even over the whole spectrum - the typical radio sound. More amount and more "
      L"lift give more density and loudness but less natural dynamics, and at extremes a flat, breathing sound. More "
@@ -200,18 +200,18 @@ const wchar_t* stageSound(const std::string& stage) {
 const StageSound kShippedSound[] = {
     {"Gentle",
      L"Easy listening at -18 LUFS: songs are brought to one loudness slowly and gently, and most of the music's "
-     L"dynamics stay. Light compression, 3 density bands, no clipping. For background music and quiet rooms."},
+     L"dynamics stay. Light compression, a 3-band MB Compressor, no clipping. For background music and quiet rooms."},
     {"Light",
-     L"-16 LUFS: a little more even and present than Gentle, still natural. Gentle compression, 4 density bands, the "
+     L"-16 LUFS: a little more even and present than Gentle, still natural. Gentle compression, a 4-band MB Compressor, the "
      L"de-esser and a touch of clipping."},
     {"Medium",
-     L"-14 LUFS, the usual loudness of streaming services: even and full without sounding squashed. 5 density bands, "
+     L"-14 LUFS, the usual loudness of streaming services: even and full without sounding squashed. A 5-band MB Compressor, "
      L"a little exciter, the de-esser. A good start for most music."},
     {"Loud",
-     L"-12 LUFS: dense and punchy. Earlier and harder compression, 6 density bands, bass enhancer and exciter, more "
+     L"-12 LUFS: dense and punchy. Earlier and harder compression, a 6-band MB Compressor, bass enhancer and exciter, more "
      L"clipping. For parties and noisy rooms."},
     {"Very Loud",
-     L"-10 LUFS, close to modern club masters: very dense and loud with little dynamics left. 7 density bands, the "
+     L"-10 LUFS, close to modern club masters: very dense and loud with little dynamics left. A 7-band MB Compressor, the "
      L"strongest compression and clipping. For loud venues; on long listening it can tire."},
     {"FM Station",
      L"The sound of an FM station: processed like a loud one - a fast, dense 5-band, a full low end, a slightly wider "
@@ -221,7 +221,7 @@ const StageSound kShippedSound[] = {
      L"stereo coder)."},
     {"DAB+",
      L"Digital radio the EBU R 128 way, -23 LUFS and at most -1 dBTP: the music keeps its dynamics - songs are "
-     L"shifted to the target slowly instead of squashed, only passages over -18 LUFS are compressed, no density, no "
+     L"shifted to the target slowly instead of squashed, only passages over -18 LUFS are compressed, no MB Compressor, no "
      L"clipping and no exciter (a low bit-rate codec smears both). Quiet next to the other presets: turn the "
      L"receiver up."},
     {"Web Stream",
@@ -301,7 +301,7 @@ std::wstring describe(const Preset& p, PresetKind kind) {
     for (int k = 0; k < kStageCount; ++k)
         if (v[kStageParam[k]] >= 0.5) {
             std::wstring stage = fromUtf8(paramInfo(kStageParam[k]).stage);
-            stage[0] = static_cast<wchar_t>(towlower(stage[0]));
+            if (stage.size() < 2 || !iswupper(stage[1])) stage[0] = static_cast<wchar_t>(towlower(stage[0])); // "MB" stays
             if (kStageParam[k] == pDensOn) swprintf(b, 96, L" (%d bands)", static_cast<int>(v[pDensBands])), stage += b;
             if (kStageParam[k] == pLimOn) swprintf(b, 96, L" (ceiling %.1f dBTP)", v[pLimCeiling]), stage += b;
             on += (on.empty() ? L"" : L", ") + stage;

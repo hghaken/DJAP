@@ -45,7 +45,7 @@ Per deck, in this order (`docs/design.md` sections 2-4):
 - **Leveller** - slow automatic gain that brings each song to the loudness preset's target loudness (EBU R 128 / BS.1770),
   holds during fades, breakdowns and pauses, catches up quickly after a stopped deck.
 - **Compressor** - wide-band, soft knee, threshold relative to the target.
-- **Density** - multiband (1-7 bands, flat sum): each band is compared with its own recent level.
+- **MB Compressor** - multiband (1-7 bands, flat sum): each band is compared with its own recent level.
 - **Bass enhancer, exciter, de-esser, stereo width** - optional stages that shape the sound.
 - **Soft clipper** and **look-ahead true-peak limiter** - the output never passes the ceiling (default -1 dBTP).
 
@@ -67,7 +67,7 @@ EQs are managed like loudness presets.
 - `DJAP.exe` - the GUI: two deck strips (loudness preset and EQ - one choice when both decks share them -, processing /
   bypass, meters for input and output loudness, true peak, the gain of every stage and the spectrum of input and
   output), a spectrum window (a click on a deck's spectrum: the EQ as a curve with points to drag, the
-  density bands with their gains, the loudness preset and EQ lists and the four bass sliders - bass level,
+  MB Compressor bands with their gains, the loudness preset and EQ lists and the four bass sliders - bass level,
   enhancer, width and frequency), an analysis window (compressor curve, loudness and gain over the last minute,
   goniometer, correlation and stereo width), a loudness window with the stage switches and every parameter, a
   EQ window, tooltips on every control (they can be switched off), windows that open where they were left, and

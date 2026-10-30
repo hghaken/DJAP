@@ -45,7 +45,7 @@ Each deck runs the same chain of processing stages:
 | **Noise** | Noise reduction (off unless you switch it on): hiss, hum and rumble are turned down in pauses and quiet passages, in four bands; the music above its threshold passes untouched. |
 | **EQ** | The tone of the music: bass, low-mid, presence and treble, an automatic tone correction per song, a sub-bass generator and a contour for quiet listening. |
 | **Compressor** | Evens out the loud parts within a song. |
-| **Density** | A multiband stage (1 to 7 frequency bands): a band that sticks out is turned down, one that falls away is lifted - the full, dense "radio" sound. |
+| **MB Compressor** | A multiband stage (1 to 7 frequency bands): a band that sticks out is turned down, one that falls away is lifted - the full, dense "radio" sound. |
 | **Bass enhancer** | Overtones of the bass, so the bass is heard on small speakers. |
 | **Exciter** | Overtones in the highs: shine and air. |
 | **De-esser** | Takes the sharpness off "s" and "t" sounds. |
@@ -414,7 +414,7 @@ axis, so the white line can be compared with the bars and with the target direct
 A stage that is switched off in the loudness preset is shown greyed out.
 
 **Spectrum.** The frequency content of the input (**original**, orange) and the output (**processed**, turquoise),
-20 Hz to 20 kHz. The density stage is drawn in it: its bands (dotted lines at the splits, band numbers at the top)
+20 Hz to 20 kHz. The MB Compressor is drawn in it: its bands (dotted lines at the splits, band numbers at the top)
 and each band's gain now as a line over the band's range (purple, like the bands), up or down by up to 12 dB. The **EQ**
 (yellow) is the deck's EQ as one curve on the same scale, the auto tone's corrections of the moment included
 (its points and per-section curves are in the spectrum window, 8.2); in Bypass it is not drawn.
@@ -520,20 +520,20 @@ medium they imitate. In the loudness preset lists they appear from the quietest 
 
 | Loudness preset | Output | Character |
 |---|---|---|
-| **DAB+** | -23 LUFS | Digital radio the EBU R 128 way: the music keeps its dynamics; songs are moved to the target slowly instead of squashed; only passages above -18 LUFS are compressed; no density, clipping or exciter. Quiet next to the others: turn the amplifier up. |
-| **Gentle** | -18 LUFS | Easy listening: songs are brought to one loudness slowly and gently, most of the dynamics stay. Light compression, 3 density bands, no clipping. For background music and quiet rooms. |
-| **Light** | -16 LUFS | A little more even and present than Gentle, still natural. 4 density bands, the de-esser and a touch of clipping. |
+| **DAB+** | -23 LUFS | Digital radio the EBU R 128 way: the music keeps its dynamics; songs are moved to the target slowly instead of squashed; only passages above -18 LUFS are compressed; no MB Compressor, clipping or exciter. Quiet next to the others: turn the amplifier up. |
+| **Gentle** | -18 LUFS | Easy listening: songs are brought to one loudness slowly and gently, most of the dynamics stay. Light compression, 3 MB Compressor bands, no clipping. For background music and quiet rooms. |
+| **Light** | -16 LUFS | A little more even and present than Gentle, still natural. 4 MB Compressor bands, the de-esser and a touch of clipping. |
 | **Web Stream** | -16 LUFS | Internet radio, podcasts, MP3 / AAC files: like Light but without clipping and with the ceiling at -2 dBTP, because lossy coding raises peaks and turns clipping into audible distortion. |
-| **Medium** | -14 LUFS | The usual loudness of streaming services: even and full without sounding squashed. 5 density bands, a little exciter, the de-esser. A good start for most music. |
+| **Medium** | -14 LUFS | The usual loudness of streaming services: even and full without sounding squashed. 5 MB Compressor bands, a little exciter, the de-esser. A good start for most music. |
 | **FM Station** | about -13 LUFS | The sound of an FM station: processed like a loud station (fast, dense 5 bands, full low end, slightly wider, hard clipping, highs held down) and then turned down 4 dB, as the transmitter's power limit does. It sounds like FM; it is not a signal ready for a transmitter. |
-| **Loud** | -12 LUFS | Dense and punchy: earlier and harder compression, 6 density bands, bass enhancer and exciter, more clipping. For parties and noisy rooms. |
-| **Very Loud** | -10 LUFS | Close to modern club masters: very dense and loud, little dynamics left. 7 density bands, the strongest compression and clipping. For loud venues; on long listening it can tire. |
+| **Loud** | -12 LUFS | Dense and punchy: earlier and harder compression, 6 MB Compressor bands, bass enhancer and exciter, more clipping. For parties and noisy rooms. |
+| **Very Loud** | -10 LUFS | Close to modern club masters: very dense and loud, little dynamics left. 7 MB Compressor bands, the strongest compression and clipping. For loud venues; on long listening it can tire. |
 
 All loudness presets have a limiter ceiling of -1.0 dBTP except Web Stream (-2.0 dBTP).
 
 The main values (`DJAPCmd --presets` lists them for the loudness presets on your computer, including your own):
 
-| Loudness preset | Target LUFS | Leveller range / speed | Compressor threshold / ratio | Density bands | Clipper drive | Ceiling dBTP |
+| Loudness preset | Target LUFS | Leveller range / speed | Compressor threshold / ratio | MB Compressor bands | Clipper drive | Ceiling dBTP |
 |---|---|---|---|---|---|---|
 | DAB+ | -23 | 15 dB / 0.5 dB/s | +5 LU / 2.0 | off | off | -1.0 |
 | Gentle | -18 | 12 dB / 0.5 dB/s | +6 LU / 1.5 | 3 | off | -1.0 |
@@ -635,7 +635,7 @@ threshold: it should fill in the pauses, not while the music plays.
 | Side-chain high-pass | Hz | off, 5 .. 200 | 80 | Bass below this does not make the compressor work, so a heavy kick does not pull the whole mix down. |
 | Make-up | dB | auto, 0 .. 12 | auto | Gain after compression. Auto keeps the target level unchanged. |
 
-**Density** - the multiband stage.
+**MB Compressor** - the multiband stage.
 
 | Value | Unit | Range | Default | What it does |
 |---|---|---|---|---|
@@ -714,7 +714,7 @@ limiter on.
   changing the loudness preset.
 - If the volume seems to drift within songs, lower the leveller **Speed**; if new songs take too long to settle,
   raise it (or rely on catch-up after pauses).
-- If the sound "breathes" or pumps, lengthen the compressor and density **Release**, or lower the density **Amount**.
+- If the sound "breathes" or pumps, lengthen the compressor and MB Compressor **Release**, or lower the MB Compressor **Amount**.
 - Watch the stage rows: a limiter that reduces more than a few dB all the time means the stages before it push too
   hard (lower input gain, clipper drive or target).
 
@@ -787,7 +787,7 @@ one above the other, so the histories and the scope get the width):
    (the dashed line is 1:1). The white dot is where the detector is now; amber dots show the last 3 seconds.
 3. **Loudness** - the momentary loudness of the input (original, orange) and output (processed, turquoise) over the
    last 60 seconds, relative to the target.
-4. **Gain** - the leveller, compressor and density gains over the last 60 seconds, and the noise reduction (pink:
+4. **Gain** - the leveller, compressor and MB Compressor gains over the last 60 seconds, and the noise reduction (pink:
    how far its most reduced band is down - it dips in pauses and quiet passages; a cut deeper than 18 dB lies on the
    bottom edge).
 5. **Scope** - an oscilloscope of the waveform, left channel above and right below, to see whether the sound clips
@@ -840,7 +840,7 @@ Click the **spectrum** in a deck's meter panel (in the plug-in too, 9.2). The bi
 
 - The **spectrum** of the input (orange) and the output (turquoise), with its dB scale on the left. It reaches down
   to -96 dB; what is quieter is not drawn, so where a song has (almost) no highs the line drops out at the bottom.
-- The **density bands** and their gains now: a purple line per band at its gain on the right-hand scale (above the
+- The **MB Compressor bands** and their gains now: a purple line per band at its gain on the right-hand scale (above the
   0 dB line = lifted, under it = turned down), with the gain in dB.
 - The deck's **EQ as a curve** (yellow, the right-hand scale in dB): thick - what the EQ does now,
   including the auto tone's correction for this song; dashed - the same without the auto tone (only while it
@@ -849,14 +849,14 @@ Click the **spectrum** in a deck's meter panel (in the plug-in too, 9.2). The bi
   left and right change its frequency, up and down its gain, in the same steps as the EQ window's sliders.
   **Double-click** a point to set its gain back to 0 dB. This changes the EQ itself - every deck using it
   - is heard at once and saved when you let go of the mouse. The EQ window and the bass sliders follow.
-- A **purple handle per density band**: the band's fixed gain (*Band N gain* in the loudness preset's Density tab, -12 to
+- A **purple handle per MB Compressor band**: the band's fixed gain (*Band N gain* in the loudness preset's MB Compressor tab, -12 to
   +12 dB, right-hand scale), lying exactly over the band. **Drag** it up or down; **double-click** sets it back to
-  0 dB. This changes the deck's loudness preset (every deck using it). So the density bands work as an EQ of their own, next
+  0 dB. This changes the deck's loudness preset (every deck using it). So the MB Compressor bands work as an EQ of their own, next
   to the EQ's four tone sections.
 - **Reset loudness** and **Reset EQ** set every value of the deck's loudness preset or EQ back, as the buttons in the
   loudness and EQ windows do: a shipped one to its shipped values, your own to the defaults (asks first).
 - **Snap to bands** (lit = on, remembered): an EQ point dragged near a band split sits exactly on it (the split
-  lights up), so a tone section can start where a density band does. A split outside a section's range is skipped.
+  lights up), so a tone section can start where an MB Compressor band does. A split outside a section's range is skipped.
 - With two decks, **Deck A / B** switches between them. **Loudness** and **EQ** choose the deck's loudness preset
   and EQ, as the lists in the main window do (both decks when they are linked).
 - The **four bass sliders** (4.2) - bass level, enhancer, width and frequency - in a second row,
@@ -864,7 +864,7 @@ Click the **spectrum** in a deck's meter panel (in the plug-in too, 9.2). The bi
 - The bass level and frequency **in the graph**: the blue bass point is the bass level (drag up or down) and the
   bass frequency (drag left or right; as the slider, it moves the enhancer's and the width's frequency too). The
   sliders at the top follow.
-- The left scale (spectrum, dB) and the right one (EQ, density, -12 to +12 dB) share the same grid lines.
+- The left scale (spectrum, dB) and the right one (EQ, MB Compressor, -12 to +12 dB) share the same grid lines.
 - At the top right of the graph the window shows what is under the mouse: the frequency with the input, output and
   EQ levels there, or the point's frequency and gain.
 
@@ -903,7 +903,7 @@ The window is one deck strip of the program:
   unchanged, delayed by the same look-ahead.
 - **Loudness** and **EQ** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
   and EQ windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
-- **The meter panel** - LED bars, the gain of each stage and the spectrum with the density bands and the EQ curve, as in the main
+- **The meter panel** - LED bars, the gain of each stage and the spectrum with the MB Compressor bands and the EQ curve, as in the main
   window (4.3). Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
   program; clicking the spectrum opens the spectrum window (8.2) for this channel, with the four bass sliders and
   the EQ's points. What you drag there changes the plug-in's own values (the project keeps them; the loudness
@@ -1004,7 +1004,7 @@ The Setup window shows the total.
 | Answered with silence | The engine was not ready (for example while starting). |
 | Driver resyncs, overloads | Reported by the ASIO driver. |
 
-If late periods appear, raise the buffer size, close other heavy programs, or use fewer density bands. The processing
+If late periods appear, raise the buffer size, close other heavy programs, or use fewer MB Compressor bands. The processing
 of both decks together uses only a few percent of one CPU core.
 
 ### 10.1 The reference system
@@ -1089,7 +1089,7 @@ DJAPCmd --version | --help
   renders it mono (default: the settings' Mono). After
   rendering it prints a report of input and output loudness.
   `--trace <file.csv>` also writes deck A every 100 ms: loudness in and out (momentary and short-term), the
-  leveller's gain and whether it holds, and what the compressor, density bands, de-esser, clipper and limiter do -
+  leveller's gain and whether it holds, and what the compressor, MB Compressor bands, de-esser, clipper and limiter do -
   to see why a song comes out uneven. The trace file must be a file of its own (not the input or the output).
 - **--presets** lists all loudness presets and EQs with their main values and which deck uses them.
 - **--measure** prints the integrated loudness, loudness range, maximum momentary and short-term loudness, sample
@@ -1140,9 +1140,9 @@ old file stays.
 | **"Open driver" fails** | Another program (DJ software) may hold the ASIO driver. Close it or use another interface. Check that the interface is connected and its driver installed. |
 | **A device shows "(not found)"** | The saved device is not connected, or it was chosen under another API (each API names devices differently). Choose it again. |
 | **"The settings file could not be read"** at the start | Another program held `DJAP.ini` (a virus scanner, a sync tool) for more than two seconds. DJAP runs with its default settings and saves nothing, so your file stays as it is; close that program and start DJAP again. |
-| **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer density bands. With an input on another clock, underruns in the Setup window mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
+| **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer MB Compressor bands. With an input on another clock, underruns in the Setup window mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
 | **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window. |
-| **The sound pumps or breathes** | Lower the density amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
+| **The sound pumps or breathes** | Lower the MB Compressor amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
 | **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Attack" (Leveller tab) brings it down within about a second. Shorten it if needed - or lengthen Release or Quiet wait, so the soft intro is turned up less. |
 | **A soft intro takes too long to come up** | Shorten "Quiet wait" (it starts sooner) and "Release" (it rises faster). A very soft intro (more than Range under the target) cannot be brought up fully: raise Range. |
 | **Quiet passages come up too much** | A quiet part that stays is levelled after a few seconds. To keep more of the difference, lower the leveller range or its speed. |

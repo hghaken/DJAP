@@ -173,11 +173,11 @@ const wchar_t* PluginView::Spectrum::resetTip(bool colour) const {
     return colour ? L"Reset EQ: the plug-in's EQ values back to those of the EQ chosen in the list (asks "
                     L"first) - after points were dragged here or the host changed them. The EQ itself is not changed."
                   : L"Reset loudness: the plug-in's loudness values back to those of the loudness preset chosen in the "
-                    L"list (asks first) - the density band handles go back with them. The preset itself is not changed.";
+                    L"list (asks first) - the MB Compressor band handles go back with them. The preset itself is not changed.";
 }
 
 std::wstring PluginView::Spectrum::hint(int) const {
-    return L"Drag a point: this plug-in's EQ values (blue: bass level and frequency). A purple handle: a density "
+    return L"Drag a point: this plug-in's EQ values (blue: bass level and frequency). A purple handle: an MB Compressor "
            L"band's fixed gain. The project keeps them - the presets in the lists stay as they are; double-click resets.";
 }
 

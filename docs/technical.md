@@ -10,7 +10,7 @@ Numbers in square brackets, such as [1], refer to the sources in chapter 21, wit
 DJAP, with the AI assistant Claude (Anthropic), from these public standards and papers and the project's own
 measurements; no code, presets or parameter values were taken from commercial products. The one adapted routine is
 the halfband coefficient designer, which follows the public hiir library (WTFPL licence; [25], `THIRD_PARTY.md`).
-Where no source is cited (the leveller, the density gain law, the auto tone, the drift loop's tuning), the design is
+Where no source is cited (the leveller, the MB Compressor's gain law, the auto tone, the drift loop's tuning), the design is
 DJAP's own, with its measurements in this manual and in `docs/design.md`.
 
 ## Contents
@@ -21,7 +21,7 @@ DJAP's own, with its measurements in this manual and in `docs/design.md`.
 4. [Leveller](#4-leveller); [4a. Noise reduction](#4a-noise-reduction)
 5. [EQ](#5-eq)
 6. [Compressor](#6-compressor)
-7. [Density (multiband)](#7-density-multiband)
+7. [MB Compressor (multiband)](#7-mb-compressor-multiband)
 8. [Bass enhancer](#8-bass-enhancer)
 9. [Exciter](#9-exciter)
 10. [De-esser](#10-de-esser)
@@ -52,9 +52,9 @@ input (stereo)
  -> mono (only when chosen): both channels (L + R) / 2, a 20 ms ramp
  -> leveller gain x input gain                               (4)
  -> noise reduction, 4 bands or 1                            (4a)
- -> EQ: sub bass, tone, auto tone, contour               (5)
+ -> EQ: sub bass, tone, auto tone, contour                   (5)
  -> compressor                                               (6)
- -> density, 1-7 bands                                       (7)
+ -> MB Compressor, 1-7 bands                                 (7)
  -> bass enhancer -> exciter -> de-esser                     (8-10)
  -> stereo width                                             (11)
  -> [leveller detector]                                      (4)
@@ -76,8 +76,8 @@ so they share the same latency (they are mixed after DJAP, and a difference woul
 - **Double precision.** All filters and gains run in 64-bit floating point; the deck's input and output are 32-bit
   float. The two channels of a filter run side by side in one SSE2 register (`StereoBiquad`), with the same
   operations in the same order as the scalar version, so each channel is bit-identical to it.
-- **Two rates.** The audio runs per sample; detectors that do not need sample rate (leveller, density, de-esser,
-  auto tone) update every 16 samples (the *control block*, 0.33 ms at 48 kHz). The density and de-esser gains are
+- **Two rates.** The audio runs per sample; detectors that do not need sample rate (leveller, MB Compressor, de-esser,
+  auto tone) update every 16 samples (the *control block*, 0.33 ms at 48 kHz). The MB Compressor and de-esser gains are
   ramped linearly across the next block; the leveller's gain is held for the block - it moves at most a few dB per
   second, so a step is under 0.003 dB.
 - **One look-ahead.** Only the limiter looks ahead (default 1.5 ms; 0, 1.5, 2, 3 or 5 ms). No other stage buffers, so the
@@ -102,7 +102,7 @@ thread (16.2). There:
 | bypass | a 20 ms crossfade between the processed and the dry path |
 | input and output gain, compressor make-up, width, bass width, bass enhancer amount, clipper drive | a one-pole glide with a 5 ms time constant |
 | filter frequencies of the compressor side chain, exciter and de-esser | new coefficients, filter memory kept |
-| density or noise reduction band count or splits; the width stage's bass split | a second, preallocated filter set is warmed up for 20 ms unheard (a filter started cold on running audio starts with a transient), then the output crossfades to it over 20 ms with a raised cosine (a linear fade's corner was audible on a 120 Hz tone) |
+| MB Compressor or noise reduction band count or splits; the width stage's bass split | a second, preallocated filter set is warmed up for 20 ms unheard (a filter started cold on running audio starts with a transient), then the output crossfades to it over 20 ms with a raised cosine (a linear fade's corner was audible on a 120 Hz tone) |
 | bass enhancer frequency | the enhancer fades out (20 ms), takes the new filters, fades back in |
 | EQ filters | coefficients ramped per sample from the old design to the new one (5.1) |
 | look-ahead | fade out 5 ms, change the delay, refill it, fade in 5 ms |
@@ -111,7 +111,7 @@ A configuration that arrives before the first audio block is applied at once, wi
 
 ### 1.5 Group delay
 
-Filters that split or shape the spectrum - the density bands' crossovers, the width stage's bass split, the EQ's
+Filters that split or shape the spectrum - the MB Compressor bands' crossovers, the width stage's bass split, the EQ's
 shelves, the oversampled clipper - are minimum-phase IIR filters: they add no latency, but they delay low
 frequencies a little more than high ones (their group delay). Measured beyond the look-ahead at 48 kHz on a -30 dBFS
 tone (`deck_test`, each tone in its own run; outside review, client 2026-10-26: "write it honestly in the docs"):
@@ -127,7 +127,7 @@ tone (`deck_test`, each tone in its own run; outside review, client 2026-10-26: 
 | DAB+ | 0.0 | 0.0 | 0.0 | 0.1 |
 | Web Stream | 5.2 | 5.1 | 0.5 | 0.1 |
 
-Most of it comes from the density bands (more bands, more delay at the bottom) and the width stage's bass split. A
+Most of it comes from the MB Compressor bands (more bands, more delay at the bottom) and the width stage's bass split. A
 kick's attack and every click still come out after the look-ahead alone; the low end of the same hit follows a few
 milliseconds later, as it does in an analogue multiband processor. Both decks run the same code, so two decks on the
 same loudness preset stay aligned; two different presets differ by the difference of their rows. Linear-phase
@@ -152,7 +152,7 @@ not click. Background on the bilinear transform and digital filters: Smith [9].
 
 Two identical Butterworth sections in a row form a 4th-order Linkwitz-Riley filter (LR4) [16]. Its low-pass and
 high-pass outputs at the same frequency are in phase with each other and sum to a 2nd-order all-pass: a flat
-magnitude. Every band split in DJAP (density, stereo width, bass enhancer) is built from LR4 pairs.
+magnitude. Every band split in DJAP (MB Compressor, stereo width, bass enhancer) is built from LR4 pairs.
 
 ### 2.3 State-variable filters
 
@@ -226,7 +226,7 @@ analysis, so the leveller has to measure as the music plays.
 
 - **Input level** (0.4 s, K-weighted, before any processing): decides whether the music is *quiet* (below
   `T - Hold below` after the leveller and input gain), *silent* (below -60 LUFS) or playing.
-- **Post level**: measured after the stereo width stage - after compressor and density have done their work - so the
+- **Post level**: measured after the stereo width stage - after compressor and MB Compressor have done their work - so the
   leveller aims the *processed* sound at the target. Three averages, 0.4 s (*fast*), 1.5 s (*mid*) and 3 s (*slow*),
   and a *trend* level: 0.4 s, but a control block more than 10 dB under the mid level leaves it where it is - the gap
   between two sung or spoken phrases is not a fall, while every block of a fade passes. It is kept every 0.25 s for
@@ -294,7 +294,7 @@ enough not to follow the phrases of a song.
 
 ### 4.4 Why the detector sits after the dynamics stages
 
-A leveller that measures before the compressor and density aims the *unprocessed* level at the target; the stages
+A leveller that measures before the compressor and MB Compressor aims the *unprocessed* level at the target; the stages
 after it then change the loudness again, and the output misses the target by however much they compress or lift.
 Measuring after them (the handbook's "measure what you control") puts the output on target for every loudness preset.
 
@@ -306,7 +306,7 @@ threshold untouched. It sits right after the leveller and input gain, so its thr
 like the compressor's and the de-esser's (the leveller has brought every song to the same level), and before the
 EQ, so a treble boost does not lift the hiss into its detector. Off in every shipped loudness preset.
 
-1. **Bands.** Three LR4 splits (default 80 Hz, 1 kHz, 5 kHz: rumble and hum, low, mid, hiss), built like the density
+1. **Bands.** Three LR4 splits (default 80 Hz, 1 kHz, 5 kHz: rumble and hum, low, mid, hiss), built like the MB Compressor
    bank (7.1): the two lower bands pass the all-passes of the splits above them, so the four bands sum to an all-pass.
    Or one band: the gain on the whole signal, no filters.
 2. **Level.** Per band the mean square of both channels, averaged with a one-pole over one period of the band's lowest
@@ -322,7 +322,7 @@ EQ, so a treble boost does not lift the hiss into its detector. Off in every shi
    gain is ramped linearly across the next control block. A band that is open again within 0.0001 dB is set to
    exactly 0 dB, so a wide band at rest passes the signal bit for bit.
 5. **Changes.** A new band count or new splits run in the spare bank with the 20 ms warm-up and 20 ms raised-cosine
-   crossfade of the density bank (7.4); the spare bank starts from the running bank's levels and reductions (from 1
+   crossfade of the MB Compressor bank (7.4); the spare bank starts from the running bank's levels and reductions (from 1
    band to 4 every band gets the wide band's, from 4 to 1 the wide band gets the least reduced band's), so the
    crossfade does not swell.
 
@@ -424,9 +424,9 @@ A wide-band, feed-forward compressor with a soft knee, after the design analysis
 Measured step response with the defaults: 63 % of the reduction after 14 ms (attack 10 ms plus the 10 ms detector),
 back to 37 % after 223 ms.
 
-## 7. Density (multiband)
+## 7. MB Compressor (multiband)
 
-The density stage compares each frequency band with **its own recent level** rather than with a fixed threshold.
+The MB Compressor compares each frequency band with **its own recent level** rather than with a fixed threshold.
 Material above that level is turned down, material below it is lifted: soft details come up, peaks are held, and a
 bass drum moves only the low band. This is what makes the dense, even sound of broadcast processing.
 
@@ -487,7 +487,7 @@ Default splits per band count (each split movable, always rising and at least 1.
 A new band count or new splits change the filters' phase, so they cannot simply be swapped. Each deck holds two
 complete filter banks (7 bands each, allocated in advance); the new configuration runs in the spare bank, warms up
 20 ms unheard and is crossfaded in over 20 ms with a raised cosine. A split change keeps the band levels and gains.
-Measured cost: density with 7 bands about 0.3-0.4 % of one CPU core per deck.
+Measured cost: the MB Compressor with 7 bands about 0.3-0.4 % of one CPU core per deck.
 
 ## 8. Bass enhancer
 
@@ -707,7 +707,7 @@ DJAP follows that volume itself, when the option is on:
 
 Every 10 ms each deck writes a record into a lock-free ring (16.2): the K-weighted energy of input and output, the
 sample peak of the input, the true peak of the output (4x detector), the gain of every stage (leveller gain;
-compressor, de-esser and limiter reduction; the noise reduction's largest reduction per band; density gain per band;
+compressor, de-esser and limiter reduction; the noise reduction's largest reduction per band; MB Compressor gain per band;
 how far the clipper reduced the deepest peak), and the energy at 13 points of the chain (`MeterRecord::chain`). The GUI reads the ring 20 times a second.
 
 ### 15.2 Signal-chain bars
@@ -944,7 +944,7 @@ The loudness presets' targets follow the loudness standards of the media they im
 - **EBU R 128** [2] introduced loudness normalisation in broadcasting: programme loudness -23 LUFS, true peak at most
   -1 dBTP. **EBU Tech 3344** [5] applies it to distribution and reproduction. The **DAB+** loudness preset follows it: -23
   LUFS, wide dynamics, songs shifted slowly instead of squashed, compression only above -18 LUFS (R 128's short-term
-  maximum for "s1"), no density, clipping or exciter (a low-bit-rate codec smears clipping and spends its bits on
+  maximum for "s1"), no MB Compressor, clipping or exciter (a low-bit-rate codec smears clipping and spends its bits on
   added highs).
 - **FM radio** is limited by the multiplex power of ITU-R BS.412 [14] (an average over 60 s), which caps the
   loudness at about -12..-15 LUFS while station processing makes the sound very dense. The **FM Station** loudness preset
@@ -975,7 +975,7 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Compressor | static curve; step response | exact; 63 % in about 14 ms |
 | Limiter | +12 dBFS single samples at several look-aheads; +6 dBFS sine; fs/4 square; +9.5 dBFS noise bursts | sample peak <= ceiling; true peak (16x reference) <= ceiling + 0.1 dB |
 | Bypass | processing off | the input delayed by the look-ahead, bit-exact |
-| Density | band-sum flatness for every band count 1..7 | 0.01 dB |
+| MB Compressor | band-sum flatness for every band count 1..7 | 0.01 dB |
 | Noise reduction | band sum while open; pink noise under the threshold; a tone with hiss under it (4 bands and 1); hold / release / attack; every value changed on a tone it turns down; the split rule | 0.001 dB (one band bit-exact); the depth within 0.3 dB; the tone within 0.05 dB, the hiss down by about the depth; the times; no click; rising, 1.25x apart |
 | Band count | 3 -> 7 -> 1 bands on a sine while playing | no step larger than the signal's own |
 | Clicks | every parameter changed on a sine in its own band | no step larger than the signal's own |

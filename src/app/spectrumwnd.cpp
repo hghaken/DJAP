@@ -32,17 +32,17 @@ enum Tip { tGraph, tDecks, tSnap, tResetPreset, tResetColour, kTips };
 enum BoxId { idLoudnessBox = 201, idColourBox, idBass0 = 210 };
 const wchar_t* const kTipText[kTips] = {
     L"The deck's spectrum, 20 Hz - 20 kHz (left scale, dB): orange = the original (the deck's input), turquoise = "
-    L"processed (the output). Purple: the density stage's bands; a line per band at its gain now (right scale; "
+    L"processed (the output). Purple: the MB Compressor's bands; a line per band at its gain now (right scale; "
     L"blue = lifted, red = turned down). Yellow: the deck's EQ as a curve (right scale, dB) - thick: what it does now, the auto "
     L"tone's correction included; dashed: without the auto tone; thin: each tone section. Drag a point: left-right "
     L"its frequency, up-down its gain; double-click: back to 0 dB. It changes the EQ preset (every deck that uses "
-    L"it), heard at once and saved when you let go. A purple handle per density band: its fixed gain (the loudness "
+    L"it), heard at once and saved when you let go. A purple handle per MB Compressor band: its fixed gain (the loudness "
     L"preset's Band N gain, -12 .. +12 dB, right-hand scale) - drag it up or down; double-click: 0 dB.\n\nThe blue "
     L"bass point is the bass sliders' Bass level (up-down) and Bass frequency (left-right; the enhancer and the width "
     L"follow).",
     L"The deck whose spectrum and EQ are shown.",
-    L"Snap to bands (lit): an EQ point dragged near a density band split sits exactly on it, so a tone section "
-    L"starts where a density band does.",
+    L"Snap to bands (lit): an EQ point dragged near an MB Compressor band split sits exactly on it, so a tone section "
+    L"starts where an MB Compressor band does.",
     L"", // Reset loudness, Reset colour: the source's (SpectrumSource::resetTip)
     L"",
 };
@@ -139,13 +139,13 @@ const wchar_t* SettingsSpectrum::resetTip(bool colour) const {
                     L"own to neutral - as the EQ window's button does (asks first). The coloured points go back with it."
                   : L"Reset loudness: every value of the deck's loudness preset back - a shipped one to its shipped "
                     L"values, your own to the generic defaults - as the loudness window's button does (asks first). The "
-                    L"density band handles go back with it.";
+                    L"MB Compressor band handles go back with it.";
 }
 
 std::wstring SettingsSpectrum::hint(int d) const {
     if (!editable(d, true)) return L"This deck has no EQ.";
     return L"Drag a point: the EQ \"" + fromUtf8(settings_.deck[d].colour) +
-           L"\" (blue: bass level and frequency). A purple handle: a density band of \"" +
+           L"\" (blue: bass level and frequency). A purple handle: an MB Compressor band of \"" +
            fromUtf8(settings_.deck[d].preset) + L"\". Every deck using them changes; double-click resets.";
 }
 
@@ -698,7 +698,7 @@ void SpectrumWindow::paint(HDC target) {
     } else if ((draggingBand_ >= 0 || hotBand_ >= 0) && source_.editable(deck_, false)) {
         const int band = draggingBand_ >= 0 ? draggingBand_ : hotBand_;
         wchar_t b[128];
-        swprintf(b, 128, L"Density band %d: fixed gain %+.1f dB, now %+.1f dB", band + 1, d.bandGainDb[band],
+        swprintf(b, 128, L"MB Compressor band %d: fixed gain %+.1f dB, now %+.1f dB", band + 1, d.bandGainDb[band],
                  d.densityDb[band]);
         read = b;
     } else if (mouse_.x >= 0) {
