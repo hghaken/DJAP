@@ -155,14 +155,14 @@ void PluginView::Spectrum::setBass(int d, int slider, int pos, bool save) { set(
 void PluginView::Spectrum::reset(int d, bool colour, HWND owner) {
     const int i = chosen(d, colour);
     if (!view_.plugin_ || i < 0) {
-        placement::messageBox(owner, colour ? L"These colour values match no colour in the list." :
+        placement::messageBox(owner, colour ? L"These EQ values match no EQ in the list." :
                                               L"These values match no loudness preset in the list.",
-                              colour ? L"Reset colour" : L"Reset loudness", MB_OK | MB_ICONINFORMATION);
+                              colour ? L"Reset EQ" : L"Reset loudness", MB_OK | MB_ICONINFORMATION);
         return;
     }
-    const std::wstring q = std::wstring(L"Set the plug-in's ") + (colour ? L"colour" : L"loudness") +
+    const std::wstring q = std::wstring(L"Set the plug-in's ") + (colour ? L"EQ" : L"loudness") +
                            L" values back to those of \"" + wide(chosenName(d, colour)) + L"\"?";
-    if (placement::messageBox(owner, q.c_str(), colour ? L"Reset colour" : L"Reset loudness",
+    if (placement::messageBox(owner, q.c_str(), colour ? L"Reset EQ" : L"Reset loudness",
                               MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
         return;
     view_.plugin_->choose(colour, i); // the chosen one again: every value of it
@@ -170,14 +170,14 @@ void PluginView::Spectrum::reset(int d, bool colour, HWND owner) {
 }
 
 const wchar_t* PluginView::Spectrum::resetTip(bool colour) const {
-    return colour ? L"Reset colour: the plug-in's colour values back to those of the colour chosen in the list (asks "
-                    L"first) - after points were dragged here or the host changed them. The colour itself is not changed."
+    return colour ? L"Reset EQ: the plug-in's EQ values back to those of the EQ chosen in the list (asks "
+                    L"first) - after points were dragged here or the host changed them. The EQ itself is not changed."
                   : L"Reset loudness: the plug-in's loudness values back to those of the loudness preset chosen in the "
                     L"list (asks first) - the density band handles go back with them. The preset itself is not changed.";
 }
 
 std::wstring PluginView::Spectrum::hint(int) const {
-    return L"Drag a point: this plug-in's colour values (blue: bass level and frequency). A purple handle: a density "
+    return L"Drag a point: this plug-in's EQ values (blue: bass level and frequency). A purple handle: a density "
            L"band's fixed gain. The project keeps them - the presets in the lists stay as they are; double-click resets.";
 }
 
@@ -383,7 +383,7 @@ void PluginView::create() {
     bypass_ = make(L"BUTTON", L"Bypass Off", BS_OWNERDRAW | WS_TABSTOP, idBypass);
     presetLabel_ = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
     preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
-    colourLabel_ = make(L"STATIC", L"Colour", SS_LEFT | SS_CENTERIMAGE, 0);
+    colourLabel_ = make(L"STATIC", L"EQ", SS_LEFT | SS_CENTERIMAGE, 0);
     colour_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idColour);
     edit_ = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idEdit);
     editColour_ = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idEditColour);
@@ -394,19 +394,19 @@ void PluginView::create() {
 
     tips_.create(hwnd_);
     tips_.add(version_, L"DJAP processes this channel like one deck of the program, with the same presets and "
-                        L"colours. Every value is also a parameter in the host's own list, and can be automated.\n\n"
+                        L"EQs. Every value is also a parameter in the host's own list, and can be automated.\n\n"
                         L"Right-click anywhere on the window: Setup (look-ahead, oversampling, tooltips, the update "
                         L"check) and About DJAP. When a newer version exists it says so here (About DJAP has the details).");
     tips_.add(preset_, L"The loudness preset: the target loudness and every stage's values. The list holds the program's "
                        L"loudness presets and your own (from the settings file the program and the plug-in share). The "
                        L"project keeps the values themselves, so it sounds the same on a computer without that "
                        L"preset; \"(other values)\" = values that match no preset in the list.");
-    tips_.add(colour_, L"The colour, on top of the loudness preset: tone, auto tone, sub bass and a contour. "
+    tips_.add(colour_, L"The EQ, on top of the loudness preset: tone, auto tone, sub bass and a contour. "
                        L"Neutral changes nothing.");
     tips_.add(edit_, L"Opens the loudness window: the stage switches and every value of the loudness preset with its unit, "
                      L"range and meaning; Save as, Rename, Delete and Reset. Your presets are saved in the settings "
                      L"file the program uses too.");
-    tips_.add(editColour_, L"Opens the colour window: every value of the colour; Save as, Rename, Delete and Reset.");
+    tips_.add(editColour_, L"Opens the EQ window: every value of the EQ; Save as, Rename, Delete and Reset.");
     tips_.add(graphs_, L"Opens the analysis window of this channel: the signal chain step by step (a click on a step "
                        L"opens its settings), the compressor's curve, loudness and gains of the last 60 s, the scope "
                        L"(right-click: input or output) and the goniometer with correlation and stereo width.");
@@ -442,7 +442,7 @@ void PluginView::layout() {
     MoveWindow(bypass_, m + W - bypassW, y, bypassW, rowH, TRUE);
     y += rowH + gap;
     // Loudness [....] [Edit...]  Colour [....] [Edit...]
-    const int labelW = px(66), colourLabelW = px(50), editW = px(64);
+    const int labelW = px(66), colourLabelW = px(26), editW = px(64); // "EQ" (was "Colour", 50 px)
     const int combos = W - labelW - colourLabelW - 2 * editW - 5 * gap - px(10);
     const int presetW = combos / 2, colourW = combos - presetW;
     int x = m;

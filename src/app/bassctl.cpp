@@ -16,15 +16,15 @@ const int kMin[kSliders] = {-24, 0, 0, 8}, kMax[kSliders] = {24, 20, 20, 50}; //
 const wchar_t* const kName[kSliders] = {L"Bass level", L"Bass enhancer", L"Bass width", L"Bass frequency"};
 
 const wchar_t* const kTip[kSliders] = {
-    L"More or less bass, -12 .. +12 dB: the colour's bass shelf below the bass frequency. The leveller keeps the "
+    L"More or less bass, -12 .. +12 dB: the EQ's bass shelf below the bass frequency. The leveller keeps the "
     L"loudness on target, so this changes the balance, not the volume; the limiter keeps the ceiling. 0 dB = off.\n"
-    L"Belongs to the colour.",
+    L"Belongs to the EQ.",
     L"Strength of the bass enhancer, 0 .. 100 %: overtones of the bass below its frequency, so the bass is heard on "
     L"small speakers too. 0 % switches the enhancer off, more switches it on.\nBelongs to the loudness preset.",
     L"Stereo width of the bass below the bass frequency, 0 .. 100 %: 0 % = bass in mono (tighter in a club, safe "
     L"for mono systems), 100 % = as recorded. Moving it switches the width stage on.\nBelongs to the loudness preset.",
-    L"Where 'bass' ends, 40 .. 250 Hz: the colour's bass corner, and in the loudness preset the enhancer's frequency (60 .. "
-    L"160 Hz) and the width stage's bass split, all at once (each can be set apart in the colour and loudness windows).",
+    L"Where 'bass' ends, 40 .. 250 Hz: the EQ's bass corner, and in the loudness preset the enhancer's frequency (60 .. "
+    L"160 Hz) and the width stage's bass split, all at once (each can be set apart in the EQ and loudness windows).",
 };
 
 void setup(HWND bar, int k) {

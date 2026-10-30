@@ -13,7 +13,7 @@ sources are listed in the technical manual), and improved with outside reviews b
 [![DJAP in three minutes - watch on YouTube](https://img.youtube.com/vi/1PePjk0rk-Y/maxresdefault.jpg)](https://www.youtube.com/watch?v=1PePjk0rk-Y)
 
 [DJAP in three minutes on YouTube](https://www.youtube.com/watch?v=1PePjk0rk-Y): before and after, the loudness presets,
-every value, the colours, the analysis, Setup, Windows' own sound and the plug-in. (Intro, b-roll and voice-over are
+every value, the EQs, the analysis, Setup, Windows' own sound and the plug-in. (Intro, b-roll and voice-over are
 AI-generated.)
 
 ## Download
@@ -31,7 +31,7 @@ Technologies GmbH.
 ## Manuals
 
 - [User manual](docs/manual.md) ([PDF](docs/DJAP-Manual.pdf)) - installing, connecting, every window, control and
-  setting, loudness presets and colours, the command line, troubleshooting.
+  setting, loudness presets and EQs, the command line, troubleshooting.
 - [Technical manual](docs/technical.md) ([PDF](docs/DJAP-Technical-Manual.pdf)) - how each part of the audio
   processing works, with formulas, measurements, tests and the sources (standards and papers) with links.
 
@@ -46,7 +46,7 @@ Per deck, in this order (`docs/design.md` sections 2-4):
   holds during fades, breakdowns and pauses, catches up quickly after a stopped deck.
 - **Compressor** - wide-band, soft knee, threshold relative to the target.
 - **Density** - multiband (1-7 bands, flat sum): each band is compared with its own recent level.
-- **Bass enhancer, exciter, de-esser, stereo width** - optional colour stages.
+- **Bass enhancer, exciter, de-esser, stereo width** - optional stages that shape the sound.
 - **Soft clipper** and **look-ahead true-peak limiter** - the output never passes the ceiling (default -1 dBTP).
 
 The limiter look-ahead (default 1.5 ms, 0-5 ms) is the only latency the processing adds (the multiband filters let the
@@ -55,22 +55,22 @@ the same amount, bit-exact, so switching never jumps. Five shipped loudness pres
 (Gentle -18, Light -16, Medium -14, Loud -12, Very Loud -10 LUFS), and three follow a medium: FM Station (the dense FM sound at about -13 LUFS), DAB+ (EBU R 128: -23 LUFS, wide dynamics) and Web Stream (-16 LUFS, -2 dBTP for MP3 / AAC); every value of every loudness preset can be changed, and
 own loudness presets can be saved, renamed and deleted.
 
-Besides its loudness preset each deck has a **colour**: the tone of the music, kept apart from its loudness - bass, low-mid,
+Besides its loudness preset each deck has an **EQ**: the tone of the music, kept apart from its loudness - bass, low-mid,
 presence and treble controls, an automatic tone correction that pulls each song's balance towards that of modern
 productions (a thin old record gets more bass, a dull one more highs), a sub-bass generator (an octave under the
-bass) and a contour for quiet listening. The leveller keeps the loudness on target, so a colour changes
-only the balance. Nine shipped colours (Neutral, Warm, Bass+, Less mid, Bright, Vocal, Oldies, Auto, Quiet); own
-colours are managed like loudness presets.
+bass) and a contour for quiet listening. The leveller keeps the loudness on target, so an EQ changes
+only the balance. Nine shipped EQs (Neutral, Warm, Bass+, Less mid, Bright, Vocal, Oldies, Auto, Quiet); own
+EQs are managed like loudness presets.
 
 ## Programs
 
-- `DJAP.exe` - the GUI: two deck strips (loudness preset and colour - one choice when both decks share them -, processing /
+- `DJAP.exe` - the GUI: two deck strips (loudness preset and EQ - one choice when both decks share them -, processing /
   bypass, meters for input and output loudness, true peak, the gain of every stage and the spectrum of input and
-  output), a spectrum window (a click on a deck's spectrum: the colour as an EQ curve with points to drag, the
-  density bands with their gains, the loudness preset and colour lists and the four bass sliders - bass level,
+  output), a spectrum window (a click on a deck's spectrum: the EQ as a curve with points to drag, the
+  density bands with their gains, the loudness preset and EQ lists and the four bass sliders - bass level,
   enhancer, width and frequency), an analysis window (compressor curve, loudness and gain over the last minute,
   goniometer, correlation and stereo width), a loudness window with the stage switches and every parameter, a
-  colour window, tooltips on every control (they can be switched off), windows that open where they were left, and
+  EQ window, tooltips on every control (they can be switched off), windows that open where they were left, and
   the Setup window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
   decks the same loudness preset, start / stop, latency, real-time health). With ASIO a deck's input may also come from a
@@ -88,7 +88,7 @@ colours are managed like loudness presets.
   settings:
 
   ```
-  DJAPCmd --render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--ca <colour>] [--cb <colour>] [--look <ms>] [--oversampling <2|4|8>] [--keep-delay] [--pcm24] [--trace <file.csv>]
+  DJAPCmd --render in.wav out.wav [--a <preset|off>] [--b <preset|off>] [--ca <EQ>] [--cb <EQ>] [--look <ms>] [--oversampling <2|4|8>] [--keep-delay] [--pcm24] [--trace <file.csv>]
   DJAPCmd --presets
   DJAPCmd --measure <file.wav> [...]
   DJAPCmd --tone <file> [...]
@@ -98,8 +98,8 @@ colours are managed like loudness presets.
   A 2-channel file is deck A, a 4-channel file is deck A (1-2) and deck B (3-4). Input may be WAV or anything
   Windows decodes (MP3, M4A, WMA, FLAC; mono plays on both channels); the output is WAV.
 - `DJAP.vst3` - the plug-in for DJ software: one deck (stereo in, stereo out) with the same chain, the same loudness presets
-  and colours (read from the program's settings file) and a window like a deck strip of the program: loudness preset,
-  colour, look-ahead, Bypass, the four bass sliders and the meter panel. Every value is a parameter the host can
+  and EQs (read from the program's settings file) and a window like a deck strip of the program: loudness preset,
+  EQ, look-ahead, Bypass, the four bass sliders and the meter panel. Every value is a parameter the host can
   show and automate; a project stores the values themselves. The host is told the latency (the look-ahead).
 
 ## Building

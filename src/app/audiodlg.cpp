@@ -181,7 +181,7 @@ void AudioWindow::createControls() {
     outB_ = make(WC_COMBOBOXW, L"", combo, idOutB);
     rate_ = make(WC_COMBOBOXW, L"", combo, idRate);
     buffer_ = make(WC_COMBOBOXW, L"", combo, idBuffer);
-    link_ = make(L"BUTTON", L"Deck A and deck B use the same loudness preset and colour (a choice on either deck sets both)",
+    link_ = make(L"BUTTON", L"Deck A and deck B use the same loudness preset and EQ (a choice on either deck sets both)",
                  BS_AUTOCHECKBOX | WS_TABSTOP, idLink);
     follow_ = make(L"BUTTON", L"The outputs follow the Windows volume (volume keys, taskbar) and mute",
                    BS_AUTOCHECKBOX | WS_TABSTOP, idFollow);
@@ -266,7 +266,7 @@ void AudioWindow::createControls() {
     tips_.add(buffer_, L"Frames per period. Smaller = lower latency, but more risk of dropouts when the PC is busy "
                        L"(watch Health: late periods are dropouts). ASIO: the driver's preferred size or a size it "
                        L"allows. Other APIs: the period asked of Windows.");
-    tips_.add(link_, L"On: deck B always uses deck A's loudness preset and colour - the main window then shows one set of "
+    tips_.add(link_, L"On: deck B always uses deck A's loudness preset and EQ - the main window then shows one set of "
                      L"controls (deck A's), and its Bypass counts for both decks.");
     tips_.add(mono_, L"Mono: every deck's left and right are mixed, (L + R) / 2, and both outputs carry that one "
                      L"sound - for a mono sound system, or a speaker on one side only. From the deck's input on, so "

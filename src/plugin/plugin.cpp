@@ -293,7 +293,8 @@ void Plugin::addParameters() {
     }
     // the lists: the presets' names and one more for values that match none of them (a project from elsewhere)
     for (const bool colour : {false, true}) {
-        auto* param = new NameListParameter(colour ? "Colour" : "Loudness", colour ? kColourId : kPresetId,
+        // "EQ": the colour's name in the windows since 2026-10-30 (client); the id stays
+        auto* param = new NameListParameter(colour ? "EQ" : "Loudness", colour ? kColourId : kPresetId,
                                             colour ? &settings_.colours : &settings_.presets);
         const ParamValue norm = static_cast<double>(colour ? colourIndex() : presetIndex()) / param->getInfo().stepCount;
         param->getInfo().defaultNormalizedValue = norm;
@@ -774,7 +775,7 @@ void Plugin::openEditor(bool colour, HWND owner, const std::string& tab) {
                                          colour ? PresetKind::Colour : PresetKind::Dynamics);
         e->setDeckName(L"this plug-in");
         const std::wstring deck = L"DJAP Deck " + std::to_wstring(slot_); // the deck, not the preset (client, 2026-10-30)
-        e->setWindowTitle((colour ? L"Settings Colour: " : L"Settings Loudness: ") + deck);
+        e->setWindowTitle((colour ? L"Settings EQ: " : L"Settings Loudness: ") + deck);
     }
     const std::string& chosen = colour ? settings_.deck[0].colour : settings_.deck[0].preset;
     e->show(owner, chosen.empty() ? std::string(colour ? "Neutral" : "Medium") : chosen, 0, tab);

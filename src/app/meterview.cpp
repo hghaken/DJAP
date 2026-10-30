@@ -413,7 +413,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                                          (i >= tRow0 && i < tRow0 + kMeterRows ? L" Click: opens its settings."
                                           : i <= tInR ? L" Click: opens the General tab (input gain, target)."
                                           : i <= tOutR ? L" Click: opens the Limiter tab (its ceiling)."
-                                                       : L" Click: opens the big spectrum window, with the colour's EQ "
+                                                       : L" Click: opens the big spectrum window, with the EQ "
                                                          L"curve and the bass settings.");
                 v->tips.addRect(hwnd, static_cast<UINT_PTR>(i), tip.c_str());
             }

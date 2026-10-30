@@ -78,9 +78,9 @@ const ChainRow kChain[14] = { // AnalysisWindow::kChainRows
     {L"Noise", RowKind::reduction, sNoise, 0, 0,
      L"Noise reduction: how far its most turned-down band is down now (dB) - hiss, hum or rumble under the loudness "
      L"preset's noise threshold. Mostly nothing while music plays; bars in pauses and quiet passages."},
-    {L"Colour", RowKind::change, kChainColourBit, ctNoise, ctColour,
-     L"Colour: what the tone EQ, auto tone, sub bass and contour of the deck's colour do to the level (dB, "
-     L"over 0.4 s). 'off' = a neutral colour."},
+    {L"EQ", RowKind::change, kChainColourBit, ctNoise, ctColour,
+     L"EQ: what the tone, auto tone, sub bass and contour of the deck's EQ do to the level (dB, "
+     L"over 0.4 s). 'off' = a neutral EQ."},
     {L"Compressor", RowKind::reduction, sCompressor, 0, 0,
      L"Compressor: its gain reduction now (dB). Bars only when the music is over its threshold."},
     {L"Density", RowKind::change, sDensity, ctCompressor, ctDensity,
@@ -254,7 +254,7 @@ LRESULT AnalysisWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             for (int p = 0; p < kParts; ++p) {
                 const std::wstring tip = p < kGraphs ? std::wstring(kTips[p])
                                                      : std::wstring(kChain[p - kGraphs].tip) +
-                                                           (p - kGraphs == kColourRow ? L" Click: opens the colour window."
+                                                           (p - kGraphs == kColourRow ? L" Click: opens the EQ window."
                                                                                       : L" Click: opens its settings.");
                 tips_.addRect(hwnd_, static_cast<UINT_PTR>(d * kParts + p), tip.c_str());
                 tipRect_[d][p] = RECT{};

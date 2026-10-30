@@ -292,7 +292,7 @@ std::wstring describe(const Preset& p, PresetKind kind) {
         if (v[pAutoAmount] > 0) swprintf(b, 64, L"auto tone %.0f %%", v[pAutoAmount]), add(b);
         if (v[pSubAmount] > 0) swprintf(b, 64, L"sub bass %.0f %%", v[pSubAmount]), add(b);
         if (v[pLoudness] > 0) swprintf(b, 64, L"loudness %.0f %%", v[pLoudness]), add(b);
-        return L"Your own colour: " + (s.empty() ? std::wstring(L"it changes nothing (as Neutral).") : s + L".");
+        return L"Your own EQ: " + (s.empty() ? std::wstring(L"it changes nothing (as Neutral).") : s + L".");
     }
     wchar_t b[96];
     swprintf(b, 96, L"target %.1f LUFS", v[pTarget]);
@@ -567,7 +567,7 @@ void EditWindow::createControls() {
         return CreateWindowExW(ex, cls, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 10, 10, hwnd_,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
     };
-    presetLabel_ = make(L"STATIC", colour() ? L"Colour" : L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
+    presetLabel_ = make(L"STATIC", colour() ? L"EQ" : L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
     preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
     saveAs_ = make(L"BUTTON", L"Save as...", BS_OWNERDRAW | WS_TABSTOP, idSaveAs);
     rename_ = make(L"BUTTON", L"Rename...", BS_OWNERDRAW | WS_TABSTOP, idRename);
@@ -586,14 +586,14 @@ void EditWindow::createControls() {
     tips_.add(tabs_, L"One tab per stage: every value of the stage as a slider, with its value (type one in and press "
                      L"Enter), its unit, a reset button and what it does.");
     if (colour()) {
-        tips_.add(preset_, L"The colour preset shown in this window (opened on the deck's own): tone, auto tone, sub "
+        tips_.add(preset_, L"The EQ preset shown in this window (opened on the deck's own): tone, auto tone, sub "
                            L"bass, loudness. Every change is saved at once and heard on every deck that uses it.");
-        tips_.add(saveAs_, L"Saves these values as a colour under a new name (or over one of your own) and moves the "
-                           L"deck this window was opened from to it. Shipped colours cannot be saved over.");
-        tips_.add(rename_, L"Renames your own colour; the decks that use it follow.");
-        tips_.add(delete_, L"Deletes your own colour (asks first); a deck that used it goes to Neutral.");
-        tips_.add(resetPreset_, L"Shipped colour: back to its shipped values. Own colour: back to neutral (asks first).");
-        tips_.add(note_, L"Whether this is a shipped or an own colour and which decks use it.");
+        tips_.add(saveAs_, L"Saves these values as an EQ under a new name (or over one of your own) and moves the "
+                           L"deck this window was opened from to it. Shipped EQs cannot be saved over.");
+        tips_.add(rename_, L"Renames your own EQ; the decks that use it follow.");
+        tips_.add(delete_, L"Deletes your own EQ (asks first); a deck that used it goes to Neutral.");
+        tips_.add(resetPreset_, L"Shipped EQ: back to its shipped values. Own EQ: back to neutral (asks first).");
+        tips_.add(note_, L"Whether this is a shipped or an own EQ and which decks use it.");
     } else {
         tips_.add(preset_, L"The loudness preset shown in this window (opened on the deck's own). Every change is saved at "
                            L"once and heard on every deck that uses this loudness preset.");
@@ -879,7 +879,7 @@ void EditWindow::select(const std::string& preset) {
     showRows();
     updateRows();
     const std::wstring title =
-        !windowTitle_.empty() ? windowTitle_ : (colour() ? L"Colour: " : L"Loudness: ") + fromUtf8(current_);
+        !windowTitle_.empty() ? windowTitle_ : (colour() ? L"EQ: " : L"Loudness: ") + fromUtf8(current_);
     SetWindowTextW(hwnd_, title.c_str());
     updateButtons();
 }
@@ -939,12 +939,12 @@ void EditWindow::updateButtons() {
     const bool own = p && !p->shipped;
     EnableWindow(rename_, own);
     EnableWindow(delete_, own);
-    SetWindowTextW(resetPreset_, own ? L"Reset to defaults" : colour() ? L"Reset colour" : L"Reset loudness");
+    SetWindowTextW(resetPreset_, own ? L"Reset to defaults" : colour() ? L"Reset EQ" : L"Reset loudness");
     std::wstring users;
     for (int d = 0; d < 2; ++d)
         if (d < settings_.decks && used(d) == current_)
             users += users.empty() ? (d == 0 ? deckA_ : L"deck B") : L" and deck B";
-    const std::wstring what = colour() ? L"colour" : L"loudness preset";
+    const std::wstring what = colour() ? L"EQ" : L"loudness preset";
     std::wstring note = own ? L"Own " + what + L"." : L"Shipped " + what + L": values can be changed and reset; it cannot "
                                                                          L"be renamed or deleted.";
     note += users.empty() ? L" Not used by a deck right now." : L" Changes are heard at once on " + users + L".";
@@ -1023,7 +1023,7 @@ void EditWindow::commitValue(size_t r) {
         const std::wstring msg = L"\"" + text + L"\" is not a value for " + fromUtf8(paramInfo(row.param).name) +
                                  L" (" + fromUtf8(rangeText(row.param)) + L").";
         updateRow(r);
-        placement::messageBox(hwnd_, msg.c_str(), colour() ? L"Colour" : L"Loudness", MB_OK | MB_ICONWARNING);
+        placement::messageBox(hwnd_, msg.c_str(), colour() ? L"EQ" : L"Loudness", MB_OK | MB_ICONWARNING);
         return;
     }
     if (v != p->values[static_cast<size_t>(row.param)]) setValue(row.param, v); // clamped by normaliseValues
@@ -1093,17 +1093,17 @@ void EditWindow::command(int id, int code) {
     std::string err;
     if (id == idSaveAs) {
         std::string name = current_ + " (copy)";
-        if (!askName(hwnd_, colour() ? L"Save colour as" : L"Save loudness preset as",
-                     colour() ? L"Name of the new colour:" : L"Name of the new loudness preset:", name))
+        if (!askName(hwnd_, colour() ? L"Save EQ as" : L"Save loudness preset as",
+                     colour() ? L"Name of the new EQ:" : L"Name of the new loudness preset:", name))
             return;
         if (const Preset* existing = settings_.find(name, kind_)) {
             if (!existing->shipped) {
                 const std::wstring q = L"Replace the loudness preset \"" + fromUtf8(name) + L"\"?";
-                if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Save colour as" : L"Save loudness preset as", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+                if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Save EQ as" : L"Save loudness preset as", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
             }
         }
         if (!settings_.saveAs(name, values, err, kind_)) {
-            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Save colour as" : L"Save loudness preset as", MB_OK | MB_ICONWARNING);
+            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Save EQ as" : L"Save loudness preset as", MB_OK | MB_ICONWARNING);
             return;
         }
         if (used(deck_) == current_) used(deck_) = name;
@@ -1113,23 +1113,23 @@ void EditWindow::command(int id, int code) {
         select(current_);
     } else if (id == idRename) {
         std::string name = current_;
-        if (!askName(hwnd_, colour() ? L"Rename colour" : L"Rename loudness preset", L"New name:", name) || name == current_) return;
+        if (!askName(hwnd_, colour() ? L"Rename EQ" : L"Rename loudness preset", L"New name:", name) || name == current_) return;
         if (!settings_.rename(current_, name, err, kind_)) {
-            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Rename colour" : L"Rename loudness preset", MB_OK | MB_ICONWARNING);
+            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Rename EQ" : L"Rename loudness preset", MB_OK | MB_ICONWARNING);
             return;
         }
         current_ = name;
         onChange_(true, true);
         select(current_);
     } else if (id == idDelete) {
-        const std::wstring q = (colour() ? L"Delete the colour \"" : L"Delete the loudness preset \"") + fromUtf8(current_) +
+        const std::wstring q = (colour() ? L"Delete the EQ \"" : L"Delete the loudness preset \"") + fromUtf8(current_) +
                                (colour() ? L"\"? A deck that uses it changes to Neutral." :
                                            L"\"? A deck that uses it changes to Medium.");
-        if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Delete colour" : L"Delete loudness preset", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) !=
+        if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Delete EQ" : L"Delete loudness preset", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) !=
             IDYES)
             return;
         if (!settings_.remove(current_, err, kind_)) {
-            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Delete colour" : L"Delete loudness preset", MB_OK | MB_ICONWARNING);
+            placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Delete EQ" : L"Delete loudness preset", MB_OK | MB_ICONWARNING);
             return;
         }
         onChange_(true, true);
@@ -1137,7 +1137,7 @@ void EditWindow::command(int id, int code) {
     } else if (id == idResetPreset) {
         const std::wstring q = L"Set every value of \"" + fromUtf8(current_) + L"\" back to " +
                                (shipped ? L"its shipped values?" : L"the generic defaults?");
-        if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Reset colour" : L"Reset loudness",
+        if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Reset EQ" : L"Reset loudness",
                                   MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
             return;
         settings_.resetPreset(current_, kind_);

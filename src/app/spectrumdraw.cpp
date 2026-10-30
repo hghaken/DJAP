@@ -307,7 +307,7 @@ Geometry paint(HDC dc, const RECT& area, const Data& d, HFONT small, UINT dpi, b
     legend(L"original", kOrange);
     legend(L"processed", kTeal);
     if (bands > 0) legend(L"density", kPurple);
-    if (d.colour) legend(L"colour", kCurve);
+    if (d.colour) legend(L"EQ", kCurve);
     SelectObject(dc, oldFont);
     return g;
 }

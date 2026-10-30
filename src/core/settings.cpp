@@ -314,9 +314,9 @@ std::string Settings::toText() const {
     o << "[Decks]\n; Loudness preset and processing switch (1 = on, 0 = bypass) of each deck\n";
     o << "PresetA=" << deck[0].preset << "\nProcessingA=" << (deck[0].processing ? 1 : 0) << "\n";
     o << "PresetB=" << deck[1].preset << "\nProcessingB=" << (deck[1].processing ? 1 : 0) << "\n";
-    o << "; Colour of each deck (tone, auto tone, sub bass, contour)\nColourA=" << deck[0].colour
+    o << "; EQ of each deck (tone, auto tone, sub bass, contour; the keys keep their old name Colour)\nColourA=" << deck[0].colour
       << "\nColourB=" << deck[1].colour << "\n";
-    o << "; 1 = both decks use the same loudness preset and colour (deck B follows deck A)\nLinkPresets=" << (linkPresets ? 1 : 0)
+    o << "; 1 = both decks use the same loudness preset and EQ (deck B follows deck A)\nLinkPresets=" << (linkPresets ? 1 : 0)
       << "\n\n";
     o << "[Window]\n; Where each window was last: x, y, width, height (screen pixels), 1 = maximised; a window without a\n"
          "; line opens centred on the screen\n";
@@ -332,7 +332,7 @@ std::string Settings::toText() const {
         o << "\n[Plugin]\n; 1 = the plug-ins keep the same settings (the first one open leads)\nLink=" << (pluginLink ? 1 : 0)
           << "\n";
         o << "; What each plug-in instance last chose - 1 = the first one open (deck 1 in a DJ program), 2 = the\n"
-             "; second, ...: loudness preset, colour, look-ahead (ms), oversampling, 1 = mono; taken at its next start\n";
+             "; second, ...: loudness preset, EQ (Colour), look-ahead (ms), oversampling, 1 = mono; taken at its next start\n";
         for (const auto& [n, c] : pluginSlots)
             o << "Loudness" << n << "=" << c.preset << "\nColour" << n << "=" << c.colour << "\nLookAhead" << n << "="
               << compact(c.lookAheadMs) << "\nOversampling" << n << "=" << c.oversampling << "\nMono" << n << "="
@@ -373,7 +373,7 @@ std::string Settings::toText() const {
         const bool shipped = shippedColourIndex(p.name) >= 0;
         const PresetValues base = shippedValues(p.name, PresetKind::Colour);
         o << "\n[" << kColourPrefix << p.name << "]\n";
-        if (shipped) o << "; Shipped colour: only values that differ from the shipped ones are listed\n";
+        if (shipped) o << "; Shipped EQ: only values that differ from the shipped ones are listed\n";
         for (int i = kFirstColourParam; i < kParamCount; ++i) {
             const ParamInfo& info = paramInfo(i);
             const double v = p.values[static_cast<size_t>(i)];

@@ -40,8 +40,8 @@ const char* const kUsage =
     "        2 channels = deck A; 4 channels = deck A (1-2) and deck B (3-4).\n"
     "        --a <preset|off>   loudness preset of deck A, or off (unprocessed); default: the settings' choice\n"
     "        --b <preset|off>   the same for deck B (4-channel files)\n"
-    "        --ca <colour>      colour of deck A (tone, auto tone, sub bass, contour); default: the settings' choice\n"
-    "        --cb <colour>      the same for deck B\n"
+    "        --ca <EQ>          EQ of deck A (tone, auto tone, sub bass, contour); default: the settings' choice\n"
+    "        --cb <EQ>          the same for deck B\n"
     "        --look <ms>        limiter look-ahead 0..5 ms (above 0 at least 66 samples, the true-peak\n"
     "                           minimum); default: the settings (1.5 ms)\n"
     "        --oversampling <n> the soft clipper's and the exciter's: 2, 4 or 8; default: the settings (4)\n"
@@ -50,7 +50,7 @@ const char* const kUsage =
     "        --pcm24            write 24-bit PCM (default: 32-bit float, lossless)\n"
     "        --trace <file.csv> deck A every 100 ms: loudness in / out (momentary, short-term), the leveller's gain\n"
     "                           and state, compressor, density bands, de-esser, clipper and limiter (dB)\n"
-    "  --presets            lists the loudness presets and colours (shipped and own) with their main values\n"
+    "  --presets            lists the loudness presets and EQs (shipped and own) with their main values\n"
     "  --tone <file> [more files]\n"
     "        Long-term tone balance (60 Hz, 250 Hz, 3 kHz, 10 kHz against 1 kHz) and what the auto tone would\n"
     "        correct at 100 % (6 dB at most, treble 3 dB).\n"
@@ -233,7 +233,7 @@ int presets(const Settings& s, const fs::path& ini, bool iniFound) {
                     comp, bands, clip, v[pLimCeiling], used.c_str());
     }
     std::printf("\n  target LUFS, compressor threshold LU re target / ratio, clipper drive dB, limiter ceiling dBTP\n\n");
-    std::printf("  %-24s %-8s %6s %8s %9s %7s %6s %5s %9s  %s\n", "colour", "kind", "bass", "low-mid", "presence",
+    std::printf("  %-24s %-8s %6s %8s %9s %7s %6s %5s %9s  %s\n", "EQ", "kind", "bass", "low-mid", "presence",
                 "treble", "auto", "sub", "contour", "used by");
     for (const Preset& p : s.colours) {
         const PresetValues& v = p.values;
@@ -326,12 +326,12 @@ bool chooseDeck(const Settings& s, int d, const std::string& choice, const std::
     const std::string colourName = colourChoice.empty() ? s.deck[d].colour : colourChoice;
     const Preset* c = s.find(colourName, PresetKind::Colour);
     if (!c) {
-        err = "there is no colour \"" + colourName + "\" (see --presets)";
+        err = "there is no EQ \"" + colourName + "\" (see --presets)";
         return false;
     }
     out.used = true;
     out.values = withColour(p->values, c->values);
-    label = "\"" + p->name + "\", colour \"" + c->name + "\"";
+    label = "\"" + p->name + "\", EQ \"" + c->name + "\"";
     return true;
 }
 
@@ -519,7 +519,7 @@ int run(int argc, wchar_t** argv) {
             return 0;
         } else if (a == "--ca" || a == "--cb") {
             std::string& target = a == "--ca" ? colourA : colourB;
-            if (!value(target) || target.empty()) return usageError(a + " needs a colour name");
+            if (!value(target) || target.empty()) return usageError(a + " needs an EQ name");
         } else if (a == "--render" || a == "--presets" || a == "--measure" || a == "--devices" || a == "--tone") {
             if (!command.empty()) return usageError("one command at a time (" + command + " and " + a + ")");
             command = a;

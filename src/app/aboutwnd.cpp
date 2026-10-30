@@ -265,12 +265,12 @@ void AboutWindow::show(HWND owner, const std::filesystem::path& settingsFile) {
     owner_ = owner;
     body_ = plugin_ ? L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING) +
                           L" - plug-in\n\nOne deck of DJAP inside DJ software: a leveller, compressor, density, de-esser, "
-                          L"stereo width, colour and a true-peak limiter, with only the limiter's look-ahead as delay."
+                          L"stereo width, EQ and a true-peak limiter, with only the limiter's look-ahead as delay."
                     : L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING) +
                           L"\n\nTwo-deck loudness and dynamics processor for DJs: a leveller, compressor, density, "
-                          L"de-esser, stereo width, colour and a true-peak limiter per deck, with only the limiter's "
+                          L"de-esser, stereo width, EQ and a true-peak limiter per deck, with only the limiter's "
                           L"look-ahead as delay.";
-    path_ = L"Settings and own loudness presets and colours: " + settingsFile.wstring();
+    path_ = L"Settings and own loudness presets and EQs: " + settingsFile.wstring();
     loadLogo();
     HINSTANCE inst = moduleInstance();
     if (!g_registered) {

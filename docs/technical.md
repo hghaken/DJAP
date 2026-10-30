@@ -19,7 +19,7 @@ DJAP's own, with its measurements in this manual and in `docs/design.md`.
 2. [Building blocks](#2-building-blocks)
 3. [Measuring loudness](#3-measuring-loudness)
 4. [Leveller](#4-leveller); [4a. Noise reduction](#4a-noise-reduction)
-5. [Colour](#5-colour)
+5. [EQ](#5-eq)
 6. [Compressor](#6-compressor)
 7. [Density (multiband)](#7-density-multiband)
 8. [Bass enhancer](#8-bass-enhancer)
@@ -52,7 +52,7 @@ input (stereo)
  -> mono (only when chosen): both channels (L + R) / 2, a 20 ms ramp
  -> leveller gain x input gain                               (4)
  -> noise reduction, 4 bands or 1                            (4a)
- -> colour: sub bass, tone, auto tone, contour               (5)
+ -> EQ: sub bass, tone, auto tone, contour               (5)
  -> compressor                                               (6)
  -> density, 1-7 bands                                       (7)
  -> bass enhancer -> exciter -> de-esser                     (8-10)
@@ -104,14 +104,14 @@ thread (16.2). There:
 | filter frequencies of the compressor side chain, exciter and de-esser | new coefficients, filter memory kept |
 | density or noise reduction band count or splits; the width stage's bass split | a second, preallocated filter set is warmed up for 20 ms unheard (a filter started cold on running audio starts with a transient), then the output crossfades to it over 20 ms with a raised cosine (a linear fade's corner was audible on a 120 Hz tone) |
 | bass enhancer frequency | the enhancer fades out (20 ms), takes the new filters, fades back in |
-| colour filters | coefficients ramped per sample from the old design to the new one (5.1) |
+| EQ filters | coefficients ramped per sample from the old design to the new one (5.1) |
 | look-ahead | fade out 5 ms, change the delay, refill it, fade in 5 ms |
 
 A configuration that arrives before the first audio block is applied at once, without ramps.
 
 ### 1.5 Group delay
 
-Filters that split or shape the spectrum - the density bands' crossovers, the width stage's bass split, the colour's
+Filters that split or shape the spectrum - the density bands' crossovers, the width stage's bass split, the EQ's
 shelves, the oversampled clipper - are minimum-phase IIR filters: they add no latency, but they delay low
 frequencies a little more than high ones (their group delay). Measured beyond the look-ahead at 48 kHz on a -30 dBFS
 tone (`deck_test`, each tone in its own run; outside review, client 2026-10-26: "write it honestly in the docs"):
@@ -156,7 +156,7 @@ magnitude. Every band split in DJAP (density, stereo width, bass enhancer) is bu
 
 ### 2.3 State-variable filters
 
-The colour stage uses state-variable filters with linear trapezoidal integration, after Andrew Simper [15]. Unlike a
+The EQ stage uses state-variable filters with linear trapezoidal integration, after Andrew Simper [15]. Unlike a
 biquad, their coefficients may change every sample without disturbing the filter's state, so a gain or a frequency can
 glide smoothly. The shelves and bells match their analogue prototypes within 0.0001 dB.
 
@@ -304,7 +304,7 @@ A downward expander in four bands or one (`NoiseBank` in `src/core/deck.cpp`; cl
 hum and rumble away where the music does not cover them - pauses, fades, quiet passages - and leaves music above its
 threshold untouched. It sits right after the leveller and input gain, so its threshold can be relative to the target
 like the compressor's and the de-esser's (the leveller has brought every song to the same level), and before the
-colour, so a treble boost does not lift the hiss into its detector. Off in every shipped loudness preset.
+EQ, so a treble boost does not lift the hiss into its detector. Off in every shipped loudness preset.
 
 1. **Bands.** Three LR4 splits (default 80 Hz, 1 kHz, 5 kHz: rumble and hum, low, mid, hiss), built like the density
    bank (7.1): the two lower bands pass the all-passes of the splits above them, so the four bands sum to an all-pass.
@@ -337,10 +337,10 @@ band waits the detector's fall and the hold, then reaches 63 % of the depth one 
 any value clicks (worst click ratio 1.00). Cost with four bands: about 0.16 % of one core per deck (`deck_test --cpu`);
 nothing while it is off.
 
-## 5. Colour
+## 5. EQ
 
-The colour stage (`src/core/colour.*`) changes the tone of the music and nothing else. It sits after the leveller and
-before the leveller's detector, so the leveller keeps the loudness on target: a colour changes the balance, not the
+The EQ stage (`src/core/colour.*`) changes the tone of the music and nothing else. It sits after the leveller and
+before the leveller's detector, so the leveller keeps the loudness on target: an EQ changes the balance, not the
 volume.
 
 ### 5.1 Tone
@@ -357,7 +357,7 @@ Four sections, each a state-variable filter (2.3):
 Targets glide with a 25 ms one-pole. Each section is redesigned once per control block (16 samples) when it moved
 by at least 0.005 dB or 0.05 Hz, and its coefficients are ramped linearly per sample from the old design to the new
 one. Stepping them per block instead produced a measurable zipper (a click ratio of 98.9 on a 60 Hz tone; with the
-ramp below 1). A section that has arrived at 0 dB is skipped and its state cleared, so a neutral colour is bit-exact.
+ramp below 1). A section that has arrived at 0 dB is skipped and its state cleared, so a neutral EQ is bit-exact.
 
 ### 5.2 Auto tone
 
@@ -403,7 +403,7 @@ measured +8.9 dB at 30 Hz and +3.9 dB at 16 kHz at 100 %.
 A wide-band, feed-forward compressor with a soft knee, after the design analysis of Giannoulis, Massberg and Reiss
 [6].
 
-1. **Side chain.** The signal after leveller, input gain and colour, through a 2nd-order high-pass (default 80 Hz,
+1. **Side chain.** The signal after leveller, input gain and EQ, through a 2nd-order high-pass (default 80 Hz,
    0 = off, up to 200 Hz) so the bass does not trigger the compressor.
 2. **Level.** The summed square of both channels, smoothed with a 10 ms one-pole, on the loudness scale:
    `x = -0.691 + 10 log10(L^2 + R^2)`. A per-sample peak would compress every transient; a short mean square on the
@@ -895,7 +895,7 @@ buffers.
 - **One object.** Processor and controller are one object (the SDK's single-component effect), so the plug-in's
   window reads the deck's meter and tap rings itself through the same `DeckMonitor` (`src/core/monitor.*`) the
   program uses: one reader per ring, as the rings require (16.2).
-- **Parameters.** The 83 values of the chain plus the loudness preset and colour lists, Bypass and the look-ahead. A value's
+- **Parameters.** The 83 values of the chain plus the loudness preset and EQ lists, Bypass and the look-ahead. A value's
   normalised position (0..1) maps to the program's slider positions (`paramPositions`, `paramValueAt`,
   `paramPositionOf`): linear in the value's steps, logarithmic (300 positions) for times and frequencies spanning
   a factor of 8 or more. A parameter's id is an FNV-1a hash of its settings key plus 1000, so ids stay the same
@@ -904,7 +904,7 @@ buffers.
   value of each, and when anything changed designs a new `DeckConfig` (`makeDeckConfig`: coefficients only, no
   allocation) and hands it to the deck through its sequence-locked slot before processing the block. The deck then
   ramps or crossfades as in 1.4: no automation step clicks.
-- **Loudness presets.** Choosing a loudness preset or colour (the list parameters) makes the controller load that loudness preset's values,
+- **Loudness presets.** Choosing a loudness preset or EQ (the list parameters) makes the controller load that loudness preset's values,
   ask the host to read all parameters again (`kParamValuesChanged`) and hand the processor a complete snapshot; the
   processor never reads the loudness preset lists, which change on the GUI thread. The controller keeps the exact values of
   a loudness preset or a project, so a stored project holds 800 Hz and not the 810 Hz of the nearest log step; a value the
@@ -913,14 +913,14 @@ buffers.
   one settings file, each with a three-way merge (`Settings::saveMerged`): the file is read again, the writer's own
   changes since it last read or wrote the file (its "base") are applied to it - additions, changed values,
   renames, deletions - and everything else stays. Two writers therefore never lose each other's loudness presets; when both
-  changed the same loudness preset, the later save wins. A plug-in writes only the loudness preset and colour lists, never the
+  changed the same loudness preset, the later save wins. A plug-in writes only the loudness preset and EQ lists, never the
   program's other settings, and nothing when it has nothing new. Each writer saves through a temporary file of its
   own name and renames it over the file, so a reader never sees half a file.
 - **Latency.** The look-ahead in samples (`round(ms x rate / 1000)`, 72 at 1.5 ms and 48 kHz) is reported to the
   host, and announced again (`kLatencyChanged`) when the look-ahead or the sample rate changes, so the host can
   delay the other channels by the same amount (plug-in delay compensation).
-- **State.** A versioned binary stream: loudness preset and colour names, look-ahead, Bypass and every value as a pair of
-  settings key and value, the oversampling, mono, and the loudness preset's and colour's values the project's values
+- **State.** A versioned binary stream: loudness preset and EQ names, look-ahead, Bypass and every value as a pair of
+  settings key and value, the oversampling, mono, and the loudness preset's and EQ's values the project's values
   were based on. Loading merges three-way: a value the project left as its preset had it takes the preset's value in
   the settings file now (the preset may have been changed since), a value changed in the project stays. Loading it
   sets the controller and hands the processor a complete snapshot through a
@@ -979,7 +979,7 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Noise reduction | band sum while open; pink noise under the threshold; a tone with hiss under it (4 bands and 1); hold / release / attack; every value changed on a tone it turns down; the split rule | 0.001 dB (one band bit-exact); the depth within 0.3 dB; the tone within 0.05 dB, the hiss down by about the depth; the times; no click; rising, 1.25x apart |
 | Band count | 3 -> 7 -> 1 bands on a sine while playing | no step larger than the signal's own |
 | Clicks | every parameter changed on a sine in its own band | no step larger than the signal's own |
-| Colour | every section against its analogue prototype; contour; neutral; auto tone; sub bass | 0.02 dB; +8.9 / +3.9 dB; bit-exact; reference - balance; 30 Hz -2.3 dB |
+| EQ | every section against its analogue prototype; contour; neutral; auto tone; sub bass | 0.02 dB; +8.9 / +3.9 dB; bit-exact; reference - balance; 30 Hz -2.3 dB |
 | Width | left-only tone at 200 % and 0 %; mono stays mono | 1.5 / 0.5; 0.5 / 0.5 |
 | Loudness presets | all 8 loudness presets on test material at -18 and -9 LUFS in | output within 1 LU of each loudness preset's target; true peak <= ceiling |
 | Robustness | NaN / Inf input; FTZ restored | recovers within a block; processor mode unchanged |
@@ -1016,7 +1016,7 @@ need a membership or a purchase for the full text.
 | [12] | E. Larsen, R. M. Aarts, *Reproducing Low-Pitched Signals through Small Loudspeakers*, J. Audio Eng. Soc. 50(3), 2002, pp. 147-164 - <https://aes2.org/publications/elibrary-page/?id=11088>; summary at <https://research.tue.nl/en/publications/reproducing-low-pitched-signals-through-small-loudspeakers/> | bass enhancer (8) |
 | [13] | E. Larsen, R. M. Aarts, *Audio Bandwidth Extension: Application of Psychoacoustics, Signal Processing and Loudspeaker Design*, Wiley 2004 | bass enhancer (8) |
 | [14] | ITU-R BS.412-9, *Planning standards for terrestrial FM sound broadcasting at VHF* - <https://www.itu.int/rec/R-REC-BS.412/en> | multiplex power limit, the FM Station loudness preset (19) |
-| [15] | A. Simper, *Linear Trap Optimised SVF* (Cytomic technical paper) - <https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf> | state-variable filters of the colour stage (2.3, 5) |
+| [15] | A. Simper, *Linear Trap Optimised SVF* (Cytomic technical paper) - <https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf> | state-variable filters of the EQ stage (2.3, 5) |
 | [16] | S. H. Linkwitz, *Active Crossover Networks for Noncoincident Drivers*, J. Audio Eng. Soc. 24(1), 1976, pp. 2-8 - <https://aes2.org/publications/elibrary-page/?id=2649>; see also <https://www.linkwitzlab.com/filters.htm> | Linkwitz-Riley band splits (2.2, 7, 11) |
 | [17] | ISO 226:2023, *Acoustics - Normal equal-loudness-level contours* - <https://www.iso.org/standard/83117.html> | contour (5.4) |
 | [18] | A. D. Blumlein, British patent 394,325 (filed 1931, granted 1933), *Improvements in and relating to sound-transmission, sound-recording and sound-reproducing systems* | mid / side stereo (11) |

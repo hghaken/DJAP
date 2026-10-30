@@ -387,7 +387,7 @@ void MainWindow::createControls() {
         s.presetLabel = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
         s.preset = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iPreset));
         s.edit = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iEdit));
-        s.colourLabel = make(L"STATIC", L"Colour", SS_LEFT | SS_CENTERIMAGE, 0);
+        s.colourLabel = make(L"STATIC", L"EQ", SS_LEFT | SS_CENTERIMAGE, 0);
         s.colour = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iColour));
         s.editColour = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iEditColour));
         for (HWND b : {s.processing, s.graphs, s.edit, s.editColour}) theme::makeButton(b);
@@ -419,12 +419,12 @@ void MainWindow::createControls() {
                   L"by step, the compressor's curve, loudness and gains of the last 60 s, the goniometer with "
                   L"correlation and stereo width.");
         tips_.add(s.colour,
-                  L"The colour this deck uses, on top of its loudness preset: tone (bass, low-mid, presence, treble), auto "
+                  L"The EQ this deck uses, on top of its loudness preset: tone (bass, low-mid, presence, treble), auto "
                   L"tone (each song's balance pulled towards a modern reference), sub bass and a contour (more bass and highs for quiet listening). "
                   L"Neutral changes nothing; Warm, Bass+, Less mid, Bright, Vocal: a fixed tone; Oldies: auto tone "
                   L"and a little sub bass for thin old recordings; Auto: only the auto tone; Quiet: the contour "
-                  L"for quiet listening. Your own colours follow.");
-        tips_.add(s.editColour, L"Opens the colour window: every value of this deck's colour; Save as, Rename, Delete "
+                  L"for quiet listening. Your own EQs follow.");
+        tips_.add(s.editColour, L"Opens the EQ window: every value of this deck's EQ; Save as, Rename, Delete "
                                 L"and Reset.");
         tips_.add(s.edit, L"Opens the loudness window: the nine stage switches and every value of this deck's loudness preset "
                           L"with its unit, range and meaning; Save as, Rename, Delete and Reset.");
@@ -486,7 +486,7 @@ void MainWindow::layout() {
         MoveWindow(s.processing, x0 + stripW - bypassW, y, bypassW, rowH, TRUE);
         y += rowH + gap;
         // Preset [....] [Edit...]  Colour [....] [Edit...]
-        const int labelW = px(48), colourLabelW = px(50), editW = px(70);
+        const int labelW = px(48), colourLabelW = px(26), editW = px(70); // "EQ" (was "Colour", 50 px)
         const int combos = stripW - labelW - colourLabelW - 2 * editW - 5 * gap - px(10);
         const int presetW = combos / 2, colourW = combos - presetW;
         int x = x0;

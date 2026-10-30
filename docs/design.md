@@ -73,6 +73,9 @@ a spare filter set that first warms up 20 ms unheard (a filter started cold on r
 transient) and then crossfades in over 20 ms with a raised cosine (a linear fade's corner showed on a 120 Hz tone);
 a new bass enhancer frequency fades the enhancer out (20 ms), takes the new filters and fades it back in.
 
+Names (client, 2026-10-30): the colour preset is called **EQ** in the program, the plug-in and the manuals; this
+design keeps "colour", as the code, the ini keys and the parameter keys do.
+
 ## 3. Parameters (per deck, stored in a named preset)
 
 Values are the handbook's tested defaults unless marked **DJ**, where the use differs from a player that has per-song

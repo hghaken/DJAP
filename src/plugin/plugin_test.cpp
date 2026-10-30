@@ -971,7 +971,7 @@ int main(int argc, char** argv) {
                 if (t == L"Spectrum: DJAP Deck 2") spectrum = true;
                 if (t == L"Analysis: DJAP Deck 2") analysis = true;
                 if (t == L"Settings Loudness: DJAP Deck 2") loudness = true;
-                if (t == L"Settings Colour: DJAP Deck 2") colourWnd = true;
+                if (t == L"Settings EQ: DJAP Deck 2") colourWnd = true;
                 if (t.find(L"DJAP Deck") != std::wstring::npos) std::printf("-- title: %ls\n", t.c_str());
             }
             CHECK(spectrum && analysis && loudness && colourWnd);

@@ -152,9 +152,9 @@ void SetupWindow::create() {
                      L"and the limiter its ceiling. A parameter of this plug-in, stored with the project; off (stereo) "
                      L"by default. Bypass stays the unchanged input.");
     tips_.add(link_, L"Linked: the plug-ins open in the DJ software (deck 1 = the first one opened, deck 2 = the second) "
-                     L"keep the same settings - loudness preset, colour, every value, look-ahead, oversampling and Mono. "
+                     L"keep the same settings - loudness preset, EQ, every value, look-ahead, oversampling and Mono. "
                      L"Switched on, deck 2 takes deck 1's; after that a change in either plug-in's windows sets both. "
-                     L"Bypass stays each deck's own. As \"Deck A and deck B use the same loudness preset and colour\" in "
+                     L"Bypass stays each deck's own. As \"Deck A and deck B use the same loudness preset and EQ\" in "
                      L"the program's Setup window.");
     tips_.add(tooltips_, L"The explanations that appear when the mouse rests on a control, in the plug-in and in the "
                          L"program (one switch for both: the settings file).");

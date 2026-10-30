@@ -33,15 +33,15 @@ enum BoxId { idLoudnessBox = 201, idColourBox, idBass0 = 210 };
 const wchar_t* const kTipText[kTips] = {
     L"The deck's spectrum, 20 Hz - 20 kHz (left scale, dB): orange = the original (the deck's input), turquoise = "
     L"processed (the output). Purple: the density stage's bands; a line per band at its gain now (right scale; "
-    L"blue = lifted, red = turned down). Yellow: the deck's colour as an EQ curve (right scale, dB) - thick: what it does now, the auto "
+    L"blue = lifted, red = turned down). Yellow: the deck's EQ as a curve (right scale, dB) - thick: what it does now, the auto "
     L"tone's correction included; dashed: without the auto tone; thin: each tone section. Drag a point: left-right "
-    L"its frequency, up-down its gain; double-click: back to 0 dB. It changes the colour preset (every deck that uses "
+    L"its frequency, up-down its gain; double-click: back to 0 dB. It changes the EQ preset (every deck that uses "
     L"it), heard at once and saved when you let go. A purple handle per density band: its fixed gain (the loudness "
     L"preset's Band N gain, -12 .. +12 dB, right-hand scale) - drag it up or down; double-click: 0 dB.\n\nThe blue "
     L"bass point is the bass sliders' Bass level (up-down) and Bass frequency (left-right; the enhancer and the width "
     L"follow).",
-    L"The deck whose spectrum and colour are shown.",
-    L"Snap to bands (lit): a colour point dragged near a density band split sits exactly on it, so a tone section "
+    L"The deck whose spectrum and EQ are shown.",
+    L"Snap to bands (lit): an EQ point dragged near a density band split sits exactly on it, so a tone section "
     L"starts where a density band does.",
     L"", // Reset loudness, Reset colour: the source's (SpectrumSource::resetTip)
     L"",
@@ -127,7 +127,7 @@ void SettingsSpectrum::reset(int d, bool colour, HWND owner) {
     if (!p) return;
     const std::wstring q = L"Set every value of \"" + fromUtf8(name) + L"\" back to " +
                            (p->shipped ? L"its shipped values?" : colour ? L"neutral?" : L"the generic defaults?");
-    if (placement::messageBox(owner, q.c_str(), colour ? L"Reset colour" : L"Reset loudness",
+    if (placement::messageBox(owner, q.c_str(), colour ? L"Reset EQ" : L"Reset loudness",
                               MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
         return;
     settings_.resetPreset(name, kind);
@@ -135,16 +135,16 @@ void SettingsSpectrum::reset(int d, bool colour, HWND owner) {
 }
 
 const wchar_t* SettingsSpectrum::resetTip(bool colour) const {
-    return colour ? L"Reset colour: every value of the deck's colour back - a shipped colour to its shipped values, your "
-                    L"own to neutral - as the colour window's button does (asks first). The coloured points go back with it."
+    return colour ? L"Reset EQ: every value of the deck's EQ back - a shipped EQ to its shipped values, your "
+                    L"own to neutral - as the EQ window's button does (asks first). The coloured points go back with it."
                   : L"Reset loudness: every value of the deck's loudness preset back - a shipped one to its shipped "
                     L"values, your own to the generic defaults - as the loudness window's button does (asks first). The "
                     L"density band handles go back with it.";
 }
 
 std::wstring SettingsSpectrum::hint(int d) const {
-    if (!editable(d, true)) return L"This deck has no colour.";
-    return L"Drag a point: the colour \"" + fromUtf8(settings_.deck[d].colour) +
+    if (!editable(d, true)) return L"This deck has no EQ.";
+    return L"Drag a point: the EQ \"" + fromUtf8(settings_.deck[d].colour) +
            L"\" (blue: bass level and frequency). A purple handle: a density band of \"" +
            fromUtf8(settings_.deck[d].preset) + L"\". Every deck using them changes; double-click resets.";
 }
@@ -304,7 +304,7 @@ void SpectrumWindow::layoutBar() {
     if (source_.decks() == 2) x += width(L"Deck") + px(8) + 2 * (width(L"A") + px(20)) + px(24); // as paint() draws them
     decksRight_ = x;
     const int boxW[2] = {px(170), px(140)};
-    const wchar_t* const labels[2] = {L"Loudness", L"Colour"};
+    const wchar_t* const labels[2] = {L"Loudness", L"EQ"};
     for (int k = 0; k < 2; ++k) {
         boxLabelX_[k] = x;
         x += width(labels[k]) + px(8);
@@ -426,7 +426,7 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
         tips_.add(boxes_[0], L"The deck's loudness preset: its target loudness and every stage's values (as the main "
                              L"window's list; both decks when they are linked).");
-        tips_.add(boxes_[1], L"The deck's colour: tone, auto tone, sub bass and contour (as the main window's list; both "
+        tips_.add(boxes_[1], L"The deck's EQ: tone, auto tone, sub bass and contour (as the main window's list; both "
                              L"decks when they are linked).");
         for (int k = 0; k < bass::kSliders; ++k) {
             bass_[k] = CreateWindowExW(0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS | TBS_BOTTOM,
@@ -434,7 +434,7 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
                                        moduleInstance(), nullptr);
             bass::setup(bass_[k], k);
             tips_.add(bass_[k], (std::wstring(bass::kTip[k]) + L"\n\nAs the main window's slider: every deck that uses "
-                                                                L"the same loudness preset or colour changes too.").c_str());
+                                                                L"the same loudness preset or EQ changes too.").c_str());
         }
         if (!backBrush_) backBrush_ = CreateSolidBrush(kBack);
         boxNames_[0].clear();
@@ -650,7 +650,7 @@ void SpectrumWindow::paint(HDC target) {
     }
     const int decksRight = x;
     label(boxLabelX_[0], L"Loudness");
-    label(boxLabelX_[1], L"Colour");
+    label(boxLabelX_[1], L"EQ");
     x = std::max(x, buttonsX_);
     const int snapLeft = x;
     x = drawButton(bSnap, x, L"Snap to bands", source_.snapToBands(), true);
@@ -659,7 +659,7 @@ void SpectrumWindow::paint(HDC target) {
     x = drawButton(bResetPreset, resetPresetLeft, L"Reset loudness", false, true);
     const int resetColourLeft = x + px(8);
     const int resetPresetRight = x;
-    x = drawButton(bResetColour, resetColourLeft, L"Reset colour", false, true);
+    x = drawButton(bResetColour, resetColourLeft, L"Reset EQ", false, true);
     const int resetColourRight = x;
 
     // ---- the graph ----
@@ -709,10 +709,10 @@ void SpectrumWindow::paint(HDC target) {
                 i = k;
         wchar_t b[160];
         if (d.live)
-            swprintf(b, 160, L"%ls   original %.1f dB   processed %.1f dB   colour %+.1f dB", hzText(f).c_str(),
+            swprintf(b, 160, L"%ls   original %.1f dB   processed %.1f dB   EQ %+.1f dB", hzText(f).c_str(),
                      d.in[static_cast<size_t>(i)], d.out[static_cast<size_t>(i)], colourCurveDb(d.values, d.autoDb, d.fs, f));
         else
-            swprintf(b, 160, L"%ls   colour %+.1f dB", hzText(f).c_str(), colourCurveDb(d.values, d.autoDb, d.fs, f));
+            swprintf(b, 160, L"%ls   EQ %+.1f dB", hzText(f).c_str(), colourCurveDb(d.values, d.autoDb, d.fs, f));
         read = b;
     }
     if (!read.empty()) {
