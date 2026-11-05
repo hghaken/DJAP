@@ -483,7 +483,10 @@ section's frequency range) takes the split's frequency exactly. Reset preset / R
 2026-10-26): `Settings::resetPreset` of the deck's preset or colour, after the same question as the preset window's. The plug-in's meter panel
 shows the bands the same way (lines); a click on its spectrum opens the Density tab.
 The meter panel's spectrum: 4096-point FFT, Hann window, a frame every 2048 samples, power averaged over
-0.3 s, shown at 256 log-spaced points (the loudest bin in a point's band; interpolated where the bins are wider
+0.3 s (the spectrum window's "Averaging" list - client, 2026-11-05: "is there a delay on the lines' refresh?", then
+"make the averaging settable in the big spectrum window": none, 0.1, 0.2, 0.3, 0.5, 1 or 2 s, `[Window]
+SpectrumAverage` for the program's decks and `PluginSpectrumAverage` for the plug-in, merged three-way as the scopes;
+the meter panels follow it, the analysers are shared), shown at 256 log-spaced points (the loudest bin in a point's band; interpolated where the bins are wider
 than the points, below about 300 Hz). A sine of amplitude A reads 20 log10(A) dB (on a bin; up to 1.42 dB less
 between bins). The Analysis button ("Graphs" until 0.1.263) left of Bypass in each strip (client, 2026-10-25; it replaced the View menu) opens a window with a row per deck - first the signal chain (client, 2026-10-25:
 "for every step a bar, to see whether a step does anything; begin and end with an input / output volume bar"): a

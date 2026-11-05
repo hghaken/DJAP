@@ -154,6 +154,12 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     audioWindow_.setTestRun(testRun);
     audioWindow_.setRetryStatus([this] { return retryStatus(); });
     if (settings_.latencyProbe) latencyProbe_.start();
+    // the spectra's averaging (the spectrum window's list): both decks' meter panels and the spectrum window
+    audio_.setSpectrumAverage(settings_.spectrumAverageMs[0] / 1000.0);
+    spectrumSource_.onAverage([this](int ms) {
+        audio_.setSpectrumAverage(ms / 1000.0);
+        save();
+    });
     if (testRun && GetEnvironmentVariableW(L"DJAP_HEALTH_DEMO", nullptr, 0)) fillHealthDemo();
     registerMeterView(instance);
     WNDCLASSEXW wc{};

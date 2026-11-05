@@ -120,6 +120,8 @@ private:
         std::wstring hint(int d) const override;
         bool snapToBands() const override { return snap_; }
         void setSnapToBands(bool on) override { snap_ = on; }
+        int averageMs() const override;
+        void setAverageMs(int ms) override;
         bool snap_ = false; // from the settings file when the window opens; not saved by the plug-in
 
     private:

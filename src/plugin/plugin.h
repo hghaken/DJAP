@@ -69,6 +69,10 @@ public:
     // The analysis window's scope, kept in the shared settings file (every instance's; merged as the switches).
     ScopeChoice scope() const { return settings_.scope[2]; }
     void setScope(bool input, int ms);
+    // The spectra's averaging in ms (the spectrum window's list), kept in the shared settings file (every instance's;
+    // merged as the scope).
+    int spectrumAverageMs() const { return settings_.spectrumAverageMs[1]; }
+    void setSpectrumAverage(int ms);
     // The plug-in's Setup window: the plug-ins open in this DJ program keep the same settings (Settings::pluginLink);
     // switched on, every one takes the first one's.
     bool linked() const { return settings_.pluginLink; }

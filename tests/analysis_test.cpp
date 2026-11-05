@@ -102,6 +102,32 @@ void spectrum() {
     CHECK(s.points()[100] <= SpectrumAnalyzer::kFloorDb);
     const SpectrumAnalyzer early = spectrumOf(fs, 0.05, [](double t) { return std::sin(2 * kPi * 1000 * t); });
     CHECK(early.frames() == 0); // less than one frame: nothing shown yet
+
+    // the averaging (the spectrum window's choice): a tone 20 dB down after 2 s, read 0.25 s later - none follows at
+    // once, the default 0.3 s lags, 1 s lags more; reset keeps the choice
+    std::printf("-- spectrum averaging: a step of -20 dB, read 0.25 s after it\n");
+    double last = -1e9;
+    for (double avg : {0.0, 0.1, 0.3, 1.0}) {
+        SpectrumAnalyzer a;
+        a.setAverage(avg);
+        a.reset(fs);
+        CHECK(a.average() == avg);
+        std::vector<float> x(static_cast<size_t>(2.25 * fs));
+        for (size_t i = 0; i < x.size(); ++i) {
+            const double t = static_cast<double>(i) / fs;
+            x[i] = static_cast<float>((t < 2.0 ? 0.5 : 0.05) * std::sin(2 * kPi * onBin * t));
+        }
+        a.feed(x.data(), static_cast<int>(x.size()));
+        const double p = at(a, onBin);
+        std::printf("   average %.1f s: %.2f dB (the tone now -26.02)\n", avg, p);
+        if (avg == 0.0) CHECK_NEAR(p, -26.02, 0.1);
+        CHECK(p > last - 0.01); // a longer average: further behind
+        last = p;
+    }
+    CHECK(last > -12.0); // 1 s: still near the old level
+    SpectrumAnalyzer neg;
+    neg.setAverage(-1.0);
+    CHECK(neg.average() == 0.0);
 }
 
 void stereo() {

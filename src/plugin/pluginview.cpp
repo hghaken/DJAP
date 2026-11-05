@@ -176,6 +176,13 @@ const wchar_t* PluginView::Spectrum::resetTip(bool colour) const {
                     L"list (asks first) - the MB Compressor band handles go back with them. The preset itself is not changed.";
 }
 
+int PluginView::Spectrum::averageMs() const { return view_.plugin_ ? view_.plugin_->spectrumAverageMs() : 300; }
+
+void PluginView::Spectrum::setAverageMs(int ms) {
+    view_.monitor_.setSpectrumAverage(ms / 1000.0); // the strip's spectrum and the spectrum window
+    if (view_.plugin_) view_.plugin_->setSpectrumAverage(ms);
+}
+
 std::wstring PluginView::Spectrum::hint(int) const {
     return L"Drag a point: this plug-in's EQ values (blue: bass level and frequency). A purple handle: an MB Compressor "
            L"band's fixed gain. The project keeps them - the presets in the lists stay as they are; double-click resets.";
@@ -285,6 +292,7 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
         if (plugin_ && hwnd_) plugin_->openEditor(colour, GetAncestor(hwnd_, GA_ROOT), stage);
     });
     spectrumSource_.snap_ = plugin_->snapToBands();
+    monitor_.setSpectrumAverage(plugin_->spectrumAverageMs() / 1000.0);
     graphsWnd_.setScope(0, plugin_->scope().input, plugin_->scope().ms);
     graphsWnd_.onScopeChanged([this](int, bool input, int ms) {
         if (plugin_) plugin_->setScope(input, ms);

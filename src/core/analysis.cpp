@@ -69,7 +69,7 @@ void SpectrumAnalyzer::frame() {
     fft(work_);
     // |X| of a sine of amplitude A through the Hann window is A N / 4 (on its bin): scaled so that it reads A^2
     const double scale = 16.0 / (static_cast<double>(kSize) * kSize);
-    const double a = frames_ == 0 ? 0.0 : std::exp(-(static_cast<double>(kHop) / fs_) / 0.3);
+    const double a = frames_ == 0 || average_ <= 0.0 ? 0.0 : std::exp(-(static_cast<double>(kHop) / fs_) / average_);
     for (size_t k = 0; k < power_.size(); ++k) power_[k] = a * power_[k] + (1.0 - a) * std::norm(work_[k]) * scale;
     ++frames_;
     // points: the loudest bin within each point's band; between bins (low frequencies) interpolated

@@ -109,6 +109,10 @@ public:
     bool snapToBands = false; // the spectrum window: a dragged colour point snaps to the density bands' splits
     // the analysis window's scope: deck A, deck B (the program), the plug-in's (every instance); merged three-way
     ScopeChoice scope[3];
+    // the spectra's averaging in ms (the spectrum window's list; client, 2026-11-05): [0] the program's decks, [1] the
+    // plug-in (every instance); one of kSpectrumAverages, merged three-way like the scopes
+    static constexpr int kSpectrumAverages[] = {0, 100, 200, 300, 500, 1000, 2000};
+    int spectrumAverageMs[2] = {300, 300};
     bool latencyProbe = true; // the Health window's Windows latency probe (latencyprobe.h) runs
     bool showTooltips = true; // the explanations when the mouse rests on a control (all windows, the plug-in too)
     bool trayHintShown = false;  // the "still running in the notification area" balloon was shown once

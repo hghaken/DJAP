@@ -14,7 +14,8 @@ namespace ap {
 void fft(std::vector<std::complex<double>>& x);
 
 // Spectrum of a mono signal: 4096-point FFT, Hann window, a new frame every 2048 samples, power averaged over about
-// 0.3 s, shown at kPoints log-spaced frequencies from kLowHz to kHighHz. A sine of amplitude A reads 20 log10(A) dB.
+// 0.3 s (setAverage: the spectrum window's choice), shown at kPoints log-spaced frequencies from kLowHz to kHighHz. A
+// sine of amplitude A reads 20 log10(A) dB.
 class SpectrumAnalyzer {
 public:
     static constexpr int kSize = 4096;
@@ -26,6 +27,10 @@ public:
     SpectrumAnalyzer();
     void reset(double fs);
     void feed(const float* mono, int n);
+    // The averaging's time constant in seconds (client, 2026-11-05: "make the averaging settable in the big spectrum
+    // window"); 0: none, each frame alone. Kept by reset(); applies from the next frame.
+    void setAverage(double seconds) { average_ = seconds > 0.0 ? seconds : 0.0; }
+    double average() const { return average_; }
     // dB at point i (frequency pointHz(i)); kFloorDb until the first frame.
     const std::array<float, kPoints>& points() const { return points_; }
     static double pointHz(int i);
@@ -34,7 +39,7 @@ public:
 private:
     void frame();
 
-    double fs_ = 48000.0;
+    double fs_ = 48000.0, average_ = 0.3;
     std::vector<float> buf_;               // the last kSize samples (ring)
     int pos_ = 0, sinceFrame_ = 0, filled_ = 0;
     std::vector<double> window_, power_;   // Hann, averaged power per bin

@@ -69,6 +69,9 @@ public:
     const DeckMeters& meters(int d) const { return monitor_[d].meters(); }
     const DeckAnalysis& analysis(int d) const { return monitor_[d].analysis(); }
     void resetMeters(int d);
+    void setSpectrumAverage(double seconds) { // both decks' spectra (the spectrum window's choice)
+        for (DeckMonitor& m : monitor_) m.setSpectrumAverage(seconds);
+    }
 
     // Test aid without a device: plays `file` (2 channels = deck A, 4 = A + B) through the engine in real time,
     // in a loop, output discarded.

@@ -96,6 +96,11 @@ public:
     void poll(DeckProcessor& deck, double fs, double dt);
     // Starts the meters and the history again (the live flag stays).
     void reset();
+    // The spectra's averaging in seconds (SpectrumAnalyzer::setAverage), input and output alike.
+    void setSpectrumAverage(double seconds) {
+        a_.specIn.setAverage(seconds);
+        a_.specOut.setAverage(seconds);
+    }
     const DeckMeters& meters() const { return m_; }
     const DeckAnalysis& analysis() const { return a_; }
 

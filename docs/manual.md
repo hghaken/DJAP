@@ -865,6 +865,10 @@ Click the **spectrum** in a deck's meter panel (in the plug-in too, 9.2). The bi
   loudness and EQ windows do: a shipped one to its shipped values, your own to the defaults (asks first).
 - **Snap to bands** (lit = on, remembered): an EQ point dragged near a band split sits exactly on it (the split
   lights up), so a tone section can start where an MB Compressor band does. A split outside a section's range is skipped.
+- **Averaging** (remembered): how long the *original* and *processed* lines are averaged - None, 0.1, 0.2, 0.3 (the
+  default), 0.5, 1 or 2 s. Short follows the music at once but jumps; long is calm but lags behind: with 0.3 s a
+  sudden drop of 20 dB still shows only 3 dB lower a quarter of a second later. The meter panel's spectrum follows the
+  same choice; the EQ and MB Compressor lines are never averaged. The program and the plug-in each keep their own.
 - With two decks, **Deck A / B** switches between them. **Loudness** and **EQ** choose the deck's loudness preset
   and EQ, as the lists in the main window do (both decks when they are linked).
 - The **four bass sliders** (4.2) - bass level, enhancer, width and frequency - in a second row,

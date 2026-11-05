@@ -82,6 +82,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK(a.checkUpdates == b.checkUpdates && a.updateUrl == b.updateUrl);
     CHECK(a.fallbackOutput == b.fallbackOutput && a.retryMinutes == b.retryMinutes);
     for (int i = 0; i < 3; ++i) CHECK(a.scope[i] == b.scope[i]);
+    for (int i = 0; i < 2; ++i) CHECK(a.spectrumAverageMs[i] == b.spectrumAverageMs[i]);
     CHECK(a.latencyProbe == b.latencyProbe);
     CHECK(a.presets.size() == b.presets.size());
     for (size_t i = 0; i < a.presets.size() && i < b.presets.size(); ++i) {
@@ -197,6 +198,8 @@ Settings busy() {
     s.retryMinutes = 10;
     s.scope[0] = {true, 5};
     s.scope[2] = {false, 2000};
+    s.spectrumAverageMs[0] = 0;
+    s.spectrumAverageMs[1] = 1000;
     s.latencyProbe = false;
     s.checkUpdates = false;
     s.updateUrl = "http://127.0.0.1:8765/latest.json";
@@ -688,6 +691,20 @@ void merged(const fs::path& dir) {
     CHECK(check.load(file));
     CHECK(check.scope[2] == (ScopeChoice{true, 5}) && check.scope[0] == (ScopeChoice{false, 200}));
     CHECK(program.scope[2] == (ScopeChoice{true, 5}) && plugin.scope[0] == (ScopeChoice{false, 200}));
+    // the spectra's averaging likewise (client, 2026-11-05)
+    plugin.spectrumAverageMs[1] = 100;
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    program.spectrumAverageMs[0] = 1000;
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(check.load(file));
+    CHECK(check.spectrumAverageMs[0] == 1000 && check.spectrumAverageMs[1] == 100);
+    CHECK(program.spectrumAverageMs[1] == 100 && plugin.spectrumAverageMs[0] == 1000);
+    {
+        Settings odd; // a value not in the list: the default
+        odd.fromText("[Window]\nSpectrumAverage=250\nPluginSpectrumAverage=2000\n");
+        CHECK(odd.spectrumAverageMs[0] == 300 && odd.spectrumAverageMs[1] == 2000);
+    }
 
     // the plug-in's choices per instance (client, 2026-10-30): read back, merged per instance, kept by the program
     PluginSlot one;

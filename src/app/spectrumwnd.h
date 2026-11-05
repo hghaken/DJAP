@@ -9,7 +9,9 @@
 // per density band (its fixed gain, the preset's Band N gain) is dragged up and down the same way; "Snap to bands"
 // makes a dragged colour point sit on a band split when it comes near one (client, 2026-10-26). Reset preset / Reset
 // colour set the deck's preset or colour back as the preset window's button does (asks first). A second row holds
-// the main window's four bass sliders for the deck (bassctl.h; client, 2026-10-26).
+// the main window's four bass sliders for the deck (bassctl.h; client, 2026-10-26). "Averaging" sets how long the
+// original and processed lines are averaged (client, 2026-11-05: "make the averaging settable in the big spectrum
+// window"; the meter panels' spectra follow it).
 // Custom-drawn on the dark meter palette, refreshed by its owner's timer. One modeless window, owned by the main
 // window - or by the plug-in's window (client, 2026-10-29: "the plug-in does not follow the program: a click on the
 // spectrum does not give the big one, nor the bass settings"), where it shows and changes the plug-in's one deck.
@@ -59,6 +61,10 @@ public:
     virtual std::wstring hint(int d) const = 0; // the line under the graph: what a drag changes
     virtual bool snapToBands() const = 0;
     virtual void setSnapToBands(bool on) = 0;
+    // The spectra's averaging in ms (one of Settings::kSpectrumAverages): the window's list; a choice takes effect at
+    // once (every deck of the source) and is saved.
+    virtual int averageMs() const = 0;
+    virtual void setAverageMs(int ms) = 0;
 };
 
 // The program's decks: the settings' presets and colours (every deck using them changes), the audio's meters through
@@ -88,12 +94,17 @@ public:
     std::wstring hint(int d) const override;
     bool snapToBands() const override { return settings_.snapToBands; }
     void setSnapToBands(bool on) override;
+    int averageMs() const override { return settings_.spectrumAverageMs[0]; }
+    void setAverageMs(int ms) override;
+    // a new averaging choice (in the settings already): the owner applies it to the audio's spectra and saves
+    void onAverage(std::function<void(int ms)> f) { average_ = std::move(f); }
 
 private:
     Settings& settings_;
     const AnalysisSource& audio_;
     std::function<double()> rate_;
     Changed changed_;
+    std::function<void(int ms)> average_;
 };
 
 class SpectrumWindow {
@@ -123,6 +134,7 @@ private:
     void fillBoxes();        // their entries and choices, when the lists or the deck's choice changed
     void choose(bool colour); // a list's choice: the deck's loudness preset or colour (both decks when linked)
     void fillSliders();       // the bass sliders' positions from the deck's values (not while one is dragged)
+    void fillAverage();       // the Averaging list's choice from the source
     void hover(POINT pt);
     int buttonAt(POINT pt) const;
     void setTitle();
@@ -146,6 +158,8 @@ private:
     // window too"): real combo boxes in the custom-drawn bar
     HWND boxes_[2] = {};           // 0 loudness, 1 colour
     int boxLabelX_[2] = {}, buttonsX_ = 0, decksRight_ = 0, layoutDecks_ = 0;
+    HWND average_ = nullptr;       // the Averaging list, after the reset buttons
+    int averageLabelX_ = 0;
     std::vector<std::string> boxNames_[2];
     int boxChosen_[2] = {-2, -2}; // the choice the lists show
     // the bass sliders (a second row of the bar): their trackbars, where their labels and values are drawn

@@ -29,7 +29,7 @@ const COLORREF kBack = RGB(28, 30, 33), kText = RGB(214, 218, 224), kDim = RGB(1
                kSelected = RGB(62, 98, 140), kEdge = RGB(70, 74, 80);
 
 enum Tip { tGraph, tDecks, tSnap, tResetPreset, tResetColour, kTips };
-enum BoxId { idLoudnessBox = 201, idColourBox, idBass0 = 210 };
+enum BoxId { idLoudnessBox = 201, idColourBox, idAverageBox, idBass0 = 210 };
 const wchar_t* const kTipText[kTips] = {
     L"The deck's spectrum, 20 Hz - 20 kHz (left scale, dB): orange = the original (the deck's input), turquoise = "
     L"processed (the output). Purple: the MB Compressor's bands; a line per band at its gain now (right scale; "
@@ -58,6 +58,12 @@ void frame(HDC dc, const RECT& r, COLORREF c) {
     FrameRect(dc, &r, b);
     DeleteObject(b);
 }
+
+// the Averaging list's entries, in the order of Settings::kSpectrumAverages
+const wchar_t* const kAverageText[] = {L"None", L"0.1 s", L"0.2 s", L"0.3 s", L"0.5 s", L"1 s", L"2 s"};
+static_assert(sizeof kAverageText / sizeof kAverageText[0] ==
+                  sizeof Settings::kSpectrumAverages / sizeof Settings::kSpectrumAverages[0],
+              "a text per averaging choice");
 
 std::wstring hzText(double f) {
     wchar_t b[24];
@@ -154,6 +160,12 @@ void SettingsSpectrum::setSnapToBands(bool on) {
     if (changed_) changed_(true);
 }
 
+void SettingsSpectrum::setAverageMs(int ms) {
+    if (settings_.spectrumAverageMs[0] == ms) return;
+    settings_.spectrumAverageMs[0] = ms;
+    if (average_) average_(ms);
+}
+
 // ---- the window ----
 
 SpectrumWindow::SpectrumWindow(SpectrumSource& source) : source_(source) {}
@@ -197,6 +209,7 @@ void SpectrumWindow::show(HWND owner, int deck) {
     setTitle();
     layoutBar();
     fillBoxes();
+    fillAverage();
     ShowWindow(hwnd_, placement::showCommand(hwnd_));
     SetForegroundWindow(hwnd_);
     InvalidateRect(hwnd_, nullptr, FALSE);
@@ -209,6 +222,7 @@ void SpectrumWindow::refresh() {
     setTitle(); // the deck's preset or colour may have been chosen elsewhere
     fillBoxes();
     fillSliders();
+    fillAverage();
     InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
@@ -312,6 +326,10 @@ void SpectrumWindow::layoutBar() {
         x += boxW[k] + px(16);
     }
     buttonsX_ = x + px(8);
+    // the Averaging list after the buttons paint() draws there (Snap to bands, Reset loudness, Reset EQ)
+    averageLabelX_ = buttonsX_ + width(L"Snap to bands") + px(20) + px(24) + width(L"Reset loudness") + px(20) + px(8) +
+                     width(L"Reset EQ") + px(20) + px(24);
+    if (average_) MoveWindow(average_, averageLabelX_ + width(L"Averaging") + px(8), m + px(2), px(80), px(300), TRUE);
     // the second row: the four bass sliders over the width, each name, trackbar, value
     RECT rc;
     GetClientRect(hwnd_, &rc);
@@ -345,6 +363,18 @@ void SpectrumWindow::fillBoxes() {
             SendMessageW(boxes_[k], CB_SETCURSEL, static_cast<WPARAM>(want), 0);
     }
     filling_ = false;
+}
+
+void SpectrumWindow::fillAverage() {
+    if (!average_ || SendMessageW(average_, CB_GETDROPPEDSTATE, 0, 0) != 0) return;
+    int want = 3; // 0.3 s
+    for (int i = 0; i < static_cast<int>(sizeof Settings::kSpectrumAverages / sizeof Settings::kSpectrumAverages[0]); ++i)
+        if (Settings::kSpectrumAverages[i] == source_.averageMs()) want = i;
+    if (SendMessageW(average_, CB_GETCURSEL, 0, 0) != want) {
+        filling_ = true;
+        SendMessageW(average_, CB_SETCURSEL, static_cast<WPARAM>(want), 0);
+        filling_ = false;
+    }
 }
 
 void SpectrumWindow::fillSliders() {
@@ -428,6 +458,16 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
                              L"window's list; both decks when they are linked).");
         tips_.add(boxes_[1], L"The deck's EQ: tone, auto tone, sub bass and contour (as the main window's list; both "
                              L"decks when they are linked).");
+        average_ = CreateWindowExW(0, WC_COMBOBOXW, L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | CBS_DROPDOWNLIST,
+                                   0, 0, 10, 10, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(idAverageBox)),
+                                   moduleInstance(), nullptr);
+        theme::makeCombo(average_);
+        SendMessageW(average_, WM_SETFONT, reinterpret_cast<WPARAM>(font_), FALSE);
+        for (const wchar_t* t : kAverageText) SendMessageW(average_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(t));
+        tips_.add(average_, L"Averaging: how long the original and processed lines are averaged. Short follows the "
+                            L"music at once but jumps; long is calm but lags behind (0.3 s: the default). The meter "
+                            L"panel's spectrum follows the same choice; the EQ and MB Compressor lines are never "
+                            L"averaged.");
         for (int k = 0; k < bass::kSliders; ++k) {
             bass_[k] = CreateWindowExW(0, TRACKBAR_CLASSW, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS | TBS_BOTTOM,
                                        0, 0, 10, 10, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(idBass0 + k)),
@@ -444,7 +484,7 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         dpi_ = HIWORD(wp);
         setFonts();
         tips_.setDpi(dpi_);
-        for (HWND b : boxes_)
+        for (HWND b : {boxes_[0], boxes_[1], average_})
             if (b) SendMessageW(b, WM_SETFONT, reinterpret_cast<WPARAM>(font_), FALSE);
         layoutBar();
         const RECT* r = reinterpret_cast<const RECT*>(lp);
@@ -475,6 +515,11 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_COMMAND:
         if ((LOWORD(wp) == idLoudnessBox || LOWORD(wp) == idColourBox) && HIWORD(wp) == CBN_SELCHANGE && !filling_)
             choose(LOWORD(wp) == idColourBox);
+        if (LOWORD(wp) == idAverageBox && HIWORD(wp) == CBN_SELCHANGE && !filling_) {
+            const LRESULT sel = SendMessageW(average_, CB_GETCURSEL, 0, 0);
+            if (sel >= 0 && sel < static_cast<LRESULT>(sizeof Settings::kSpectrumAverages / sizeof Settings::kSpectrumAverages[0]))
+                source_.setAverageMs(Settings::kSpectrumAverages[sel]);
+        }
         return 0;
     case WM_ERASEBKGND:
         return 1;
@@ -580,6 +625,7 @@ LRESULT SpectrumWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
         for (RECT& r : tipRect_) r = RECT{};
         title_.clear();
+        average_ = nullptr; // (a child: destroyed with the window)
         return 0;
     default:
         break;
@@ -651,6 +697,7 @@ void SpectrumWindow::paint(HDC target) {
     const int decksRight = x;
     label(boxLabelX_[0], L"Loudness");
     label(boxLabelX_[1], L"EQ");
+    label(averageLabelX_, L"Averaging");
     x = std::max(x, buttonsX_);
     const int snapLeft = x;
     x = drawButton(bSnap, x, L"Snap to bands", source_.snapToBands(), true);

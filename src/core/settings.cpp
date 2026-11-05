@@ -332,6 +332,8 @@ std::string Settings::toText() const {
     for (int i = 0; i < 3; ++i)
         o << (i == 0 ? "ScopeA" : i == 1 ? "ScopeB" : "PluginScope") << "=" << (scope[i].input ? "input" : "output") << ","
           << scope[i].ms << "\n";
+    o << "; The spectra's averaging in ms (0 = none; the program, the plug-in)\nSpectrumAverage=" << spectrumAverageMs[0]
+      << "\nPluginSpectrumAverage=" << spectrumAverageMs[1] << "\n";
     o << "; 1 = the hint that the program keeps running in the notification area was shown\nTrayHintShown="
       << (trayHintShown ? 1 : 0) << "\n\n";
     o << "[Updates]\n; 1 = ask GitHub once a day for a newer version (installed only after a click)\nCheckUpdates="
@@ -500,6 +502,13 @@ void Settings::fromText(const std::string& text) {
             scope[i].input = v->compare(0, comma, "input") == 0;
             const int ms = comma == std::string::npos ? 50 : toInt(v->substr(comma + 1), 50);
             scope[i].ms = ms == 1 || ms == 5 || ms == 10 || ms == 20 || ms == 200 || ms == 2000 ? ms : 50;
+        }
+    for (int i = 0; i < 2; ++i)
+        if (auto v = get("Window", i == 0 ? "SpectrumAverage" : "PluginSpectrumAverage")) {
+            const int ms = toInt(*v, 300);
+            spectrumAverageMs[i] = 300;
+            for (int a : kSpectrumAverages)
+                if (a == ms) spectrumAverageMs[i] = ms;
         }
     if (auto v = get("Window", "Tooltips")) showTooltips = toInt(*v, 1) != 0;
     if (auto v = get("Window", "TrayHintShown")) trayHintShown = toInt(*v, 0) != 0;
@@ -709,6 +718,11 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
     for (int i = 0; i < 3; ++i) { // the scopes likewise: the program changes A and B, the plug-in its own
         out.scope[i] = !(scope[i] == base.scope[i]) ? scope[i] : now.scope[i];
         scope[i] = base.scope[i] = out.scope[i];
+    }
+    for (int i = 0; i < 2; ++i) { // the spectra's averaging likewise: the program's, the plug-in's
+        out.spectrumAverageMs[i] =
+            spectrumAverageMs[i] != base.spectrumAverageMs[i] ? spectrumAverageMs[i] : now.spectrumAverageMs[i];
+        spectrumAverageMs[i] = base.spectrumAverageMs[i] = out.spectrumAverageMs[i];
     }
     for (bool Settings::*f : {&Settings::showTooltips, &Settings::checkUpdates, &Settings::pluginLink}) {
         out.*f = this->*f != base.*f ? this->*f : now.*f;

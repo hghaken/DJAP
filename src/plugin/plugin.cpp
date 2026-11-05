@@ -898,6 +898,12 @@ void Plugin::setScope(bool input, int ms) {
     saveSettings();
 }
 
+void Plugin::setSpectrumAverage(int ms) {
+    if (settings_.spectrumAverageMs[1] == ms) return;
+    settings_.spectrumAverageMs[1] = ms;
+    saveSettings();
+}
+
 void Plugin::setSwitches(bool tooltips, bool checkUpdates) {
     settings_.showTooltips = tooltips;
     settings_.checkUpdates = checkUpdates;
