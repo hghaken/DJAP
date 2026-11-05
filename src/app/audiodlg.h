@@ -68,6 +68,7 @@ private:
     HWND inA_ = nullptr, outA_ = nullptr, inB_ = nullptr, outB_ = nullptr, rate_ = nullptr, buffer_ = nullptr;
     HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, health_ = nullptr, resetHealth_ = nullptr,
          note_ = nullptr;
+    HWND soundPanel_ = nullptr, soundSettings_ = nullptr; // Windows' Sound window and its Sound settings page
     HWND look_ = nullptr, startup_ = nullptr; // look-ahead, start with Windows
     HWND oversampling_ = nullptr; // the soft clipper's and the exciter's
     HWND tooltips_ = nullptr;                                    // the switch of all tooltips

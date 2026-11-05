@@ -7,6 +7,7 @@
 #include "resource.h"
 
 #include <commctrl.h>
+#include <shellapi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -21,7 +22,7 @@ namespace {
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
           idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
-          idCheckUpdates, idTooltips, idDrift, idInPeriod, idMono };
+          idCheckUpdates, idTooltips, idDrift, idInPeriod, idMono, idSoundPanel, idSoundSettings };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 // limiter look-ahead choices (ms; 1.5 the default). Nothing between 0 and 1.5: below about 1.3 ms the true-peak
@@ -189,6 +190,8 @@ void AudioWindow::createControls() {
                  idMono);
     start_ = make(L"BUTTON", L"Start audio", BS_OWNERDRAW | WS_TABSTOP, idStart);
     stop_ = make(L"BUTTON", L"Stop audio", BS_OWNERDRAW | WS_TABSTOP, idStop);
+    soundPanel_ = make(L"BUTTON", L"Audio properties", BS_OWNERDRAW | WS_TABSTOP, idSoundPanel);
+    soundSettings_ = make(L"BUTTON", L"Sound settings", BS_OWNERDRAW | WS_TABSTOP, idSoundSettings);
     state_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY, 0);
     stateShown_.clear();
     health_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY, 0);
@@ -209,7 +212,7 @@ void AudioWindow::createControls() {
                  L"to speakers.",
                  SS_LEFT, 0);
 
-    for (HWND b : {open_, close_, panel_, start_, stop_, resetHealth_}) theme::makeButton(b);
+    for (HWND b : {open_, close_, panel_, start_, stop_, soundPanel_, soundSettings_, resetHealth_}) theme::makeButton(b);
     for (HWND c : {decks_, api_, inputs_, drift_, inPeriod_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
@@ -282,6 +285,10 @@ void AudioWindow::createControls() {
     tips_.add(start_, L"Starts the audio with the choices above (opens the driver first when needed). If the audio "
                       L"runs when you close the program, it starts again by itself next time.");
     tips_.add(stop_, L"Stops the audio. An ASIO driver stays open until Close driver.");
+    tips_.add(soundPanel_, L"Opens Windows' Sound window: the playback and recording devices, their levels and formats. "
+                           L"Windows' own window: DJAP changes nothing there.");
+    tips_.add(soundSettings_, L"Opens Windows' Sound settings: where Windows plays its sound (for example a virtual cable "
+                              L"as the input of DJAP) and its volume. Windows' own page: DJAP changes nothing there.");
     tips_.add(state_, L"What runs now: sample rate and period, and per deck the latency from input to output - the "
                       L"device's input and output buffers plus the processing (the limiter look-ahead). With an "
                       L"input of another API also its drift buffer, the measured clock drift in ppm, and underruns "
@@ -319,7 +326,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, inPeriod_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
+                   start_, stop_, soundPanel_, soundSettings_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -388,6 +395,9 @@ void AudioWindow::layout() {
     // Start / Stop right under the audio choices (client, 2026-10-27)
     MoveWindow(start_, m + labelW + g, y, bw, h, TRUE);
     MoveWindow(stop_, m + labelW + bw + 2 * g, y, bw, h, TRUE);
+    // Windows' own sound windows, on the same row at the right (client, 2026-11-05)
+    MoveWindow(soundPanel_, m + W - 2 * bw - g, y, bw, h, TRUE);
+    MoveWindow(soundSettings_, m + W - bw, y, bw, h, TRUE);
     y += h + 2 * g;
     // the switches, one under the other (the daily update check among them: no heading of its own - client,
     // 2026-10-27; Check now / Install update are in the About window)
@@ -847,6 +857,12 @@ void AudioWindow::command(int id, int code) {
         break;
     case idResetHealth:
         audio_.resetHealth();
+        break;
+    case idSoundPanel: // the classic Sound window, on its Playback tab
+        ShellExecuteW(hwnd_, nullptr, L"control.exe", L"mmsys.cpl,,0", nullptr, SW_SHOWNORMAL);
+        break;
+    case idSoundSettings:
+        ShellExecuteW(hwnd_, nullptr, L"ms-settings:sound", nullptr, nullptr, SW_SHOWNORMAL);
         break;
     default:
         return;

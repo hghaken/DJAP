@@ -688,7 +688,9 @@ registry), Open /
 Close driver (opening asks first: it takes the interface from other programs), Control panel, the input and
 output channel pair of each deck (with the driver's channel names once it is open; pairs must differ), sample rate
 (the driver's own when it refuses the one asked for), buffer size (the driver's preferred, or the sizes its
-granularity allows), Start / Stop audio, the latency (input + output + processing) and the health counters
+granularity allows), Start / Stop audio, beside them Audio properties and Sound settings (client, 2026-11-05: Windows'
+Sound window, `control.exe mmsys.cpl,,0`, and its settings page, `ms-settings:sound`), the latency (input + output +
+processing) and the health counters
 (periods, heaviest / last % of a period, over half, late, answered with silence, driver resyncs and overloads,
 reset). Choices are saved at once; while the audio runs, a new device, channel pair, sample rate, buffer size,
 deck-input API or the exclusive switch is applied at once by starting the audio again (client, 2026-10-25: a deck

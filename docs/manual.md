@@ -181,8 +181,8 @@ To process everything Windows plays (browser, music player, video):
 
 1. Install a virtual audio cable (VAC). It adds a playback device ("Line 1") and a recording device of the same name
    connected to it.
-2. Make the cable's playback device the **default playback device** in Windows' sound settings. All Windows sound now
-   goes into the cable.
+2. Make the cable's playback device the **default playback device** in Windows' sound settings (the **Sound settings**
+   button in DJAP's Setup window opens them). All Windows sound now goes into the cable.
 3. In DJAP's Setup window choose **Processing: One channel**, **Audio API: WASAPI**, as **Input** the cable's recording
    device and as **Output** your speakers or headphones.
 4. Press **Start audio**.
@@ -295,8 +295,9 @@ in that group.
 | **Enable spk pin**, **Use PortCls** | off | not needed |
 | **Worker threads**: Up to, Prio (Driver group) | Auto, Auto | the driver's own choice per processor |
 
-**Step 2 - Windows' Sound settings.** Open *Sound settings* (the button in VAC's panel, or right-click the speaker
-in the taskbar) and then *More sound settings* for the classic Sound dialog.
+**Step 2 - Windows' Sound settings.** Open *Sound settings* (the button in DJAP's Setup window or in VAC's panel, or
+right-click the speaker in the taskbar) and then *More sound settings* for the classic Sound dialog (or directly: the
+**Audio properties** button in DJAP's Setup window).
 
 - On the **Playback** tab, double-click the cable (*Line 1 (Virtual Audio Cable)*), tab **Advanced**: *Default
   Format* **24 bit, 44100 Hz (Studio Quality)** - or the rate of your music. Leave the two *Exclusive Mode* boxes on.
@@ -500,6 +501,9 @@ Right under Look-ahead and Oversampling:
 
 - **Start audio** starts the audio with the choices above (with WASAPI exclusive it asks first).
 - **Stop audio** fades out and stops.
+- **Audio properties** opens Windows' Sound window (playback and recording devices, their levels and formats) and
+  **Sound settings** Windows' Sound settings page (where Windows plays its sound, its volume). Both are Windows' own:
+  DJAP changes nothing there.
 
 ### 5.5 Health
 
