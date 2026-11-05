@@ -336,11 +336,12 @@ void SpectrumWindow::layoutBar() {
     const int colW = (static_cast<int>(rc.right) - 2 * m) / bass::kSliders, nameW = width(L"Bass frequency") + px(10),
               valueW = width(L"100 % (off)") + px(6);
     bassRowY_ = m + barH + px(8);
+    // the name right-aligned against its slider, the value left-aligned after it (client, 2026-11-05)
     for (int k = 0; k < bass::kSliders; ++k) {
-        const int cx = m + k * colW;
-        bassLabelX_[k] = cx;
-        bassValueX_[k] = cx + colW - px(12);
-        MoveWindow(bass_[k], cx + nameW, bassRowY_, std::max(px(40), colW - nameW - valueW - px(12)), barH, TRUE);
+        const int cx = m + k * colW, sliderW = std::max(px(40), colW - nameW - valueW - px(12));
+        bassLabelX_[k] = cx + nameW - px(2);
+        bassValueX_[k] = cx + nameW + sliderW + px(2);
+        MoveWindow(bass_[k], cx + nameW, bassRowY_, sliderW, barH, TRUE);
     }
     SelectObject(dc, old);
     ReleaseDC(hwnd_, dc);
@@ -716,11 +717,11 @@ void SpectrumWindow::paint(HDC target) {
         const PresetValues v = source_.values(deck_);
         for (int k = 0; k < bass::kSliders; ++k) {
             SetTextColor(dc, kDim);
-            SetTextAlign(dc, TA_LEFT | TA_TOP);
+            SetTextAlign(dc, TA_RIGHT | TA_TOP);
             TextOutW(dc, bassLabelX_[k], bassRowY_ + (barH - th) / 2, bass::kName[k], static_cast<int>(wcslen(bass::kName[k])));
             const std::wstring val = bass::text(v, k);
             SetTextColor(dc, kText);
-            SetTextAlign(dc, TA_RIGHT | TA_TOP);
+            SetTextAlign(dc, TA_LEFT | TA_TOP);
             TextOutW(dc, bassValueX_[k], bassRowY_ + (barH - th) / 2, val.c_str(), static_cast<int>(val.size()));
         }
     }
