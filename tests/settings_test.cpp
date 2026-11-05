@@ -82,6 +82,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK(a.checkUpdates == b.checkUpdates && a.updateUrl == b.updateUrl);
     CHECK(a.fallbackOutput == b.fallbackOutput && a.retryMinutes == b.retryMinutes);
     for (int i = 0; i < 3; ++i) CHECK(a.scope[i] == b.scope[i]);
+    CHECK(a.latencyProbe == b.latencyProbe);
     CHECK(a.presets.size() == b.presets.size());
     for (size_t i = 0; i < a.presets.size() && i < b.presets.size(); ++i) {
         CHECK(a.presets[i].name == b.presets[i].name);
@@ -196,6 +197,7 @@ Settings busy() {
     s.retryMinutes = 10;
     s.scope[0] = {true, 5};
     s.scope[2] = {false, 2000};
+    s.latencyProbe = false;
     s.checkUpdates = false;
     s.updateUrl = "http://127.0.0.1:8765/latest.json";
     // shipped preset with values changed, among them the band count

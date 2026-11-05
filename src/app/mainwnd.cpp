@@ -104,7 +104,14 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
       }),
       healthWindow_(healthHistory_,
                     {[this] { return audioWindow_.healthState(); }, [this] { return audioWindow_.healthCounters(); },
-                     [this] { audio_.resetHealth(); }, [this] { return settings_.decks; }}),
+                     [this] { audio_.resetHealth(); }, [this] { return settings_.decks; },
+                     [this] { return settings_.latencyProbe; },
+                     [this](bool on) {
+                         settings_.latencyProbe = on;
+                         if (on) latencyProbe_.start();
+                         else latencyProbe_.stop();
+                         save();
+                     }}),
       graphs_(settings, audio), analysisWindow_(graphs_),
       spectrumSource_(settings, graphs_, [&audio] { return audio.sampleRate(); },
                       [this](bool saveNow) { // a colour point or band handle dragged, a list, snap switched
@@ -146,6 +153,7 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     Tooltips::setEnabled(settings_.showTooltips); // before the first window makes its tooltips
     audioWindow_.setTestRun(testRun);
     audioWindow_.setRetryStatus([this] { return retryStatus(); });
+    if (settings_.latencyProbe) latencyProbe_.start();
     if (testRun && GetEnvironmentVariableW(L"DJAP_HEALTH_DEMO", nullptr, 0)) fillHealthDemo();
     registerMeterView(instance);
     WNDCLASSEXW wc{};
@@ -784,9 +792,13 @@ void MainWindow::sampleHealth() {
     healthLast_ = now;
     HealthReading r;
     r.running = audio_.audioActive();
+    r.probeOn = latencyProbe_.running();
+    r.probeMs = latencyProbe_.takePeakMs();
     if (r.running) {
         const EngineHealth h = audio_.health();
         r.peakPercent = audio_.takePeakPercent();
+        r.lateMs = std::max(0.0, audio_.takeLateMs());
+        r.periodMs = audio_.periodMs();
         r.busySeconds = h.busySeconds;
         r.overHalf = h.overHalf;
         r.late = h.late;
@@ -813,7 +825,11 @@ void MainWindow::sampleHealth() {
 void MainWindow::fillHealthDemo() {
     HealthReading r;
     r.running = true;
+    r.probeOn = true;
+    r.periodMs = 2.9;
     for (int t = 0; t < 900; ++t) {
+        r.probeMs = 0.15 + 0.05 * std::sin(t * 0.2) + (t % 131 == 0 ? 0.9 : 0.0);
+        r.lateMs = 0.1 + 0.05 * std::sin(t * 0.3) + (t == 640 ? 3.4 : 0.0);
         r.peakPercent = 18.0 + 6.0 * std::sin(t * 0.05) + (t % 97 == 0 ? 25.0 : 0.0);
         r.busySeconds += 0.06 + 0.01 * std::sin(t * 0.03);
         r.overHalf += t == 400 || t == 640 ? 1 : 0;

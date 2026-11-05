@@ -16,7 +16,11 @@ HealthHistory::HealthHistory() : points_(kSeconds) {}
 void HealthHistory::add(const HealthReading& r, double seconds) {
     HealthPoint p;
     p.running = r.running;
+    p.probeOn = r.probeOn;
+    p.probeMs = static_cast<float>(r.probeMs);
     if (r.running) {
+        p.lateMs = static_cast<float>(r.lateMs);
+        p.periodMs = static_cast<float>(r.periodMs);
         // the first reading of a stream has nothing to compare with: its counts are not of this second
         const HealthReading& b = previous_.running ? previous_ : r;
         p.peakPercent = static_cast<float>(r.peakPercent);

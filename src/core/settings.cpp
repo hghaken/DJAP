@@ -326,6 +326,8 @@ std::string Settings::toText() const {
     for (const auto& [name, p] : windows)
         o << name << "=" << p.x << "," << p.y << "," << p.w << "," << p.h << "," << (p.maximised ? 1 : 0) << "\n";
     o << "SnapToBands=" << (snapToBands ? 1 : 0) << "\nTooltips=" << (showTooltips ? 1 : 0) << "\n";
+    o << "; 1 = measure how fast Windows wakes a thread (the Health window's timing graph)\nMeasureLatency="
+      << (latencyProbe ? 1 : 0) << "\n";
     o << "; The analysis window's scope: input or output, and the ms across it (deck A, deck B, the plug-in)\n";
     for (int i = 0; i < 3; ++i)
         o << (i == 0 ? "ScopeA" : i == 1 ? "ScopeB" : "PluginScope") << "=" << (scope[i].input ? "input" : "output") << ","
@@ -491,6 +493,7 @@ void Settings::fromText(const std::string& text) {
             if (auto y = get("Window", "Y"))
                 if (toInt(*x, -1) >= 0) windows["Main"] = WindowPlace{toInt(*x, 0), toInt(*y, 0), 0, 0, false};
     if (auto v = get("Window", "SnapToBands")) snapToBands = toInt(*v, 0) != 0;
+    if (auto v = get("Window", "MeasureLatency")) latencyProbe = toInt(*v, 1) != 0;
     for (int i = 0; i < 3; ++i)
         if (auto v = get("Window", i == 0 ? "ScopeA" : i == 1 ? "ScopeB" : "PluginScope")) {
             const size_t comma = v->find(',');

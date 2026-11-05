@@ -11,12 +11,20 @@ int main() {
         HealthHistory h;
         CHECK(h.size() == 0);
         HealthReading r;
+        // the probe also while the audio does not run; the periods' timing only while it does
+        r.probeOn = true;
+        r.probeMs = 0.4;
+        r.lateMs = 9.0;
+        h.add(r, 1.0);
+        CHECK(h.point(0).probeOn && h.point(0).probeMs == 0.4f && h.point(0).lateMs == 0.0f);
+        r.lateMs = 0.25;
+        r.periodMs = 2.9;
         r.running = true;
         r.late = 5; // counted before this stream's first reading: not of this second
         r.busySeconds = 10.0;
         r.peakPercent = 12.5;
         h.add(r, 1.0);
-        CHECK(h.size() == 1 && h.point(0).running);
+        CHECK(h.size() == 2 && h.point(0).running && h.point(0).lateMs == 0.25f && h.point(0).periodMs == 2.9f);
         CHECK(h.point(0).late == 0.0f && h.point(0).averagePercent == 0.0f && h.point(0).peakPercent == 12.5f);
 
         r.late = 7;

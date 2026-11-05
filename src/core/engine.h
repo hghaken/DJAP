@@ -57,6 +57,10 @@ public:
     void resetHealth() { resetRequest_.store(true, std::memory_order_release); }
     // The heaviest period since the last call, in % of its time (GUI thread, once a second: the Health window's graph).
     double takePeakPercent() { return recentPeakPermille_.exchange(0, std::memory_order_relaxed) / 10.0; }
+    // How much later than its period the latest periods began, the most since the last call, in ms (GUI thread, once
+    // a second: the Health window's timing graph - client, 2026-11-05); the period's length in ms.
+    double takeLateMs() { return recentLateUs_.exchange(0, std::memory_order_relaxed) / 1000.0; }
+    double periodMs() const { return periodUs_.load(std::memory_order_relaxed) / 1000.0; }
 
 private:
     double fs_ = 0.0;
@@ -66,6 +70,8 @@ private:
     // written by the audio thread only (plain stores), read by the GUI
     std::atomic<long long> blocks_{0}, overHalf_{0}, late_{0}, refused_{0};
     std::atomic<uint32_t> heaviestPermille_{0}, lastPermille_{0}, recentPeakPermille_{0};
+    std::atomic<uint32_t> recentLateUs_{0}, periodUs_{0};
+    long long lastStartNs_ = 0; // the audio thread's own: when the last period began (0: none since prepare)
     std::atomic<long long> busyNs_{0};
     std::atomic<int> core_{-1};
     std::atomic<bool> resetRequest_{false};

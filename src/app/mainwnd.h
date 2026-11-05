@@ -11,6 +11,7 @@
 #include "analysiswnd.h"
 #include "audiodlg.h"
 #include "healthwnd.h"
+#include "latencyprobe.h"
 #include "recovery.h"
 #include "audioio.h"
 #include "editwnd.h"
@@ -104,6 +105,7 @@ private:
     AudioWindow audioWindow_;
     HealthHistory healthHistory_; // a point per second, also while the Health window is closed
     HealthWindow healthWindow_;
+    LatencyProbe latencyProbe_; // the Health window's Windows latency (Settings::latencyProbe)
     ULONGLONG healthLast_ = 0;
     void sampleHealth();
     // what the analysis window shows: the decks of the settings and the audio

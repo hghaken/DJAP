@@ -7,6 +7,9 @@
 #include "sampleformat.h"
 
 #include <atomic>
+#include <cmath>
+#include <chrono>
+#include <thread>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -411,6 +414,14 @@ void healthAndSafety() {
     FakeDevice dev(SampleFormat::Int32In24, SampleFormat::Int32In24, 64);
     dev.run(e, signals(64));
     std::printf("   first period: %.1f %% of its time\n", e.health().lastPercent);
+    // how late a period begins: one that comes 30 ms after the last, at 64-frame periods (1.3 ms)
+    e.takeLateMs();
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    dev.run(e, signals(64));
+    const double late = e.takeLateMs();
+    std::printf("   a period 30 ms after the last: %.1f ms late (period %.2f ms)\n", late, e.periodMs());
+    CHECK(late >= 25.0 && late < 1000.0);
+    CHECK(e.takeLateMs() == 0.0 && std::fabs(e.periodMs() - 64000.0 / fs) < 0.01);
     e.resetHealth();
     gAllocs = 0;
     const unsigned saved = _mm_getcsr();

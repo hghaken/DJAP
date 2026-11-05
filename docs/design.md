@@ -693,7 +693,15 @@ with their totals in the time shown, clock drift (ppm per deck) and drift buffer
 closed; its counts are the counters' growth, so Reset counters or a new stream leave no spike. The audio thread's new
 `takePeakPercent` (one more relaxed atomic, a store only when it grows; the GUI's exchange can lose one period, harmless
 for a graph) gives the peak per second: the counters' `heaviest` is the worst since the last reset. A screen column of
-several seconds keeps the highest for peaks and problems, the mean for the rest. `DJAP_HEALTH_DEMO` (only in a test run:
+several seconds keeps the highest for peaks and problems, the mean for the rest. Timing (client, 2026-11-05: "a latency
+monitor, without endangering the performance / latency itself"; options 1 and 2 of three): the engine and each
+WASAPI / DirectSound / MME stream note when each period begins and keep the most it came late against the last one plus
+a period (`takeLateMs`: a time stamp the period already took, one relaxed atomic; a gap of a second - a stop - does not
+count); and `LatencyProbe` (`src/app/latencyprobe.*`, `latencyprobe_test`): a thread of its own sets a high-resolution
+waitable timer (`CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`, Windows 10 1803+; never `timeBeginPeriod`) to 1 ms, 1000 times a
+second, and keeps the most it woke late - at above-normal priority, below the audio threads (MMCSS / time-critical), so it
+can never push them aside; its values include other threads' time. Switch `[Window] MeasureLatency` (on), the Health
+window's check box. Per-driver DPC / ISR times (kernel ETW, administrator rights) were left out. `DJAP_HEALTH_DEMO` (only in a test run:
 `--ini` / `--simulate`) fills the history with example values for a picture of every line (`docs/images/health.jpg`).
 
 Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), and the audio API (client 2026-10-27: Start / Stop right under

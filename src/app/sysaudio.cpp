@@ -112,6 +112,8 @@ struct DeckStream {
     std::atomic<int> core{-1};
     std::atomic<bool> resetHealth{false}, stopping{false}, failed{false};
     long long seenBlocks = -1; // SysAudio::stalled, on the GUI thread
+    std::atomic<uint32_t> recentLateUs{0}, periodUs{0};
+    long long lastStartNs = 0; // the stream's thread's own
     double seenAt = 0.0;
     SysStreamInfo info;
 };
@@ -126,6 +128,18 @@ namespace {
 
 // The period's health (processing time against the period, blocks counted).
 void account(DeckStream* s, std::chrono::steady_clock::time_point t0, ma_uint32 frames) {
+    { // how late this period began (AudioEngine's rule)
+        const long long startNs = std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count();
+        const double periodNs = frames / s->rate * 1e9;
+        s->periodUs.store(static_cast<uint32_t>(periodNs / 1000.0), std::memory_order_relaxed);
+        const long long gapNs = startNs - s->lastStartNs;
+        if (s->lastStartNs != 0 && gapNs < 1000000000LL) {
+            const double lateUs = (gapNs - periodNs) / 1000.0;
+            if (lateUs > s->recentLateUs.load(std::memory_order_relaxed))
+                s->recentLateUs.store(static_cast<uint32_t>(std::min(lateUs, 1e9)), std::memory_order_relaxed);
+        }
+        s->lastStartNs = startNs;
+    }
     const auto spent = std::chrono::steady_clock::now() - t0;
     s->busyNs.store(s->busyNs.load(std::memory_order_relaxed) +
                         std::chrono::duration_cast<std::chrono::nanoseconds>(spent).count(),
@@ -666,6 +680,20 @@ double SysAudio::takePeakPercent() {
     for (const auto& s : impl_->decks)
         if (s) peak = std::max(peak, s->recentPeak.exchange(0, std::memory_order_relaxed));
     return peak / 10.0;
+}
+
+double SysAudio::takeLateMs() {
+    uint32_t late = 0;
+    for (const auto& s : impl_->decks)
+        if (s) late = std::max(late, s->recentLateUs.exchange(0, std::memory_order_relaxed));
+    return late / 1000.0;
+}
+
+double SysAudio::periodMs() const {
+    uint32_t p = 0;
+    for (const auto& s : impl_->decks)
+        if (s) p = std::max(p, s->periodUs.load(std::memory_order_relaxed));
+    return p / 1000.0;
 }
 
 void SysAudio::resetHealth() {

@@ -897,11 +897,19 @@ The four graphs:
 | Graph | What it shows | What you want to see |
 |---|---|---|
 | **Processing** | Per second the heaviest period (*peak*) and the mean (*average*), in % of a period's time. The amber line is 50 %, the red line 100 %: a period that reaches it is not ready in time. | Peaks well under 50 %. |
+| **Timing** | In ms per second: *audio late* - how much later than a period's length the latest periods began (the driver's or Windows' call came late); *Windows latency* - how much later than asked Windows wakes a waiting thread (see below); the red line is the period's length. | Both well under half a period. |
 | **Problems per second** | *Over half*, *silence*, *underruns*, *overruns*, *resyncs*, *overloads* and *late*; beside each name the number in the time shown. | A flat line at 0. |
 | **Clock drift** | How far the clock of an input on another clock runs from the output's, in ppm, per deck. | About the same value for hours. |
 | **Drift buffer** | The drift buffer of such an input in ms: the thin line is the fill the loop holds (the latency it adds), the thick line the measured fill. | The thick line close to the thin one. |
 
 The last two graphs stay empty when no input runs through a drift buffer (for example ASIO input pairs).
+
+**Measure Windows' latency** (on by default) runs a small thread of DJAP's own that sets a timer 1000 times a second and
+measures how much later than asked Windows wakes it - what a DPC / ISR latency monitor measures. It costs well under
+0.1 % of one processor core and runs below the audio's priority, so it can never push the audio aside; it then wakes later
+itself, so its values include the time other busy programs took. High values point at a driver that holds the processor
+(network, Bluetooth, graphics, power saving); it cannot tell which one - a dedicated latency monitor program can. *Audio
+late* is measured at the audio itself, without any extra work.
 
 ## 9. The plug-in for DJ software
 

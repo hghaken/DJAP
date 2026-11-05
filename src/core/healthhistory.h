@@ -14,6 +14,9 @@ struct HealthReading {
     double peakPercent = 0; // the heaviest period since the last reading, in % of its time
     double busySeconds = 0; // processing time so far
     long long overHalf = 0, late = 0, refused = 0, resyncs = 0, overloads = 0;
+    double lateMs = 0, periodMs = 0; // how late the latest periods began (the most), and a period's length
+    bool probeOn = false;            // the Windows latency probe runs (also while the audio does not)
+    double probeMs = 0;              // its latest wake-ups: the most they came late
     struct Input {
         bool on = false; // the deck reads through a drift buffer
         double driftPpm = 0, fillMs = 0, targetMs = 0;
@@ -27,6 +30,9 @@ struct HealthPoint {
     bool running = false;
     float peakPercent = 0, averagePercent = 0;
     float overHalf = 0, late = 0, refused = 0, resyncs = 0, overloads = 0, underruns = 0, overruns = 0;
+    float lateMs = 0, periodMs = 0;
+    bool probeOn = false;
+    float probeMs = 0;
     bool inputOn[2] = {false, false};
     float driftPpm[2] = {0, 0}, fillMs[2] = {0, 0}, targetMs[2] = {0, 0};
 };

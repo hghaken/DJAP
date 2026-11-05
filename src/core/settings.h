@@ -109,6 +109,7 @@ public:
     bool snapToBands = false; // the spectrum window: a dragged colour point snaps to the density bands' splits
     // the analysis window's scope: deck A, deck B (the program), the plug-in's (every instance); merged three-way
     ScopeChoice scope[3];
+    bool latencyProbe = true; // the Health window's Windows latency probe (latencyprobe.h) runs
     bool showTooltips = true; // the explanations when the mouse rests on a control (all windows, the plug-in too)
     bool trayHintShown = false;  // the "still running in the notification area" balloon was shown once
     bool checkUpdates = true;    // ask GitHub once a day for a newer version (Setup window)

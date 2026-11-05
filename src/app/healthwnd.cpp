@@ -18,7 +18,7 @@ namespace {
 
 const wchar_t* const kClass = L"APHealthWindow";
 const wchar_t* const kGraphClass = L"APHealthGraph";
-enum Id { idSpan = 10, idReset, idGraph };
+enum Id { idSpan = 10, idReset, idGraph, idProbe };
 
 // the meter panel's palette (meterview.cpp)
 const COLORREF kBack = RGB(28, 30, 33), kGrid = RGB(62, 66, 72), kText = RGB(214, 218, 224), kDim = RGB(120, 126, 134),
@@ -35,6 +35,11 @@ const SpanChoice kSpans[] = {{L"Last minute", 60, 10}, {L"Last 10 minutes", 600,
 const wchar_t* const kPanelTips[] = {
     L"Processing load per second, in % of a period's time. Peak: the heaviest period of that second - at 100 % it was not "
     L"ready in time, a dropout. Average: the mean, the room left for the rest of the computer's work.",
+    L"Timing per second, in ms. Audio late: how much later than a period's length the latest periods began (the driver's "
+    L"or Windows' call came late) - well under half a period is fine, near the period (the red line) the sound is in "
+    L"danger. Windows latency: how much later than asked Windows wakes a waiting thread (a thread of DJAP's own, 1000 "
+    L"times a second, below the audio's priority) - what a DPC / ISR latency monitor measures; high values point at a "
+    L"driver that holds the processor (network, Bluetooth, graphics, power saving). It cannot tell which one.",
     L"What went wrong, per second; beside each name the number in the time shown. Late: a period not ready in time (a "
     L"dropout). Over half: a period that needed more than half its time (a warning). Silence: a period answered with "
     L"silence, the engine was not ready. Underruns: the input fell behind. Overruns: input blocks dropped. Resyncs and "
@@ -87,7 +92,7 @@ struct Series {
     bool total = false; // the legend adds the sum over the time shown
 };
 
-enum class Scale { Load, Count, Free, Fill };
+enum class Scale { Load, Time, Count, Free, Fill };
 
 struct Panel {
     const wchar_t* title;
@@ -129,7 +134,7 @@ void HealthWindow::show(HWND owner) {
         }
         dpi_ = owner ? GetDpiForWindow(owner) : 96;
         if (dpi_ == 0) dpi_ = 96;
-        RECT r{0, 0, px(980), px(780)};
+        RECT r{0, 0, px(980), px(900)};
         AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_);
         hwnd_ = CreateWindowExW(WS_EX_CONTROLPARENT, kClass, L"Health", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT,
                                 CW_USEDEFAULT, r.right - r.left, r.bottom - r.top, owner, nullptr, inst, this);
@@ -153,7 +158,7 @@ LRESULT CALLBACK HealthWindow::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     const LRESULT r = w->handle(msg, wp, lp);
     if (msg == WM_NCDESTROY) {
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-        w->hwnd_ = w->state_ = w->counters_ = w->span_ = w->reset_ = w->graph_ = nullptr;
+        w->hwnd_ = w->state_ = w->counters_ = w->span_ = w->reset_ = w->graph_ = w->probe_ = nullptr;
         w->stateShown_.clear();
         w->countersShown_.clear();
         w->stateLines_ = 1;
@@ -194,7 +199,9 @@ LRESULT HealthWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         layout();
         return 0;
     case WM_COMMAND:
-        if (LOWORD(wp) == idReset && HIWORD(wp) == BN_CLICKED) {
+        if (LOWORD(wp) == idProbe && HIWORD(wp) == BN_CLICKED) {
+            if (source_.setProbe) source_.setProbe(SendMessageW(probe_, BM_GETCHECK, 0, 0) == BST_CHECKED);
+        } else if (LOWORD(wp) == idReset && HIWORD(wp) == BN_CLICKED) {
             if (source_.reset) source_.reset();
         } else if (LOWORD(wp) == idSpan && HIWORD(wp) == CBN_SELCHANGE) {
             const LRESULT i = SendMessageW(span_, CB_GETCURSEL, 0, 0);
@@ -203,7 +210,7 @@ LRESULT HealthWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     case WM_GETMINMAXINFO: {
-        RECT r{0, 0, px(760), px(560)};
+        RECT r{0, 0, px(760), px(660)};
         AdjustWindowRectExForDpi(&r, WS_OVERLAPPEDWINDOW, FALSE, 0, dpi_);
         reinterpret_cast<MINMAXINFO*>(lp)->ptMinTrackSize = {r.right - r.left, r.bottom - r.top};
         return 0;
@@ -242,6 +249,8 @@ void HealthWindow::create() {
     counters_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY | SS_NOPREFIX, 0);
     span_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idSpan);
     reset_ = make(L"BUTTON", L"Reset counters", BS_OWNERDRAW | WS_TABSTOP, idReset);
+    probe_ = make(L"BUTTON", L"Measure Windows' latency", BS_AUTOCHECKBOX | WS_TABSTOP, idProbe);
+    SendMessageW(probe_, BM_SETCHECK, source_.probeOn && source_.probeOn() ? BST_CHECKED : BST_UNCHECKED, 0);
     graph_ = make(kGraphClass, L"", 0, idGraph, this);
     theme::makeButton(reset_);
     theme::makeCombo(span_);
@@ -261,6 +270,9 @@ void HealthWindow::create() {
                          L"overloads: reported by the ASIO driver.");
     tips_.add(span_, L"The time the graphs show. DJAP keeps the last hour, also while this window is closed.");
     tips_.add(reset_, L"Sets the counters back to zero. The graphs keep what they show.");
+    tips_.add(probe_, L"Measures how fast Windows wakes a waiting thread: 1000 times a second, well under 0.1 % of one "
+                      L"core, below the audio's priority (it can never push the audio aside). Off: the Windows latency "
+                      L"line stays empty.");
     graphTips_.create(graph_);
     graphTips_.setDpi(dpi_);
     for (int i = 0; i < kPanels; ++i) graphTips_.addRect(graph_, static_cast<UINT_PTR>(i), kPanelTips[i]);
@@ -277,7 +289,7 @@ void HealthWindow::setFonts() {
     LOGFONTW lf = ncm.lfMessageFont;
     lf.lfHeight = lf.lfHeight * 9 / 10;
     small_ = CreateFontIndirectW(&lf);
-    for (HWND h : {state_, counters_, span_, reset_}) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
+    for (HWND h : {state_, counters_, span_, reset_, probe_}) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
 void HealthWindow::layout() {
@@ -304,7 +316,8 @@ void HealthWindow::layout() {
     MoveWindow(counters_, m, y, std::max(0, W - spanW - bw - 2 * g), 3 * lh, TRUE);
     MoveWindow(span_, m + W - bw - g - spanW, y, spanW, px(200), TRUE);
     MoveWindow(reset_, m + W - bw, y, bw, h, TRUE);
-    y += std::max(3 * lh, h) + g;
+    MoveWindow(probe_, m + W - bw - g - spanW, y + h + g, spanW + g + bw, lh + px(4), TRUE);
+    y += std::max(3 * lh, h + g + lh + px(4)) + g;
     MoveWindow(graph_, m, y, W, std::max(0, static_cast<int>(rc.bottom) - y - m), TRUE);
     InvalidateRect(hwnd_, nullptr, TRUE);
 }
@@ -357,7 +370,17 @@ void HealthWindow::paintGraphs(HDC dc, const RECT& rc) {
                  {{L"peak", kAmber, 1, true, running(&HealthPoint::peakPercent)},
                   {L"average", kGreen, 2, false, running(&HealthPoint::averagePercent)}},
                  L"Not running"};
-    panels[1] = {L"Problems per second", Scale::Count,
+    panels[1] = {L"Timing, ms", Scale::Time,
+                 {{L"period", kRed, 1, false, running(&HealthPoint::periodMs)},
+                  {L"Windows latency", kBlue, 1, true,
+                   [](const HealthPoint& p, float& v) {
+                       if (!p.probeOn) return false;
+                       v = p.probeMs;
+                       return true;
+                   }},
+                  {L"audio late", kOrange, 2, true, running(&HealthPoint::lateMs)}},
+                 L"Not running"};
+    panels[2] = {L"Problems per second", Scale::Count,
                  {{L"over half", kAmber, 1, true, running(&HealthPoint::overHalf), true},
                   {L"silence", kPurple, 1, true, running(&HealthPoint::refused), true},
                   {L"underruns", kBlue, 1, true, running(&HealthPoint::underruns), true},
@@ -366,13 +389,13 @@ void HealthWindow::paintGraphs(HDC dc, const RECT& rc) {
                   {L"overloads", kPink, 1, true, running(&HealthPoint::overloads), true},
                   {L"late", kRed, 2, true, running(&HealthPoint::late), true}},
                  L"Not running"};
-    panels[2] = {L"Clock drift, ppm", Scale::Free, {}, L"No input with a drift buffer"};
-    panels[3] = {L"Drift buffer, ms", Scale::Fill, {}, L"No input with a drift buffer"};
+    panels[3] = {L"Clock drift, ppm", Scale::Free, {}, L"No input with a drift buffer"};
+    panels[4] = {L"Drift buffer, ms", Scale::Fill, {}, L"No input with a drift buffer"};
     const COLORREF deckColour[2] = {kTeal, kOrange};
     for (int d = 0; d < (two ? 2 : 1); ++d) {
-        panels[2].series.push_back({deckName(d), deckColour[d], 2, false, ofDeck(&HealthPoint::driftPpm, d)});
-        panels[3].series.push_back({deckName(d) + L" target", kDim, 1, false, ofDeck(&HealthPoint::targetMs, d)});
-        panels[3].series.push_back({deckName(d), deckColour[d], 2, false, ofDeck(&HealthPoint::fillMs, d)});
+        panels[3].series.push_back({deckName(d), deckColour[d], 2, false, ofDeck(&HealthPoint::driftPpm, d)});
+        panels[4].series.push_back({deckName(d) + L" target", kDim, 1, false, ofDeck(&HealthPoint::targetMs, d)});
+        panels[4].series.push_back({deckName(d), deckColour[d], 2, false, ofDeck(&HealthPoint::fillMs, d)});
     }
 
     const int span = spanSeconds_;
@@ -434,6 +457,9 @@ void HealthWindow::paintGraphs(HDC dc, const RECT& rc) {
             yHi = std::max(10.0, niceCeil(hi));
             break;
         case Scale::Count:
+            yHi = std::max(1.0, niceCeil(hi));
+            break;
+        case Scale::Time:
             yHi = std::max(1.0, niceCeil(hi));
             break;
         case Scale::Fill:

@@ -22,6 +22,8 @@ public:
         std::function<std::wstring()> state, counters; // the texts: what runs, the counters
         std::function<void()> reset;                   // Reset counters
         std::function<int()> decks;                    // 1 or 2: the graphs' names of the lines
+        std::function<bool()> probeOn;                 // the Windows latency probe: runs, and its switch
+        std::function<void(bool)> setProbe;
     };
     HealthWindow(const HealthHistory& history, Source source);
     ~HealthWindow();
@@ -33,7 +35,7 @@ public:
     HWND hwnd() const { return hwnd_; }
 
 private:
-    static constexpr int kPanels = 4;
+    static constexpr int kPanels = 5;
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     static LRESULT CALLBACK graphProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
@@ -45,7 +47,8 @@ private:
 
     const HealthHistory& history_;
     Source source_;
-    HWND hwnd_ = nullptr, state_ = nullptr, counters_ = nullptr, span_ = nullptr, reset_ = nullptr, graph_ = nullptr;
+    HWND hwnd_ = nullptr, state_ = nullptr, counters_ = nullptr, span_ = nullptr, reset_ = nullptr, graph_ = nullptr,
+         probe_ = nullptr;
     HFONT font_ = nullptr, small_ = nullptr;
     UINT dpi_ = 96;
     int spanSeconds_ = 600;

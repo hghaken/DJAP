@@ -13,6 +13,7 @@ AudioEngine::AudioEngine() {
 
 void AudioEngine::prepare(double fs) {
     fs_ = fs;
+    lastStartNs_ = 0;
     decks_[0]->prepare(fs);
     decks_[1]->prepare(fs);
     decks_[0]->startFadeIn(); // a device starts in the middle of the music: no step at the start
@@ -33,6 +34,18 @@ void AudioEngine::process(const void* const* in, const SampleFormat* inFormat, v
         heaviestPermille_.store(0, std::memory_order_relaxed);
     }
     if (frames <= 0) return;
+    if (fs_ > 0.0) { // how late this period began: its start against the last one's plus a period
+        const long long startNs = std::chrono::duration_cast<std::chrono::nanoseconds>(t0.time_since_epoch()).count();
+        const double periodNs = frames / fs_ * 1e9;
+        periodUs_.store(static_cast<uint32_t>(periodNs / 1000.0), std::memory_order_relaxed);
+        const long long gapNs = startNs - lastStartNs_;
+        if (lastStartNs_ != 0 && gapNs < 1000000000LL) { // (a gap of a second: a stop and a start, not a late period)
+            const double lateUs = (gapNs - periodNs) / 1000.0;
+            if (lateUs > recentLateUs_.load(std::memory_order_relaxed))
+                recentLateUs_.store(static_cast<uint32_t>(std::min(lateUs, 1e9)), std::memory_order_relaxed);
+        }
+        lastStartNs_ = startNs;
+    }
     if (fs_ <= 0.0) {
         for (int c = 0; c < kChannels; ++c)
             if (out[c]) silence(outFormat[c], out[c], 0, frames);

@@ -98,6 +98,8 @@ public:
     // Both decks' periods together (blocks summed, heaviest = the larger).
     EngineHealth health() const;
     double takePeakPercent(); // the heaviest period of any stream since the last call (AudioEngine's)
+    double takeLateMs();      // how late the latest periods began (AudioEngine's), and the longest period
+    double periodMs() const;
     void resetHealth();
     // A stream stopped by itself (device unplugged, taken by another program in exclusive mode). Cleared by stop().
     bool failed() const;

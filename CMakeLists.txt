@@ -92,7 +92,7 @@ target_compile_options(miniaudio PRIVATE /W0)
 target_link_libraries(miniaudio PUBLIC ole32 winmm)
 
 # ---- Shared by the GUI and the command line: settings location, text conversion, audio devices ----
-add_library(apapp STATIC src/app/appstate.cpp src/app/mediafile.cpp src/app/sysaudio.cpp)
+add_library(apapp STATIC src/app/appstate.cpp src/app/mediafile.cpp src/app/sysaudio.cpp src/app/latencyprobe.cpp)
 target_include_directories(apapp PUBLIC src/app "${CMAKE_BINARY_DIR}/generated")
 ap_own(apapp)
 target_link_libraries(apapp PUBLIC apcore miniaudio shell32 ole32 mfplat mfreadwrite mfuuid)
@@ -142,6 +142,10 @@ add_executable(sysaudio_test tests/app/sysaudio_test.cpp)
 target_include_directories(sysaudio_test PRIVATE tests)
 ap_own(sysaudio_test)
 target_link_libraries(sysaudio_test PRIVATE apapp)
+add_executable(latencyprobe_test tests/app/latencyprobe_test.cpp)
+target_include_directories(latencyprobe_test PRIVATE tests)
+ap_own(latencyprobe_test)
+target_link_libraries(latencyprobe_test PRIVATE apapp)
 target_link_options(DJAPCmd PRIVATE /PDBALTPATH:%_PDB%)
 
 # ---- Plug-in for DJ software (src/plugin): the Steinberg SDK in third_party/vst3sdk (MIT; not committed) ----

@@ -108,6 +108,8 @@ public:
     EngineHealth health() const { return systemRunning() ? sys_.health() : engine_.health(); }
     void resetHealth();
     double takePeakPercent() { return systemRunning() ? sys_.takePeakPercent() : engine_.takePeakPercent(); }
+    double takeLateMs() { return systemRunning() ? sys_.takeLateMs() : engine_.takeLateMs(); }
+    double periodMs() const { return systemRunning() ? sys_.periodMs() : engine_.periodMs(); }
     // An automatic restart (after a driver reset request) that is still being tried, or that failed; empty when all
     // is well.
     const std::string& deviceError() const { return deviceError_; }
