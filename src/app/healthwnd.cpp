@@ -371,14 +371,16 @@ void HealthWindow::paintGraphs(HDC dc, const RECT& rc) {
                   {L"average", kGreen, 2, false, running(&HealthPoint::averagePercent)}},
                  L"Not running"};
     panels[1] = {L"Timing, ms", Scale::Time,
+                 // the thin Windows latency line last, on top: it lies close to audio late and hid under it (client,
+                 // 2026-11-05: "the Windows latency line does not come after ticking it")
                  {{L"period", kRed, 1, false, running(&HealthPoint::periodMs)},
+                  {L"audio late", kOrange, 2, true, running(&HealthPoint::lateMs)},
                   {L"Windows latency", kBlue, 1, true,
                    [](const HealthPoint& p, float& v) {
                        if (!p.probeOn) return false;
                        v = p.probeMs;
                        return true;
-                   }},
-                  {L"audio late", kOrange, 2, true, running(&HealthPoint::lateMs)}},
+                   }}},
                  L"Not running"};
     panels[2] = {L"Problems per second", Scale::Count,
                  {{L"over half", kAmber, 1, true, running(&HealthPoint::overHalf), true},
