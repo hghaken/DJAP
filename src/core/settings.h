@@ -52,6 +52,13 @@ struct PluginSlot {
     }
 };
 
+// The analysis window's scope (client, 2026-11-05: "save this value"): the input or the output, and the time across it.
+struct ScopeChoice {
+    bool input = false;
+    int ms = 50; // 1, 5, 10, 20, 50, 200 or 2000
+    bool operator==(const ScopeChoice& o) const { return input == o.input && ms == o.ms; }
+};
+
 class Settings {
 public:
     Settings(); // shipped presets, default audio settings
@@ -100,6 +107,8 @@ public:
     // without one opens centred on the screen (client, 2026-10-26)
     std::map<std::string, WindowPlace> windows;
     bool snapToBands = false; // the spectrum window: a dragged colour point snaps to the density bands' splits
+    // the analysis window's scope: deck A, deck B (the program), the plug-in's (every instance); merged three-way
+    ScopeChoice scope[3];
     bool showTooltips = true; // the explanations when the mouse rests on a control (all windows, the plug-in too)
     bool trayHintShown = false;  // the "still running in the notification area" balloon was shown once
     bool checkUpdates = true;    // ask GitHub once a day for a newer version (Setup window)

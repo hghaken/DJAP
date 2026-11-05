@@ -81,6 +81,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK(a.snapToBands == b.snapToBands && a.showTooltips == b.showTooltips);
     CHECK(a.checkUpdates == b.checkUpdates && a.updateUrl == b.updateUrl);
     CHECK(a.fallbackOutput == b.fallbackOutput && a.retryMinutes == b.retryMinutes);
+    for (int i = 0; i < 3; ++i) CHECK(a.scope[i] == b.scope[i]);
     CHECK(a.presets.size() == b.presets.size());
     for (size_t i = 0; i < a.presets.size() && i < b.presets.size(); ++i) {
         CHECK(a.presets[i].name == b.presets[i].name);
@@ -193,6 +194,8 @@ Settings busy() {
     s.trayHintShown = true;
     s.fallbackOutput = "Speakers (USB Audio)";
     s.retryMinutes = 10;
+    s.scope[0] = {true, 5};
+    s.scope[2] = {false, 2000};
     s.checkUpdates = false;
     s.updateUrl = "http://127.0.0.1:8765/latest.json";
     // shipped preset with values changed, among them the band count
@@ -674,6 +677,15 @@ void merged(const fs::path& dir) {
     CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
     CHECK(check.load(file));
     CHECK(!check.checkUpdates && !plugin.checkUpdates);
+    // the scopes: the plug-in's choice survives the program's next save, and the program's the plug-in's
+    plugin.scope[2] = {true, 5};
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    program.scope[0] = {false, 200};
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(check.load(file));
+    CHECK(check.scope[2] == (ScopeChoice{true, 5}) && check.scope[0] == (ScopeChoice{false, 200}));
+    CHECK(program.scope[2] == (ScopeChoice{true, 5}) && plugin.scope[0] == (ScopeChoice{false, 200}));
 
     // the plug-in's choices per instance (client, 2026-10-30): read back, merged per instance, kept by the program
     PluginSlot one;

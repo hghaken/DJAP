@@ -193,6 +193,13 @@ void AnalysisWindow::unregisterClass() {
     g_registered = false;
 }
 
+void AnalysisWindow::setScope(int d, bool input, int ms) {
+    if (d < 0 || d > 1) return;
+    scopeInput_[d] = input;
+    scopeMs_[d] = ms;
+    if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
 void AnalysisWindow::show(HWND owner) {
     if (!hwnd_) {
         HINSTANCE inst = moduleInstance();
@@ -315,7 +322,10 @@ LRESULT AnalysisWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             DestroyMenu(m);
             if (choice == 1 || choice == 2) scopeInput_[d] = choice == 1;
             if (choice >= 10 && choice < 17) scopeMs_[d] = spans[choice - 10];
-            if (choice) InvalidateRect(hwnd_, nullptr, FALSE);
+            if (choice) {
+                InvalidateRect(hwnd_, nullptr, FALSE);
+                if (scopeChanged_) scopeChanged_(d, scopeInput_[d], scopeMs_[d]);
+            }
             return 0;
         }
         break;

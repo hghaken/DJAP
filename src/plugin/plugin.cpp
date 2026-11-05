@@ -893,6 +893,11 @@ void Plugin::editPlain(ParamID id, double plain) {
     edit(id, p >= 0 ? normalizedOf(p, plain) : plain);
 }
 
+void Plugin::setScope(bool input, int ms) {
+    settings_.scope[2] = {input, ms};
+    saveSettings();
+}
+
 void Plugin::setSwitches(bool tooltips, bool checkUpdates) {
     settings_.showTooltips = tooltips;
     settings_.checkUpdates = checkUpdates;

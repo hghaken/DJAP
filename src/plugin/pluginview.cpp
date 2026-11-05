@@ -285,6 +285,10 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
         if (plugin_ && hwnd_) plugin_->openEditor(colour, GetAncestor(hwnd_, GA_ROOT), stage);
     });
     spectrumSource_.snap_ = plugin_->snapToBands();
+    graphsWnd_.setScope(0, plugin_->scope().input, plugin_->scope().ms);
+    graphsWnd_.onScopeChanged([this](int, bool input, int ms) {
+        if (plugin_) plugin_->setScope(input, ms);
+    });
     aboutWnd_.setPlugin(true);
     aboutWnd_.setBeatSource([this] { return &monitor_.analysis().scopeOut; });
     aboutWnd_.setUpdates(

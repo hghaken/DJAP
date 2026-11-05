@@ -326,6 +326,10 @@ std::string Settings::toText() const {
     for (const auto& [name, p] : windows)
         o << name << "=" << p.x << "," << p.y << "," << p.w << "," << p.h << "," << (p.maximised ? 1 : 0) << "\n";
     o << "SnapToBands=" << (snapToBands ? 1 : 0) << "\nTooltips=" << (showTooltips ? 1 : 0) << "\n";
+    o << "; The analysis window's scope: input or output, and the ms across it (deck A, deck B, the plug-in)\n";
+    for (int i = 0; i < 3; ++i)
+        o << (i == 0 ? "ScopeA" : i == 1 ? "ScopeB" : "PluginScope") << "=" << (scope[i].input ? "input" : "output") << ","
+          << scope[i].ms << "\n";
     o << "; 1 = the hint that the program keeps running in the notification area was shown\nTrayHintShown="
       << (trayHintShown ? 1 : 0) << "\n\n";
     o << "[Updates]\n; 1 = ask GitHub once a day for a newer version (installed only after a click)\nCheckUpdates="
@@ -487,6 +491,13 @@ void Settings::fromText(const std::string& text) {
             if (auto y = get("Window", "Y"))
                 if (toInt(*x, -1) >= 0) windows["Main"] = WindowPlace{toInt(*x, 0), toInt(*y, 0), 0, 0, false};
     if (auto v = get("Window", "SnapToBands")) snapToBands = toInt(*v, 0) != 0;
+    for (int i = 0; i < 3; ++i)
+        if (auto v = get("Window", i == 0 ? "ScopeA" : i == 1 ? "ScopeB" : "PluginScope")) {
+            const size_t comma = v->find(',');
+            scope[i].input = v->compare(0, comma, "input") == 0;
+            const int ms = comma == std::string::npos ? 50 : toInt(v->substr(comma + 1), 50);
+            scope[i].ms = ms == 1 || ms == 5 || ms == 10 || ms == 20 || ms == 200 || ms == 2000 ? ms : 50;
+        }
     if (auto v = get("Window", "Tooltips")) showTooltips = toInt(*v, 1) != 0;
     if (auto v = get("Window", "TrayHintShown")) trayHintShown = toInt(*v, 0) != 0;
     if (auto v = get("Updates", "CheckUpdates")) checkUpdates = toInt(*v, 1) != 0;
@@ -692,6 +703,10 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
     out.sortPresets();
     // the switches both can change (the plug-in's Setup window, client 2026-10-29): three-way like the lists - a
     // change this writer made since `base` is written, else the file's value stays (the other may have changed it)
+    for (int i = 0; i < 3; ++i) { // the scopes likewise: the program changes A and B, the plug-in its own
+        out.scope[i] = !(scope[i] == base.scope[i]) ? scope[i] : now.scope[i];
+        scope[i] = base.scope[i] = out.scope[i];
+    }
     for (bool Settings::*f : {&Settings::showTooltips, &Settings::checkUpdates, &Settings::pluginLink}) {
         out.*f = this->*f != base.*f ? this->*f : now.*f;
         this->*f = base.*f = out.*f;

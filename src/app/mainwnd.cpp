@@ -115,6 +115,11 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
                       }),
       spectrumWindow_(spectrumSource_) {
     // a click on a step in the analysis window: that deck's preset (or colour) window on the step's tab
+    for (int d = 0; d < 2; ++d) analysisWindow_.setScope(d, settings_.scope[d].input, settings_.scope[d].ms);
+    analysisWindow_.onScopeChanged([this](int d, bool input, int ms) {
+        settings_.scope[d] = {input, ms};
+        save();
+    });
     analysisWindow_.onOpenStage([this](int d, const std::string& stage, bool colour) {
         if (colour) colourEditor_.show(hwnd_, settings_.deck[d].colour, d, stage);
         else editor_.show(hwnd_, settings_.deck[d].preset, d, stage);

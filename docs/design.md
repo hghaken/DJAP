@@ -513,7 +513,9 @@ scope taking the width; a scope of the last 2 s (client, 2026-10-27: "an oscillo
 check for clipping, of the input and the output, chosen with a right-click"; then "the sines are too close
 together": 1 / 5 / 10 / 20 / 50 / 200 ms of the samples themselves - 50 by default; under 1 sample per pixel a line
 through the samples - ending at the newest rising zero crossing of the left channel within the last 50 ms (at least
-the span), or 2 s as buckets; `WaveScope` in monitor.h keeps the last 32768 frames and 400 buckets of 2 s with
+the span), or 2 s as buckets (the choice per deck kept in `[Window]` `ScopeA` / `ScopeB`, the plug-in's in
+`PluginScope` - client, 2026-11-05: "save this value"; merged three-way by `saveMerged`, so the program and the plug-in
+keep each other's); `WaveScope` in monitor.h keeps the last 32768 frames and 400 buckets of 2 s with
 each channel's lowest / highest sample and the samples at |x| >= 0.9999; linear -1 .. +1, red where they clipped, the
 limiter's ceiling for the output; the clip count always over 2 s); a goniometer of the output's last 43 ms (mono vertical, L / R on the
 diagonals) with, in the same panel right under it (client: "the three values in the same stereo graph, not

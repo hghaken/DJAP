@@ -809,7 +809,8 @@ The history is cleared at every start of the audio.
 The scope draws the waveform itself, sample by sample, so you can see what the meters only summarise: whether the
 sound reaches full scale and is cut off there.
 
-- **What it shows** - the title says which signal and how much time across. **Right-click** the scope to choose:
+- **What it shows** - the title says which signal and how much time across. **Right-click** the scope to choose
+  (DJAP remembers the choice per deck, and the plug-in its own):
   - *Scope of the input* (orange) - what comes into DJAP. Clipping here is already in the source - the music file,
     the DJ software's gain or the virtual cable's level - and DJAP cannot undo it: turn the source down.
   - *Scope of the output* (turquoise, the default) - what DJAP sends out, after the limiter.

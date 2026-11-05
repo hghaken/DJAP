@@ -66,6 +66,9 @@ public:
     bool snapToBands() const { return settings_.snapToBands; }   // the spectrum window's start (not saved by the plug-in)
     // The plug-in's Setup window: the two switches it shares with the program, merged into the settings file.
     void setSwitches(bool tooltips, bool checkUpdates);
+    // The analysis window's scope, kept in the shared settings file (every instance's; merged as the switches).
+    ScopeChoice scope() const { return settings_.scope[2]; }
+    void setScope(bool input, int ms);
     // The plug-in's Setup window: the plug-ins open in this DJ program keep the same settings (Settings::pluginLink);
     // switched on, every one takes the first one's.
     bool linked() const { return settings_.pluginLink; }

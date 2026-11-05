@@ -44,6 +44,11 @@ public:
     // the stage's tab (client, 2026-10-25).
     using OpenStage = std::function<void(int deck, const std::string& stage, bool colour)>;
     void onOpenStage(OpenStage f) { openStage_ = std::move(f); }
+    // The scope of deck d: the input or the output, the ms across it (1, 5, 10, 20, 50, 200, 2000) - from the settings;
+    // a choice in its right-click menu is told to onScopeChanged, which saves it (client, 2026-11-05).
+    void setScope(int d, bool input, int ms);
+    using ScopeChanged = std::function<void(int deck, bool input, int ms)>;
+    void onScopeChanged(ScopeChanged f) { scopeChanged_ = std::move(f); }
     // The module the window class belongs to: the program (default) or the plug-in DLL, which removes the class
     // again before it is unloaded.
     static void setModule(HINSTANCE instance);
@@ -75,6 +80,7 @@ private:
     double trail_[2][kTrail] = {};
     int trailPos_ = 0;
     OpenStage openStage_;
+    ScopeChanged scopeChanged_;
     // the scope of each deck: the input or the output (a right-click on it chooses), and where it was painted
     bool scopeInput_[2] = {false, false};
     int scopeMs_[2] = {50, 50}; // the time across it: 1, 5, 10, 20, 50, 200 or 2000 ms (the right-click menu)
