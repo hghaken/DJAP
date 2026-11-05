@@ -67,13 +67,16 @@ EQs are managed like loudness presets.
 - `DJAP.exe` - the GUI: two deck strips (loudness preset and EQ - one choice when both decks share them -, processing /
   bypass, meters for input and output loudness, true peak, the gain of every stage and the spectrum of input and
   output), a spectrum window (a click on a deck's spectrum: the EQ as a curve with points to drag, the
-  MB Compressor bands with their gains, the loudness preset and EQ lists and the four bass sliders - bass level,
-  enhancer, width and frequency), an analysis window (compressor curve, loudness and gain over the last minute,
+  MB Compressor bands with their gains, the loudness preset and EQ lists, the four bass sliders - bass level,
+  enhancer, width and frequency - and how long the spectrum is averaged), an analysis window (compressor curve, loudness and gain over the last minute,
   goniometer, correlation and stereo width), a loudness window with the stage switches and every parameter, a
   EQ window, tooltips on every control (they can be switched off), windows that open where they were left, and
   the Setup window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
-  decks the same loudness preset, start / stop), a Health window (latency, real-time health and line graphs of the last hour). With ASIO a deck's input may also come from a
+  decks the same loudness preset, start / stop, a lamp per device that shows whether it is there, a fallback output
+  for a device that goes away - a Bluetooth headset switched off - after trying it again for a few minutes, and back
+  when it returns, buttons to Windows' sound settings), a Health window (latency, real-time health, how late the
+  audio and Windows wake up, and line graphs of the last hour). With ASIO a deck's input may also come from a
   WASAPI, DirectSound or MME device (for example a player sending into a virtual cable): the two clocks' drift is
   corrected by a slightly adjusted read speed (at most 0.2 %), at the cost of a buffer of about 8-23 ms, shown
   with the measured drift. The outputs can follow the Windows volume and mute (the keyboard's volume keys; on by

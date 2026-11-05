@@ -722,7 +722,9 @@ is visible and 12 dB fills the bar.
 
 Each deck also copies every input and output frame into a second ring (four floats per frame - the only extra work on
 the audio thread). On the GUI thread: a 4096-point radix-2 FFT [19] with a Hann window [20], a new frame every 2048
-samples, power averaged over 0.3 s, shown at 256 log-spaced points from 20 Hz to 20 kHz (the loudest bin in each
+samples, power averaged with a time constant of 0.3 s (the spectrum window's *Averaging*: none, 0.1, 0.2, 0.3, 0.5, 1
+or 2 s - an exponential average of the power per bin, so a sudden drop shows slowly in dB: 20 dB down reads only
+about 3 dB lower a quarter of a second later at 0.3 s), shown at 256 log-spaced points from 20 Hz to 20 kHz (the loudest bin in each
 point's band, interpolated where the bins are wider than the points). A sine of amplitude A reads 20 log10(A) dB.
 
 ### 15.4 Stereo statistics
