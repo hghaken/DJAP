@@ -767,8 +767,17 @@ bool AudioWindow::startAudio(bool askExclusive) {
         }
         SysRoute routes[2];
         sysRoutesFrom(settings_, routes);
+        // a chosen output that is not there (a headset switched off): the fallback at once (client, 2026-11-05) -
+        // and back as soon as it is there (the main window's recovery)
+        std::vector<SysDevice> ins, outs;
+        std::string listErr;
+        if (SysAudio::devices(api, ins, outs, listErr)) fallbackRoutes(settings_, outs, routes);
         ok = audio_.startSystem(api, routes, settings_.sampleRate, static_cast<unsigned>(settings_.bufferSize),
                                 settings_.exclusive, settings_.driftCorrection, err);
+        // not started: the audio is still wanted - the main window tries again (its countdown, then the fallback) and
+        // says why in the status (client, 2026-11-05: a failed Start ended the tries)
+        settings_.startAudio = true;
+        return ok;
     }
     settings_.startAudio = ok;
     if (!ok) placement::messageBox(hwnd_, fromUtf8(err).c_str(), L"Start audio", MB_OK | MB_ICONERROR);

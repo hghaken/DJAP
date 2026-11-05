@@ -100,6 +100,7 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
           applyAll(); // routes, and deck B's preset when the presets were just linked
           editor_.refresh();
           colourEditor_.refresh();
+          recoverAudio(); // a Start that failed: the tries begin now (the countdown shows at once)
       }),
       healthWindow_(healthHistory_,
                     {[this] { return audioWindow_.healthState(); }, [this] { return audioWindow_.healthCounters(); },
@@ -217,11 +218,7 @@ bool MainWindow::startChosen(bool useFallback, const std::vector<SysDevice>& out
     } else {
         SysRoute routes[2];
         sysRoutesFrom(settings_, routes);
-        if (useFallback)
-            for (SysRoute& r : routes)
-                if (!r.output.empty() && std::none_of(outputs.begin(), outputs.end(),
-                                                      [&](const SysDevice& o) { return o.name == r.output; }))
-                    r.output = settings_.fallbackOutput;
+        if (useFallback) fallbackRoutes(settings_, outputs, routes);
         ok = audio_.startSystem(api, routes, settings_.sampleRate, static_cast<unsigned>(settings_.bufferSize),
                                 settings_.exclusive, settings_.driftCorrection, startError_);
     }
@@ -232,8 +229,9 @@ bool MainWindow::startChosen(bool useFallback, const std::vector<SysDevice>& out
 // Every 5 s (and at program start): the audio that should run and does not (client, 2026-11-05). DeviceRecovery says
 // what to do.
 std::wstring MainWindow::retryStatus() const {
-    if (!recovery_.trying() || !settings_.startAudio) return L"";
-    if (onFallback_ && audio_.deviceRunning()) return L"On fallback";
+    if (!settings_.startAudio) return L"";
+    if (onFallback_ && audio_.deviceRunning()) return L"On fallback"; // (also when Start went there at once)
+    if (!recovery_.trying()) return L"";
     const int left = static_cast<int>(std::ceil(
         recovery_.secondsLeft(static_cast<double>(GetTickCount64()) * 1e-3, settings_.retryMinutes * 60.0)));
     if (left <= 0) return L"Trying";
