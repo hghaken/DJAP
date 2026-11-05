@@ -737,7 +737,9 @@ Out line and the message say so; in the Setup window the fallback row sits right
 countdown behind Try again for ("4:32", "On fallback", "Trying" - client, 2026-11-05; `MainWindow::retryStatus`, read
 every refresh). Stop audio stays enabled while it tries, and ends it. Start audio in the Setup window (client, 2026-11-05: "no countdown,
 and at the start it falls back on the headset that was off already"): a chosen output that is not among the devices
-goes to the fallback at once (`fallbackRoutes`, the same rule as the recovery's), and a Start that fails (WASAPI /
+goes to the fallback at once (`fallbackRoutes`, the same rule as the recovery's) - and so at the program's start (client,
+2026-11-05: "an output not found at the start: jump to the fallback at once and start the audio"; `Facts::atStart`, set by
+`startSavedAudio`; a fallback not there yet just after logging on: the tries as ever), and a Start that fails (WASAPI /
 DirectSound / MME) no longer clears `StartAudio` nor shows a message box - the recovery takes over at once (the Setup
 window's `onChange_` calls `recoverAudio`) with its countdown and its message in the status. ASIO keeps its message box. `SysAudio::stalled`: a stream that
 plays without a period for 10 s counts as stopped - miniaudio stops only a default device on a state change, and warns

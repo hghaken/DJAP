@@ -25,6 +25,9 @@ public:
         bool keepTrying = true;          // no fallback and the time is over: go on trying (false: ASIO - each try
                                          // opens a driver, which may take the interface from another program)
         double retrySeconds = 300.0;
+        // the program's start: a chosen output that is not there goes to the fallback at once, as a Start in the Setup
+        // window does (client, 2026-11-05) - no time to try first
+        bool atStart = false;
     };
     // After this long a return that failed is tried again (a device can be listed before it can be opened).
     static constexpr double kReturnPause = 30.0;

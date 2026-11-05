@@ -91,6 +91,25 @@ int main() {
         CHECK(r.tick(315.0, none) == Action::Retry);
     }
     {
+        // the program's start with the chosen output not there: the fallback at once, back when it is there; without a
+        // usable fallback (none, or not there yet just after logging on) the tries as ever
+        DeviceRecovery r;
+        DeviceRecovery::Facts start = gone;
+        start.atStart = true;
+        CHECK(r.tick(0.0, start) == Action::StartFallback);
+        DeviceRecovery::Facts on = gone;
+        on.running = true;
+        on.onFallback = true;
+        CHECK(r.tick(5.0, on) == Action::None);
+        on.chosenOutputsThere = true;
+        on.fallbackUsable = false;
+        CHECK(r.tick(60.0, on) == Action::ReturnToChosen);
+        DeviceRecovery s;
+        DeviceRecovery::Facts notYet = start;
+        notYet.fallbackUsable = false;
+        CHECK(s.tick(0.0, notYet) == Action::Retry);
+    }
+    {
         // no fallback chosen: go on trying; the chosen device comes back after an hour
         DeviceRecovery r;
         DeviceRecovery::Facts f = gone;

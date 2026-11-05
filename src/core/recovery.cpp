@@ -22,6 +22,7 @@ DeviceRecovery::Action DeviceRecovery::tick(double now, const Facts& f) {
         trying_ = true;
         since_ = now;
     }
+    if (f.atStart && f.fallbackUsable) return Action::StartFallback;
     if (now - since_ < f.retrySeconds) return Action::Retry;
     if (f.fallbackUsable) return Action::StartFallback;
     if (f.keepTrying) return Action::Retry;

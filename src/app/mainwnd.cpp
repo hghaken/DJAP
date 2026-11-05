@@ -207,7 +207,11 @@ UINT MainWindow::showMessage() {
 
 void MainWindow::openAudioWindow() { audioWindow_.show(hwnd_); }
 
-void MainWindow::startSavedAudio() { recoverAudio(); }
+void MainWindow::startSavedAudio() {
+    programStart_ = true; // a chosen output that is not there: the fallback at once
+    recoverAudio();
+    programStart_ = false;
+}
 
 // The chosen devices; with `useFallback` the fallback output in the place of the outputs that are gone.
 bool MainWindow::startChosen(bool useFallback, const std::vector<SysDevice>& outputs) {
@@ -262,6 +266,7 @@ void MainWindow::recoverAudio() {
     f.running = audio_.deviceRunning();
     f.keepTrying = system;
     f.retrySeconds = settings_.retryMinutes * 60.0;
+    f.atStart = programStart_;
     SysRoute routes[2];
     sysRoutesFrom(settings_, routes);
     std::vector<SysDevice> inputs, outputs;
@@ -313,8 +318,12 @@ void MainWindow::recoverAudio() {
         }
         break;
     case DeviceRecovery::Action::StartFallback:
-        if (startChosen(true, outputs)) setMessage(gone + ": playing on \"" + settings_.fallbackOutput + "\" until it is back");
-        else setMessage(gone + "; the fallback output did not start either: " + startError_);
+        if (startChosen(true, outputs)) {
+            onFallback_ = true; // the countdown says so at once
+            setMessage(gone + ": playing on \"" + settings_.fallbackOutput + "\" until it is back");
+        } else {
+            setMessage(gone + "; the fallback output did not start either: " + startError_);
+        }
         break;
     case DeviceRecovery::Action::ReturnToChosen:
         if (startChosen(false, outputs)) {

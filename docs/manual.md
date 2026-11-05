@@ -471,8 +471,8 @@ the audio again (a short fade-out and fade-in).
 | **The LEDs** before the input, output and fallback lists | **Green**: the device is there (online). **Red**: it is not among the devices now - switched off, unplugged, out of reach. **Grey**: not known - an ASIO driver that is installed but not open. DJAP looks every 3 seconds while the Setup window is open. |
 | **Fallback output**, **Try again for** (WASAPI, DirectSound, MME) | When a device goes away while the audio runs - a Bluetooth headset switched off - DJAP tries the chosen devices again every 5 seconds, for the time chosen here (1, 2, 5 (default), 10 or 30 minutes). After it, the sound goes to the fallback output if a chosen output is still gone, and back by itself as soon as that output returns; the main window's route and the status say so. Behind *Try again for* a countdown shows the time left
 (*On fallback* while it plays there, *Trying* without a fallback). The row sits right under the input and output
-rows. *(none)*: no fallback, DJAP goes on trying. The same goes for a device that is not there when the audio starts at program start. When you press **Start audio**
-while a chosen output is not there (the headset is off), the sound goes to the fallback output at once, and to the
+rows. *(none)*: no fallback, DJAP goes on trying. When the audio starts with DJAP and a chosen output is not there, or you press **Start audio** while it is not there
+(the headset is off), the sound goes to the fallback output at once, and to the
 chosen output as soon as it is there. A Start that fails (WASAPI, DirectSound, MME) shows why in the status and keeps
 trying, with the countdown. **Stop audio** ends the tries. Do not choose the virtual cable you use as an input: DJAP would hear itself, so it does not use such a fallback. With ASIO there is no fallback (the driver is the only output); a stopped input is tried again for 5 minutes. |
 

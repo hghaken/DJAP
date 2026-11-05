@@ -147,6 +147,7 @@ private:
     DeviceRecovery recovery_; // a device that went away, or was not there at the start: try again, then the fallback
     std::string startError_;  // why the last start failed
     bool onFallback_ = false; // at the last recoverAudio()
+    bool programStart_ = false; // the next recoverAudio() is the program's start (startSavedAudio)
     std::wstring retryStatus() const; // the Setup window's countdown
     void recoverAudio();      // every 5 s
     bool startChosen(bool useFallback, const std::vector<SysDevice>& outputs);
