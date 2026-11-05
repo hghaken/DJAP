@@ -56,7 +56,8 @@ add_library(apcore STATIC
     src/core/analysis.cpp
     src/core/monitor.cpp
     src/core/colour.cpp
-    src/core/engine.cpp)
+    src/core/engine.cpp
+    src/core/healthhistory.cpp)
 target_include_directories(apcore PUBLIC src/core)
 ap_own(apcore)
 
@@ -118,6 +119,7 @@ add_executable(DJAP WIN32
     src/app/tray.cpp
     src/app/aboutwnd.cpp
     src/app/analysiswnd.cpp
+    src/app/healthwnd.cpp
     src/app/winvolume.cpp
     src/app/theme.cpp
     src/app/placement.cpp

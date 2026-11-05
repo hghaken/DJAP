@@ -77,6 +77,8 @@ void AudioEngine::process(const void* const* in, const SampleFormat* inFormat, v
     lastPermille_.store(permille, std::memory_order_relaxed);
     if (permille > heaviestPermille_.load(std::memory_order_relaxed))
         heaviestPermille_.store(permille, std::memory_order_relaxed);
+    if (permille > recentPeakPermille_.load(std::memory_order_relaxed)) // (the GUI's exchange may lose one period: a graph)
+        recentPeakPermille_.store(permille, std::memory_order_relaxed);
     if (permille > 500) overHalf_.store(overHalf_.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
     if (permille > 1000) late_.store(late_.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
     blocks_.store(blocks_.load(std::memory_order_relaxed) + 1, std::memory_order_release);

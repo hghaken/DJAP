@@ -34,7 +34,7 @@ int idOf(int d, int item) { return 1000 + 100 * d + item; }
 
 // commands of the right-click and notification-area menus (also sent by GUI tests: 100 setup, 102 exit, 103
 // analysis, 104 open)
-enum MenuId { mAudio = 100, mAbout, mExit, mAnalysis, mOpen, mSpectrum }; // 103 / 105: GUI tests open the windows
+enum MenuId { mAudio = 100, mAbout, mExit, mAnalysis, mOpen, mSpectrum, mHealth }; // 103 / 105: GUI tests open the windows
 
 std::wstring deckName(int d) { return d == 0 ? L"Deck A" : L"Deck B"; }
 
@@ -101,6 +101,9 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
           editor_.refresh();
           colourEditor_.refresh();
       }),
+      healthWindow_(healthHistory_,
+                    {[this] { return audioWindow_.healthState(); }, [this] { return audioWindow_.healthCounters(); },
+                     [this] { audio_.resetHealth(); }, [this] { return settings_.decks; }}),
       graphs_(settings, audio), analysisWindow_(graphs_),
       spectrumSource_(settings, graphs_, [&audio] { return audio.sampleRate(); },
                       [this](bool saveNow) { // a colour point or band handle dragged, a list, snap switched
@@ -136,6 +139,7 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     testRun_ = testRun;
     Tooltips::setEnabled(settings_.showTooltips); // before the first window makes its tooltips
     audioWindow_.setTestRun(testRun);
+    if (testRun && GetEnvironmentVariableW(L"DJAP_HEALTH_DEMO", nullptr, 0)) fillHealthDemo();
     registerMeterView(instance);
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof wc;
@@ -316,6 +320,7 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             updateMeters();
             analysisWindow_.refresh();
             spectrumWindow_.refresh();
+            sampleHealth();
             if (ticks_++ % 10 == 0) {
                 measureCpu();
                 updateStatus();
@@ -539,6 +544,10 @@ void MainWindow::command(int id, int code) {
         audioWindow_.show(hwnd_);
         return;
     }
+    if (id == mHealth) {
+        healthWindow_.show(hwnd_);
+        return;
+    }
     if (id == mAnalysis) {
         analysisWindow_.show(hwnd_);
         return;
@@ -671,6 +680,59 @@ void MainWindow::updateMeters() {
         for (int k = 0; k < 4; ++k) data.autoDb[k] = data.m.autoToneDb[k];
         data.fs = audio_.sampleRate() > 0 ? audio_.sampleRate() : 48000.0;
         setMeterView(strips_[d].meter, data);
+    }
+}
+
+// Once a second: the audio's health into the history of the Health window's graphs.
+void MainWindow::sampleHealth() {
+    const ULONGLONG now = GetTickCount64();
+    if (healthLast_ != 0 && now - healthLast_ < 1000) return;
+    const double seconds = healthLast_ != 0 ? static_cast<double>(now - healthLast_) * 1e-3 : 1.0;
+    healthLast_ = now;
+    HealthReading r;
+    r.running = audio_.audioActive();
+    if (r.running) {
+        const EngineHealth h = audio_.health();
+        r.peakPercent = audio_.takePeakPercent();
+        r.busySeconds = h.busySeconds;
+        r.overHalf = h.overHalf;
+        r.late = h.late;
+        r.refused = h.refused;
+#if AP_HAVE_ASIO
+        r.resyncs = audio_.host().resyncs();
+        r.overloads = audio_.host().overloads();
+#endif
+        for (int d = 0; d < 2; ++d) {
+            if (!audio_.asyncInput(d)) continue;
+            const AsyncInputState a = audio_.asyncState(d);
+            r.input[d].on = a.active; // (filling up after the start or an underrun: no drift or fill to speak of)
+            r.input[d].driftPpm = a.driftPpm;
+            r.input[d].fillMs = a.fillMs;
+            r.input[d].targetMs = a.targetMs;
+            r.input[d].underruns = a.underruns;
+            r.input[d].overruns = a.overruns;
+        }
+    }
+    healthHistory_.add(r, seconds);
+    healthWindow_.refresh();
+}
+
+void MainWindow::fillHealthDemo() {
+    HealthReading r;
+    r.running = true;
+    for (int t = 0; t < 900; ++t) {
+        r.peakPercent = 18.0 + 6.0 * std::sin(t * 0.05) + (t % 97 == 0 ? 25.0 : 0.0);
+        r.busySeconds += 0.06 + 0.01 * std::sin(t * 0.03);
+        r.overHalf += t == 400 || t == 640 ? 1 : 0;
+        r.late += t == 640 ? 1 : 0;
+        for (int d = 0; d < 2; ++d) {
+            r.input[d].on = true;
+            r.input[d].driftPpm = (d == 0 ? -29.0 : 12.0) + 1.5 * std::sin(t * 0.01 + d);
+            r.input[d].targetMs = d == 0 ? 13.2 : 9.5;
+            r.input[d].fillMs = r.input[d].targetMs + 0.6 * std::sin(t * 0.04 + d);
+            r.input[d].underruns += d == 1 && t == 640 ? 1 : 0;
+        }
+        healthHistory_.add(r, 1.0);
     }
 }
 
@@ -834,6 +896,7 @@ void MainWindow::updateEvent(WPARAM what) {
 void MainWindow::windowMenu(int x, int y) {
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, mAudio, L"&Setup...");
+    AppendMenuW(m, MF_STRING, mHealth, L"&Health...");
     AppendMenuW(m, MF_STRING, mAbout, L"&About DJAP...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, mExit, L"Shut&down");
@@ -845,6 +908,7 @@ void MainWindow::trayMenu(int x, int y) {
     HMENU m = CreatePopupMenu();
     AppendMenuW(m, MF_STRING, mOpen, L"&Open DJAP");
     AppendMenuW(m, MF_STRING, mAudio, L"&Setup...");
+    AppendMenuW(m, MF_STRING, mHealth, L"&Health...");
     AppendMenuW(m, MF_STRING, mAbout, L"&About DJAP...");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(m, MF_STRING, mExit, L"Shut&down");

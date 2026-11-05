@@ -680,19 +680,31 @@ stream. Any other ini value is Auto. The processing itself still adds only the l
 routes on miniaudio's null devices, Auto and Always for one device (`SysAudio::assumeOneDevice`), and a start with a
 device that is not there.
 
+Health window (`healthwnd`; client, 2026-11-05: "the health part in a window of its own, from the right-click menu, with
+line graphs of the health values"): the main window's and the tray's menu, `Health...`. On the metal what runs (per deck
+the route, the latency, the drift; the text `AudioWindow::healthState` also builds the Setup window's status from), the
+counters (periods, heaviest / last % of a period, over half, late, answered with silence, driver resyncs and overloads),
+Reset counters and the time shown (1 minute, 10 minutes, 1 hour); under them four line graphs in a dark panel, painted
+through a bitmap: processing (peak and average per second, % of a period, the lines at 50 and 100 %), problems per second
+with their totals in the time shown, clock drift (ppm per deck) and drift buffer (fill and target per deck). `HealthHistory`
+(`src/core`, tested) keeps a point per second for an hour, fed from the main window's timer also while the window is
+closed; its counts are the counters' growth, so Reset counters or a new stream leave no spike. The audio thread's new
+`takePeakPercent` (one more relaxed atomic, a store only when it grows; the GUI's exchange can lose one period, harmless
+for a graph) gives the peak per second: the counters' `heaviest` is the worst since the last reset. A screen column of
+several seconds keeps the highest for peaks and problems, the mean for the rest. `DJAP_HEALTH_DEMO` (only in a test run:
+`--ini` / `--simulate`) fills the history with example values for a picture of every line (`docs/images/health.jpg`).
+
 Setup window (`audiodlg`; client 2026-10-25: "all settings in one window, no Audio / Help menus; a right-click on the main window: Exit and Setup" - the main window has no menu bar, a right-click anywhere on it opens Setup... / Shutdown (called Exit until 2026-10-26); the window was the Audio window): limiter look-ahead (0..5 ms, both decks), start with Windows (a check box; greyed in test runs), and the audio API (client 2026-10-27: Start / Stop right under
-Look-ahead / Oversampling, the switches below them - the daily update check among them, without a heading - and one
-Health section at the bottom: the state text, as high as its lines, then the counters and Reset counters) and, for WASAPI, the exclusive switch. ASIO:
+Look-ahead / Oversampling, the switches below them - the daily update check among them, without a heading - and a
+status at the bottom: whether the audio runs and any message, as high as its lines; until 2026-11-05 a Health section,
+now the Health window, below) and, for WASAPI, the exclusive switch. ASIO:
 "Deck inputs" (ASIO input pairs, or WASAPI / DirectSound / MME devices, 6.1), the driver (installed drivers from the
 registry), Open /
 Close driver (opening asks first: it takes the interface from other programs), Control panel, the input and
 output channel pair of each deck (with the driver's channel names once it is open; pairs must differ), sample rate
 (the driver's own when it refuses the one asked for), buffer size (the driver's preferred, or the sizes its
 granularity allows), Start / Stop audio, beside them Audio properties and Sound settings (client, 2026-11-05: Windows'
-Sound window, `control.exe mmsys.cpl,,0`, and its settings page, `ms-settings:sound`), the latency (input + output +
-processing) and the health counters
-(periods, heaviest / last % of a period, over half, late, answered with silence, driver resyncs and overloads,
-reset). Choices are saved at once; while the audio runs, a new device, channel pair, sample rate, buffer size,
+Sound window, `control.exe mmsys.cpl,,0`, and its settings page, `ms-settings:sound`). Choices are saved at once; while the audio runs, a new device, channel pair, sample rate, buffer size,
 deck-input API or the exclusive switch is applied at once by starting the audio again (client, 2026-10-25: a deck
 input changed while running had only been saved, so the deck kept recording the old device); `StartAudio` remembers the user's last Start (1) or Stop / Close driver /
 other API (0) and starts the audio with the same choices at the next program start (client, 2026-10-25: "the audio

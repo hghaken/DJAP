@@ -40,6 +40,9 @@ public:
     // Messages of the main window shown under the state too (a start that is retried, settings that could not be
     // saved) - the status bar shows only the Windows volume and the CPU use (client, 2026-10-27).
     void setNotes(const std::wstring& notes) { notes_ = notes; }
+    // For the Health window: what runs (per deck: the route, the latency, the drift), with any message, and the counters.
+    std::wstring healthState() const;
+    std::wstring healthCounters() const;
 
 private:
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
@@ -53,6 +56,8 @@ private:
     // Starts (or, while running, restarts) the audio with the settings; asks before an exclusive open when asked to.
     bool startAudio(bool askExclusive);
     void readChoices(); // combos -> settings
+    void describe(std::wstring& info, std::wstring& state) const; // the driver's or the devices' line, what runs
+    std::wstring messages() const;                                // a device's error, the main window's notes
     bool asio() const;
     bool mixed() const; // ASIO, with the decks' inputs from devices of another API
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
@@ -66,8 +71,7 @@ private:
     HWND inPeriod_ = nullptr; // ASIO with WASAPI inputs: their period (in drift_'s place, which ASIO does not use)
     HWND driver_ = nullptr, open_ = nullptr, close_ = nullptr, panel_ = nullptr, info_ = nullptr;
     HWND inA_ = nullptr, outA_ = nullptr, inB_ = nullptr, outB_ = nullptr, rate_ = nullptr, buffer_ = nullptr;
-    HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, health_ = nullptr, resetHealth_ = nullptr,
-         note_ = nullptr;
+    HWND start_ = nullptr, stop_ = nullptr, state_ = nullptr, note_ = nullptr;
     HWND soundPanel_ = nullptr, soundSettings_ = nullptr; // Windows' Sound window and its Sound settings page
     HWND look_ = nullptr, startup_ = nullptr; // look-ahead, start with Windows
     HWND oversampling_ = nullptr; // the soft clipper's and the exciter's

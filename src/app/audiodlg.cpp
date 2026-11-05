@@ -21,7 +21,7 @@ namespace {
 
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
-          idResetHealth, idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
+          idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
           idCheckUpdates, idTooltips, idDrift, idInPeriod, idMono, idSoundPanel, idSoundSettings };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
@@ -160,7 +160,7 @@ void AudioWindow::createControls() {
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
     };
     const wchar_t* labels[14] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
-                                 L"Sample rate", L"Buffer size",  L"Health",        L"Audio API",    L"Deck inputs",
+                                 L"Sample rate", L"Buffer size",  L"Status",        L"Audio API",    L"Deck inputs",
                                  L"Processing",  L"Look-ahead",   L"Updates",       L"Oversampling"};
     for (int i = 0; i < 14; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
     const DWORD combo = CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP;
@@ -194,8 +194,6 @@ void AudioWindow::createControls() {
     soundSettings_ = make(L"BUTTON", L"Sound settings", BS_OWNERDRAW | WS_TABSTOP, idSoundSettings);
     state_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY, 0);
     stateShown_.clear();
-    health_ = make(L"STATIC", L"", SS_LEFT | SS_NOTIFY, 0);
-    resetHealth_ = make(L"BUTTON", L"Reset counters", BS_OWNERDRAW | WS_TABSTOP, idResetHealth);
     look_ = make(WC_COMBOBOXW, L"", combo, idLook);
     oversampling_ = make(WC_COMBOBOXW, L"", combo, idOversampling);
     startup_ = make(L"BUTTON", L"Start DJAP when Windows starts (in the notification area, with the audio of the last "
@@ -212,7 +210,7 @@ void AudioWindow::createControls() {
                  L"to speakers.",
                  SS_LEFT, 0);
 
-    for (HWND b : {open_, close_, panel_, start_, stop_, soundPanel_, soundSettings_, resetHealth_}) theme::makeButton(b);
+    for (HWND b : {open_, close_, panel_, start_, stop_, soundPanel_, soundSettings_}) theme::makeButton(b);
     for (HWND c : {decks_, api_, inputs_, drift_, inPeriod_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
@@ -237,7 +235,7 @@ void AudioWindow::createControls() {
                          L"buffer). 8, 6, 5 or 4 ms save about 4, 8, 10 or 12 ms - shared through Windows' low-latency "
                          L"mode, exclusive (the check box above) as the device's own period. Shared it "
                          L"needs a device that has the mode, set in Windows' sound settings to the same sample rate as "
-                         L"the ASIO interface; otherwise the input keeps 10 ms (Health then says so). A virtual cable's "
+                         L"the ASIO interface; otherwise the input keeps 10 ms (the Health window then says so). A virtual cable's "
                          L"own timer must tick at least 3-4 times per period (measured: its timer at 3 ms - 8 ms or "
                          L"more; at 1 ms - 4 ms or more); shorter gives clicks and distorted sound. Try it while you "
                          L"listen, and watch the underruns.");
@@ -267,7 +265,7 @@ void AudioWindow::createControls() {
                      L"the driver accepts it, else it keeps the interface's own rate. Other APIs convert when a "
                      L"device runs at another rate.");
     tips_.add(buffer_, L"Frames per period. Smaller = lower latency, but more risk of dropouts when the PC is busy "
-                       L"(watch Health: late periods are dropouts). ASIO: the driver's preferred size or a size it "
+                       L"(watch the Health window: late periods are dropouts). ASIO: the driver's preferred size or a size it "
                        L"allows. Other APIs: the period asked of Windows.");
     tips_.add(link_, L"On: deck B always uses deck A's loudness preset and EQ - the main window then shows one set of "
                      L"controls (deck A's), and its Bypass counts for both decks.");
@@ -289,15 +287,8 @@ void AudioWindow::createControls() {
                            L"Windows' own window: DJAP changes nothing there.");
     tips_.add(soundSettings_, L"Opens Windows' Sound settings: where Windows plays its sound (for example a virtual cable "
                               L"as the input of DJAP) and its volume. Windows' own page: DJAP changes nothing there.");
-    tips_.add(state_, L"What runs now: sample rate and period, and per deck the latency from input to output - the "
-                      L"device's input and output buffers plus the processing (the limiter look-ahead). With an "
-                      L"input of another API also its drift buffer, the measured clock drift in ppm, and underruns "
-                      L"(the input fell behind: a moment of silence) and overruns (input blocks dropped).");
-    tips_.add(health_, L"Periods: device periods processed. Heaviest / last: processing time in % of a period. Over "
-                       L"half: periods that needed more than half their time (a warning). Late: periods not ready "
-                       L"in time - a dropout. Answered with silence: the engine was not ready. Driver resyncs and "
-                       L"overloads: reported by the ASIO driver.");
-    tips_.add(resetHealth_, L"Sets the health counters back to zero.");
+    tips_.add(state_, L"Whether the audio runs, and a message when something is wrong. The latency, the drift, the "
+                      L"counters and their graphs are in the Health window: right-click the main window, Health...");
     tips_.add(look_, L"How far the limiter looks ahead, for both decks: the only delay the processing adds. "
                      L"Longer catches peaks more gently; every choice above 0 limits the true peak. 0 ms = no delay, "
                      L"the limiter then works on the sample peak only. Changed at once with a short fade.");
@@ -326,7 +317,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, inPeriod_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, soundPanel_, soundSettings_, state_, health_, resetHealth_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
+                   start_, stop_, soundPanel_, soundSettings_, state_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -412,16 +403,12 @@ void AudioWindow::layout() {
     }
     ShowWindow(labels_[12], SW_HIDE); // (the former "Updates" heading)
     y += g;
-    // one section, Health: what runs (a line for the stream, then one per deck that may wrap to two, and a line for
-    // a message - as many lines as the text takes, refresh()), then the counters with Reset counters beside them
-    // (client, 2026-10-27: one heading)
+    // the status: whether the audio runs and any message, as many lines as the text takes (refresh()); the rest of
+    // the former Health section is in its own window (healthwnd.*; client, 2026-11-05)
     const int stateLines = stateLines_;
     MoveWindow(labels_[7], m, y, labelW, lh, TRUE);
     MoveWindow(state_, m + labelW + g, y, W - labelW - g, stateLines * lh, TRUE);
-    y += stateLines * lh + g;
-    MoveWindow(health_, m + labelW + g, y, W - labelW - bw - 2 * g, 3 * lh, TRUE);
-    MoveWindow(resetHealth_, m + W - bw, y, bw, h, TRUE);
-    y += std::max(3 * lh, h) + 2 * g;
+    y += stateLines * lh + 2 * g;
     MoveWindow(note_, m, y, W, 2 * lh, TRUE);
     y += 2 * lh + m;
     // the window is as high as its content (one channel needs less than two decks)
@@ -855,9 +842,6 @@ void AudioWindow::command(int id, int code) {
         audio_.stopDevice();
         settings_.startAudio = false;
         break;
-    case idResetHealth:
-        audio_.resetHealth();
-        break;
     case idSoundPanel: // the classic Sound window, on its Playback tab
         ShellExecuteW(hwnd_, nullptr, L"control.exe", L"mmsys.cpl,,0", nullptr, SW_SHOWNORMAL);
         break;
@@ -879,16 +863,9 @@ UpdateView AudioWindow::updateView() const {
     return v;
 }
 
-void AudioWindow::refresh() {
-    if (!hwnd_) return;
+void AudioWindow::describe(std::wstring& info, std::wstring& state) const {
     const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
-    EnableWindow(close_, asio() && open);
-    EnableWindow(panel_, asio() && open);
-    EnableWindow(stop_, running);
-    EnableWindow(start_, !running);
-    EnableWindow(open_, asio() && !running);
-    std::wstring info, state = audio_.simulating() ? L"Not running (a simulation runs: starting the audio ends it)."
-                                                   : L"Not running.";
+    state = audio_.simulating() ? L"Not running (a simulation runs: starting the audio ends it)." : L"Not running.";
     if (asio()) {
         info = L"The driver is not open: the lists show the saved choices (pairs up to 16 channels).";
 #if AP_HAVE_ASIO
@@ -998,8 +975,23 @@ void AudioWindow::refresh() {
             }
         }
     }
-    if (!audio_.deviceError().empty()) state += L"\n" + fromUtf8(audio_.deviceError());
-    if (!notes_.empty()) state += L"\n" + notes_;
+}
+
+std::wstring AudioWindow::messages() const {
+    std::wstring m;
+    if (!audio_.deviceError().empty()) m += L"\n" + fromUtf8(audio_.deviceError());
+    if (!notes_.empty()) m += L"\n" + notes_;
+    return m;
+}
+
+std::wstring AudioWindow::healthState() const {
+    std::wstring info, state;
+    describe(info, state);
+    return state + messages();
+}
+
+std::wstring AudioWindow::healthCounters() const {
+    const bool running = audio_.deviceRunning();
     const EngineHealth h = audio_.health();
     wchar_t hb[400];
     long long resyncs = 0, overloads = 0;
@@ -1012,6 +1004,23 @@ void AudioWindow::refresh() {
              L"(dropout) %lld   answered with silence %lld\nDriver resyncs %lld   overloads %lld",
              running ? h.blocks : 0LL, running ? h.heaviestPercent : 0.0, running ? h.lastPercent : 0.0,
              running ? h.overHalf : 0LL, running ? h.late : 0LL, running ? h.refused : 0LL, resyncs, overloads);
+    return hb;
+}
+
+void AudioWindow::refresh() {
+    if (!hwnd_) return;
+    const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
+    EnableWindow(close_, asio() && open);
+    EnableWindow(panel_, asio() && open);
+    EnableWindow(stop_, running);
+    EnableWindow(start_, !running);
+    EnableWindow(open_, asio() && !running);
+    std::wstring info, full;
+    describe(info, full);
+    // the first line only: the routes, the latency and the counters are in the Health window
+    std::wstring state = full.substr(0, full.find(L'\n'));
+    if (!state.empty() && state.back() == L':') state.pop_back(); // ("Running (WASAPI, decks at 48 kHz):")
+    state += messages();
     SetWindowTextW(info_, info.c_str());
     if (state != stateShown_) {
         stateShown_ = state;
@@ -1036,7 +1045,6 @@ void AudioWindow::refresh() {
             layout();
         }
     }
-    SetWindowTextW(health_, hb);
 }
 
 } // namespace ap

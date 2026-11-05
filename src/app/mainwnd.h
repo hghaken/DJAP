@@ -10,6 +10,7 @@
 #include "aboutwnd.h"
 #include "analysiswnd.h"
 #include "audiodlg.h"
+#include "healthwnd.h"
 #include "audioio.h"
 #include "editwnd.h"
 #include "settings.h"
@@ -100,6 +101,10 @@ private:
     theme::Metal metal_;
     EditWindow editor_, colourEditor_;
     AudioWindow audioWindow_;
+    HealthHistory healthHistory_; // a point per second, also while the Health window is closed
+    HealthWindow healthWindow_;
+    ULONGLONG healthLast_ = 0;
+    void sampleHealth();
     // what the analysis window shows: the decks of the settings and the audio
     class Graphs : public AnalysisSource {
     public:
@@ -131,6 +136,7 @@ private:
     int audioCore_ = -1;
     unsigned long long quietSince_ = 0; // GetTickCount64 when the decks last had sound (or the audio stopped)
     void measureCpu();
+    void fillHealthDemo(); // a GUI test's picture with every line in the graphs (DJAP_HEALTH_DEMO, test runs only)
     TrayIcon tray_;
     HICON iconSmall_ = nullptr;
     bool quitting_ = false; // Shutdown chosen (or Windows ends the session): WM_CLOSE really closes

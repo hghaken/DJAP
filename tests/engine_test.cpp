@@ -424,6 +424,9 @@ void healthAndSafety() {
                 h.blocks, h.heaviestPercent, h.lastPercent, h.overHalf, h.late, gAllocs.load(), csr);
     CHECK(h.blocks == 750);
     CHECK(h.heaviestPercent > 0.0 && h.heaviestPercent >= h.lastPercent);
+    // the heaviest since the last look: a look takes it, the next one finds nothing new
+    CHECK(e.takePeakPercent() >= h.heaviestPercent); // (a reset leaves it: the first period may have been heavier)
+    CHECK(e.takePeakPercent() == 0.0);
     CHECK(gAllocs.load() == 0);
     CHECK(csr == 0x1F80);
     // the processing time in all, in seconds (tenth outside review: its unit and double counting untested): at least

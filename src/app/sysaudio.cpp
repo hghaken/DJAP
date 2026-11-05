@@ -107,7 +107,7 @@ struct DeckStream {
     float l[AudioEngine::kChunk] = {}, r[AudioEngine::kChunk] = {};
     // health, written by the stream's thread
     std::atomic<long long> blocks{0}, overHalf{0}, late{0};
-    std::atomic<uint32_t> heaviest{0}, last{0};
+    std::atomic<uint32_t> heaviest{0}, last{0}, recentPeak{0};
     std::atomic<long long> busyNs{0};
     std::atomic<int> core{-1};
     std::atomic<bool> resetHealth{false}, stopping{false}, failed{false};
@@ -133,6 +133,7 @@ void account(DeckStream* s, std::chrono::steady_clock::time_point t0, ma_uint32 
     const uint32_t permille = static_cast<uint32_t>(std::min(1e9, used / (frames / s->rate) * 1000.0));
     s->last.store(permille, std::memory_order_relaxed);
     if (permille > s->heaviest.load(std::memory_order_relaxed)) s->heaviest.store(permille, std::memory_order_relaxed);
+    if (permille > s->recentPeak.load(std::memory_order_relaxed)) s->recentPeak.store(permille, std::memory_order_relaxed);
     if (permille > 500) s->overHalf.store(s->overHalf.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
     if (permille > 1000) s->late.store(s->late.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
     s->blocks.store(s->blocks.load(std::memory_order_relaxed) + 1, std::memory_order_release);
@@ -656,6 +657,13 @@ EngineHealth SysAudio::health() const {
         if (h.core < 0) h.core = s->core.load(std::memory_order_relaxed); // (each deck has a thread: deck A's)
     }
     return h;
+}
+
+double SysAudio::takePeakPercent() {
+    uint32_t peak = 0;
+    for (const auto& s : impl_->decks)
+        if (s) peak = std::max(peak, s->recentPeak.exchange(0, std::memory_order_relaxed));
+    return peak / 10.0;
 }
 
 void SysAudio::resetHealth() {

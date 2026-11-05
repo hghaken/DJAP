@@ -97,6 +97,7 @@ public:
     SysStreamInfo info(int deck) const;
     // Both decks' periods together (blocks summed, heaviest = the larger).
     EngineHealth health() const;
+    double takePeakPercent(); // the heaviest period of any stream since the last call (AudioEngine's)
     void resetHealth();
     // A stream stopped by itself (device unplugged, taken by another program in exclusive mode). Cleared by stop().
     bool failed() const;

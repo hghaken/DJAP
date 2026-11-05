@@ -73,7 +73,7 @@ EQs are managed like loudness presets.
   EQ window, tooltips on every control (they can be switched off), windows that open where they were left, and
   the Setup window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
-  decks the same loudness preset, start / stop, latency, real-time health). With ASIO a deck's input may also come from a
+  decks the same loudness preset, start / stop), a Health window (latency, real-time health and line graphs of the last hour). With ASIO a deck's input may also come from a
   WASAPI, DirectSound or MME device (for example a player sending into a virtual cable): the two clocks' drift is
   corrected by a slightly adjusted read speed (at most 0.2 %), at the cost of a buffer of about 8-23 ms, shown
   with the measured drift. The outputs can follow the Windows volume and mute (the keyboard's volume keys; on by

@@ -18,7 +18,7 @@ software (chapter 9) came with the version after 0.1.100.
 5. [The Setup window](#5-the-setup-window)
 6. [Loudness presets and the loudness window](#6-loudness-presets-and-the-loudness-window)
 7. [EQs and the EQ window](#7-eqs-and-the-eq-window)
-8. [The analysis and spectrum windows](#8-the-analysis-and-spectrum-windows)
+8. [The analysis, spectrum and Health windows](#8-the-analysis-spectrum-and-health-windows)
 9. [The plug-in for DJ software](#9-the-plug-in-for-dj-software)
 10. [Latency and real-time health](#10-latency-and-real-time-health)
 11. [Updates](#11-updates)
@@ -117,7 +117,7 @@ DJAP lives in the notification area (the icons next to the clock). Closing or mi
 there; **the audio goes on**. The first time this happens a message says so.
 
 - **Click** the icon to show the window again.
-- **Right-click** the icon for its menu: *Open DJAP*, *Setup...*, *About DJAP...*, *Shutdown*.
+- **Right-click** the icon for its menu: *Open DJAP*, *Setup...*, *Health...*, *About DJAP...*, *Shutdown*.
 - The icon's tooltip shows whether the audio runs and each deck's loudness preset and EQ (or "bypass").
 
 DJAP really ends only with **Shutdown** (from the icon's menu or the main window's right-click menu), when Windows shuts
@@ -336,7 +336,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 - In VAC's panel the cable's row shows *Current format* **ExtPCM/44100/24/2** (the format in use), *Rc stms* and
   *Pb stms* 1 or more (DJAP recording, the player playing), and empty **Oflows / Uflows** columns. Counts there mean
   the cable was not served in time.
-- In DJAP's Setup, **Health**: per deck the latency, *input* about the chosen period (4.0, 8.0 or 10.0 ms), the drift
+- In DJAP's **Health** window (8.3): per deck the latency, *input* about the chosen period (4.0, 8.0 or 10.0 ms), the drift
   in ppm (tens of ppm are normal: the cable and the interface run on clocks of their own), and **underruns 0**. Two
   messages can appear: "the input runs at Windows' default period" (Windows' short periods need the cable at the
   same rate in Windows as the interface - the message says when that is the cause) and "N input blocks came twice
@@ -359,7 +359,8 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 ![The main window with two decks: deck A in a pause between songs, its noise reduction holding the hiss down (Noise row); deck B playing](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
-no menu bar: **right-click anywhere in it** for *Setup...*, *About DJAP...* (the version, the settings file in use,
+no menu bar: **right-click anywhere in it** for *Setup...*, *Health...* (what runs, the counters and their graphs:
+8.3), *About DJAP...* (the version, the settings file in use,
 the copyright and licences with the ASIO Compatible logo, the updates, a link to DJAP's GitHub page - source, releases and manuals - and a Disclaimer button) and *Shutdown*. Every control has a tooltip that explains it
 when the mouse rests on it. The window can be made as large as you like; it cannot be made smaller than the size
 that still shows every meter row and a readable spectrum.
@@ -431,11 +432,11 @@ decks take a few percent of one processor core, so well under 1 % on a computer 
 runs, then *audio X % of core N*: the processing's share of the one core the audio thread runs on, averaged over a
 second, and which core that is - with "(P-core)" or "(E-core)" on a processor with both kinds (Windows may move the
 thread between cores; the number is where the last period ran). With WASAPI each deck has its own thread: the share
-is that of both together, the core deck A's. This share against 100 % is the room left; the Health section's
-*heaviest* shows the worst single period. After them, only
+is that of both together, the core deck A's. This share against 100 % is the room left; *heaviest* in the
+Health window (8.3) shows the worst single period. After them, only
 when there is one: an error, a start that is being retried, a settings file that could not be saved, a new version.
-The audio's state - devices, sample rate, buffer size, latency, drift, the health counters - is in the Setup window
-(chapter 5).
+The audio's choices - devices, sample rate, buffer size - are in the Setup window (chapter 5); what runs, its latency and
+drift and the health counters are in the Health window (8.3).
 
 ### 4.5 Linked presets
 
@@ -505,15 +506,10 @@ Right under Look-ahead and Oversampling:
   **Sound settings** Windows' Sound settings page (where Windows plays its sound, its volume). Both are Windows' own:
   DJAP changes nothing there.
 
-### 5.5 Health
+### 5.5 Status
 
-At the bottom of the window, under one heading:
-
-- What runs: the driver or devices, rate, buffer, the latency of input, output and processing, and per deck the
-  extra latency and drift of an input on another clock; a message when the audio could not start or the settings
-  could not be saved.
-- Under it, counters that show whether the computer keeps up with the audio (chapter 10). **Reset counters** sets
-  them to 0.
+At the bottom of the window: whether the audio runs, and a message when it could not start or the settings could not
+be saved. The latency, the drift, the counters and their graphs are in the Health window (8.3).
 
 ## 6. Loudness presets and the loudness window
 
@@ -770,7 +766,7 @@ switches: a part with all its amounts at 0 is off.
 
 The auto tone holds still during breakdowns and fades, so a quiet part does not change the sound.
 
-## 8. The analysis and spectrum windows
+## 8. The analysis, spectrum and Health windows
 
 ### 8.1 The analysis window
 
@@ -871,6 +867,33 @@ Click the **spectrum** in a deck's meter panel (in the plug-in too, 9.2). The bi
 - The left scale (spectrum, dB) and the right one (EQ, MB Compressor, -12 to +12 dB) share the same grid lines.
 - At the top right of the graph the window shows what is under the mouse: the frequency with the input, output and
   EQ levels there, or the point's frequency and gain.
+
+### 8.3 The Health window
+
+![The Health window (example values)](images/health.jpg)
+
+**Right-click** the main window or the notification-area icon and choose **Health...**. It shows whether the computer
+keeps up with the audio.
+
+- At the top, what runs: the driver or devices, rate, buffer, the latency of input, output and processing, and per deck
+  the extra latency and drift of an input on another clock; a message when the audio could not start or the settings
+  could not be saved.
+- Under it the counters (chapter 10). **Reset counters** sets them to 0; the graphs keep what they show.
+- The list beside it chooses the time the graphs show: **the last minute, 10 minutes or hour**. DJAP keeps the last hour
+  from its start, also while this window is closed, so you can look back after a dropout. A gap in a line: the audio
+  did not run. When a point on the screen stands for several seconds, the peak and the problems show the highest of
+  them, so a single dropout never disappears.
+
+The four graphs:
+
+| Graph | What it shows | What you want to see |
+|---|---|---|
+| **Processing** | Per second the heaviest period (*peak*) and the mean (*average*), in % of a period's time. The amber line is 50 %, the red line 100 %: a period that reaches it is not ready in time. | Peaks well under 50 %. |
+| **Problems per second** | *Over half*, *silence*, *underruns*, *overruns*, *resyncs*, *overloads* and *late*; beside each name the number in the time shown. | A flat line at 0. |
+| **Clock drift** | How far the clock of an input on another clock runs from the output's, in ppm, per deck. | About the same value for hours. |
+| **Drift buffer** | The drift buffer of such an input in ms: the thin line is the fill the loop holds (the latency it adds), the thick line the measured fill. | The thick line close to the thin one. |
+
+The last two graphs stay empty when no input runs through a drift buffer (for example ASIO input pairs).
 
 ## 9. The plug-in for DJ software
 
@@ -997,7 +1020,7 @@ the DJ software, then run the setup.
 
 The Setup window shows the total.
 
-**Health** (Setup window) shows whether the computer keeps up:
+The **Health** window (8.3) shows whether the computer keeps up, as these counters and as graphs of the last hour:
 
 | Counter | Meaning |
 |---|---|
