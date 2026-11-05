@@ -28,7 +28,9 @@ int main() {
     {
         // the headset goes: 5 minutes of tries, then the fallback; the first and the last try
         DeviceRecovery r;
+        CHECK(!r.trying());
         CHECK(r.tick(1000.0, gone) == Action::Retry);
+        CHECK(r.trying());
         CHECK(r.secondsLeft(1000.0, 300.0) == 300.0);
         CHECK(r.tick(1299.0, gone) == Action::Retry);
         CHECK(r.secondsLeft(1299.0, 300.0) == 1.0);
@@ -51,6 +53,7 @@ int main() {
         fine.wanted = true;
         fine.running = true;
         CHECK(r.tick(5010.0, fine) == Action::None);
+        CHECK(!r.trying());
         // the next time it goes, the whole time to try again counts anew
         CHECK(r.tick(6000.0, gone) == Action::Retry);
         CHECK(r.tick(6299.0, gone) == Action::Retry);

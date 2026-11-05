@@ -41,6 +41,8 @@ public:
     // Messages of the main window shown under the state too (a start that is retried, settings that could not be
     // saved) - the status bar shows only the Windows volume and the CPU use (client, 2026-10-27).
     void setNotes(const std::wstring& notes) { notes_ = notes; }
+    // The countdown after Try again for: "4:32" while trying, "On fallback", "Trying", or empty (client, 2026-11-05).
+    void setRetryStatus(std::function<std::wstring()> f) { retryStatus_ = std::move(f); }
     // For the Health window: what runs (per deck: the route, the latency, the drift), with any message, and the counters.
     std::wstring healthState() const;
     std::wstring healthCounters() const;
@@ -84,7 +86,9 @@ private:
     Listing listed_;
     bool haveListed_ = false;
     ULONGLONG listedAt_ = 0;
-    HWND fallback_ = nullptr, retry_ = nullptr; // WASAPI / DirectSound / MME: the fallback output, the time to try again
+    HWND fallback_ = nullptr, retry_ = nullptr, countdown_ = nullptr;
+    std::function<std::wstring()> retryStatus_; // the countdown's text (the main window's recovery)
+    std::wstring retryShown_; // WASAPI / DirectSound / MME: the fallback output, the time to try again
     HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, drift_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
     HWND inPeriod_ = nullptr; // ASIO with WASAPI inputs: their period (in drift_'s place, which ASIO does not use)
     HWND driver_ = nullptr, open_ = nullptr, close_ = nullptr, panel_ = nullptr, info_ = nullptr;

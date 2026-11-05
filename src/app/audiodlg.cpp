@@ -200,6 +200,7 @@ void AudioWindow::createControls() {
     fallback_ = make(WC_COMBOBOXW, L"", combo, idFallback);
     for (HWND& led : led_) led = make(kLedClass, L"", 0, 0);
     retry_ = make(WC_COMBOBOXW, L"", combo, idRetry);
+    countdown_ = make(L"STATIC", L"", SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY | SS_NOPREFIX, 0);
     start_ = make(L"BUTTON", L"Start audio", BS_OWNERDRAW | WS_TABSTOP, idStart);
     stop_ = make(L"BUTTON", L"Stop audio", BS_OWNERDRAW | WS_TABSTOP, idStop);
     soundPanel_ = make(L"BUTTON", L"Audio properties", BS_OWNERDRAW | WS_TABSTOP, idSoundPanel);
@@ -303,6 +304,9 @@ void AudioWindow::createControls() {
                          L"time under Try again for is over. It goes back by itself as soon as the chosen output returns. "
                          L"(none): no fallback, DJAP goes on trying. Never the virtual cable you use as an input: DJAP "
                          L"would hear itself, and it refuses that.");
+    tips_.add(countdown_, L"While DJAP tries the chosen devices again: the time left before the sound goes to the fallback "
+                          L"output. \"On fallback\": it plays there now, until the chosen output is back. \"Trying\": "
+                          L"no fallback to go to, DJAP goes on trying. Empty: all runs as chosen.");
     tips_.add(retry_, L"How long DJAP keeps trying the chosen devices, every 5 seconds, after one went away or was not "
                       L"there at the start. Then the sound goes to the fallback output.");
     tips_.add(soundPanel_, L"Opens Windows' Sound window: the playback and recording devices, their levels and formats. "
@@ -339,7 +343,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, inPeriod_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, soundPanel_, soundSettings_, state_, note_, fallback_, retry_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
+                   start_, stop_, soundPanel_, soundSettings_, state_, note_, fallback_, retry_, countdown_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -382,11 +386,25 @@ void AudioWindow::layout() {
     MoveWindow(info_, m + labelW + g, y, W - labelW - g, 2 * lh, TRUE);
     y += 2 * lh + 2 * g;
     const int colW = (W - g) / 2, cw = colW - labelW - g, ledW = px(14);
-    // deck A's row, deck B's row (two decks only), rate and buffer
+    // deck A's row, deck B's row (two decks only), the fallback row (not with ASIO: the driver is the only output there;
+    // right under the devices - client, 2026-11-05), rate and buffer
     const bool two = settings_.decks == 2;
     HWND pairs[6] = {inA_, outA_, inB_, outB_, rate_, buffer_};
+    const bool fallbackRow = !asio();
+    for (HWND b : {labels_[14], led_[4], fallback_, labels_[15], retry_, countdown_})
+        ShowWindow(b, fallbackRow ? SW_SHOW : SW_HIDE);
     int row = 0;
     for (int i = 0; i < 6; ++i) {
+        if (i == 4 && fallbackRow) {
+            const int cy = y + row * (h + g), cdW = px(78);
+            MoveWindow(labels_[14], m, cy, labelW, h, TRUE);
+            MoveWindow(led_[4], m + labelW + g, cy + (h - ledW) / 2, ledW, ledW, TRUE);
+            MoveWindow(fallback_, m + labelW + g + ledW + g, cy, cw - ledW - g, px(300), TRUE);
+            MoveWindow(labels_[15], m + colW + g, cy, labelW, h, TRUE);
+            MoveWindow(retry_, m + colW + g + labelW + g, cy, cw - cdW - g, px(300), TRUE);
+            MoveWindow(countdown_, m + W - cdW, cy, cdW, h, TRUE);
+            ++row;
+        }
         const bool shown = two || (i != 2 && i != 3);
         if (i < 4) ShowWindow(led_[i], shown ? SW_SHOW : SW_HIDE);
         ShowWindow(labels_[1 + i], shown ? SW_SHOW : SW_HIDE);
@@ -408,17 +426,6 @@ void AudioWindow::layout() {
     MoveWindow(labels_[13], m + colW + g, y, labelW, h, TRUE);
     MoveWindow(oversampling_, m + colW + g + labelW + g, y, cw, px(300), TRUE);
     y += h + g;
-    // not with ASIO: the driver is the only output there
-    const bool fallbackRow = !asio();
-    for (HWND b : {labels_[14], led_[4], fallback_, labels_[15], retry_}) ShowWindow(b, fallbackRow ? SW_SHOW : SW_HIDE);
-    if (fallbackRow) {
-        MoveWindow(labels_[14], m, y, labelW, h, TRUE);
-        MoveWindow(led_[4], m + labelW + g, y + (h - ledW) / 2, ledW, ledW, TRUE);
-        MoveWindow(fallback_, m + labelW + g + ledW + g, y, cw - ledW - g, px(300), TRUE);
-        MoveWindow(labels_[15], m + colW + g, y, labelW, h, TRUE);
-        MoveWindow(retry_, m + colW + g + labelW + g, y, cw, px(300), TRUE);
-        y += h + g;
-    }
     SetWindowTextW(labels_[9], two ? L"Deck inputs" : L"Input from");
     SetWindowTextW(labels_[1], two ? L"Deck A input" : L"Input");
     SetWindowTextW(labels_[2], two ? L"Deck A output" : L"Output");
@@ -1152,6 +1159,11 @@ void AudioWindow::updateLeds() {
 void AudioWindow::refresh() {
     if (!hwnd_) return;
     updateLeds();
+    const std::wstring retry = retryStatus_ ? retryStatus_() : std::wstring();
+    if (retry != retryShown_) {
+        retryShown_ = retry;
+        SetWindowTextW(countdown_, retry.c_str());
+    }
     const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
     EnableWindow(close_, asio() && open);
     EnableWindow(panel_, asio() && open);

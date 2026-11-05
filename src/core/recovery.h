@@ -34,6 +34,7 @@ public:
     void returnFailed(double now) { noReturnBefore_ = now + kReturnPause; }
     // Of the time to try again: what is left (0: over, or not trying).
     double secondsLeft(double now, double retrySeconds) const;
+    bool trying() const { return trying_ && !gaveUp_; } // the audio should run and does not, or runs on the fallback
 
 private:
     void reset();

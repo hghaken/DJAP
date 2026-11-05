@@ -144,6 +144,7 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     testRun_ = testRun;
     Tooltips::setEnabled(settings_.showTooltips); // before the first window makes its tooltips
     audioWindow_.setTestRun(testRun);
+    audioWindow_.setRetryStatus([this] { return retryStatus(); });
     if (testRun && GetEnvironmentVariableW(L"DJAP_HEALTH_DEMO", nullptr, 0)) fillHealthDemo();
     registerMeterView(instance);
     WNDCLASSEXW wc{};
@@ -230,6 +231,17 @@ bool MainWindow::startChosen(bool useFallback, const std::vector<SysDevice>& out
 
 // Every 5 s (and at program start): the audio that should run and does not (client, 2026-11-05). DeviceRecovery says
 // what to do.
+std::wstring MainWindow::retryStatus() const {
+    if (!recovery_.trying() || !settings_.startAudio) return L"";
+    if (onFallback_ && audio_.deviceRunning()) return L"On fallback";
+    const int left = static_cast<int>(std::ceil(
+        recovery_.secondsLeft(static_cast<double>(GetTickCount64()) * 1e-3, settings_.retryMinutes * 60.0)));
+    if (left <= 0) return L"Trying";
+    wchar_t b[24];
+    swprintf(b, 24, L"%d:%02d", left / 60, left % 60);
+    return b;
+}
+
 void MainWindow::recoverAudio() {
     if (audio_.simulating()) return;
     AudioApi api = AudioApi::Asio;
@@ -272,6 +284,7 @@ void MainWindow::recoverAudio() {
             f.fallbackUsable = usable;
         }
     }
+    onFallback_ = f.onFallback;
     const double now = static_cast<double>(GetTickCount64()) * 1e-3;
     const std::string gone = missing.empty() ? std::string("audio not running") : "the output \"" + missing + "\" is gone";
     switch (recovery_.tick(now, f)) {

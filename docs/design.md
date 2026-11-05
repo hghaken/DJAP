@@ -725,7 +725,9 @@ a next try after 30 s). No fallback chosen: go on trying. ASIO: stop trying afte
 which may take the interface from DJ software. A fallback of the same name as an input is refused: a virtual cable's
 two ends carry one name, and DJAP would hear itself. Whether it runs on the fallback is read from what runs
 (`SysStreamInfo::output` against the choice), no state to go stale after a Start in the Setup window. The main window's
-Out line and the message say so. Stop audio stays enabled while it tries, and ends it. `SysAudio::stalled`: a stream that
+Out line and the message say so; in the Setup window the fallback row sits right under the device rows, with a
+countdown behind Try again for ("4:32", "On fallback", "Trying" - client, 2026-11-05; `MainWindow::retryStatus`, read
+every refresh). Stop audio stays enabled while it tries, and ends it. `SysAudio::stalled`: a stream that
 plays without a period for 10 s counts as stopped - miniaudio stops only a default device on a state change, and warns
 that a disconnected playback device can hang; not sooner, a Bluetooth device may take seconds to wake up.
 
