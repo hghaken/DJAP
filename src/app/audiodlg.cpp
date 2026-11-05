@@ -20,6 +20,8 @@ namespace ap {
 namespace {
 
 const wchar_t* const kClass = L"APAudioWindow";
+const wchar_t* const kLedClass = L"APDeviceLed";
+const ULONGLONG kListEveryMs = 3000; // the devices are read again this often while the window shows
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
           idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
           idCheckUpdates, idTooltips, idDrift, idInPeriod, idMono, idSoundPanel, idSoundSettings, idFallback, idRetry };
@@ -86,6 +88,12 @@ void AudioWindow::show(HWND owner) {
             wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_BTNFACE + 1);
             wc.lpszClassName = kClass;
             registered = RegisterClassExW(&wc) != 0;
+            WNDCLASSW lc{};
+            lc.lpfnWndProc = ledProc;
+            lc.hInstance = inst;
+            lc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
+            lc.lpszClassName = kLedClass;
+            RegisterClassW(&lc);
         }
         const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
         hwnd_ = CreateWindowExW(0, kClass, L"DJAP setup", style, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -190,6 +198,7 @@ void AudioWindow::createControls() {
     mono_ = make(L"BUTTON", L"Mono (left and right mixed, the same sound on both outputs)", BS_AUTOCHECKBOX | WS_TABSTOP,
                  idMono);
     fallback_ = make(WC_COMBOBOXW, L"", combo, idFallback);
+    for (HWND& led : led_) led = make(kLedClass, L"", 0, 0);
     retry_ = make(WC_COMBOBOXW, L"", combo, idRetry);
     start_ = make(L"BUTTON", L"Start audio", BS_OWNERDRAW | WS_TABSTOP, idStart);
     stop_ = make(L"BUTTON", L"Stop audio", BS_OWNERDRAW | WS_TABSTOP, idStop);
@@ -286,6 +295,10 @@ void AudioWindow::createControls() {
     tips_.add(start_, L"Starts the audio with the choices above (opens the driver first when needed). If the audio "
                       L"runs when you close the program, it starts again by itself next time.");
     tips_.add(stop_, L"Stops the audio, and stops trying to start it again. An ASIO driver stays open until Close driver.");
+    for (HWND led : led_)
+        tips_.add(led, L"Green: the device is there (online). Red: it is not among the devices now (switched off, "
+                       L"unplugged, out of reach). Grey: not known - an ASIO driver that is installed but not open. "
+                       L"DJAP looks every 3 seconds while this window is open.");
     tips_.add(fallback_, L"Where the sound goes when a chosen output is gone (a Bluetooth headset switched off) and the "
                          L"time under Try again for is over. It goes back by itself as soon as the chosen output returns. "
                          L"(none): no fallback, DJAP goes on trying. Never the virtual cable you use as an input: DJAP "
@@ -368,19 +381,25 @@ void AudioWindow::layout() {
     y += h + g;
     MoveWindow(info_, m + labelW + g, y, W - labelW - g, 2 * lh, TRUE);
     y += 2 * lh + 2 * g;
-    const int colW = (W - g) / 2, cw = colW - labelW - g;
+    const int colW = (W - g) / 2, cw = colW - labelW - g, ledW = px(14);
     // deck A's row, deck B's row (two decks only), rate and buffer
     const bool two = settings_.decks == 2;
     HWND pairs[6] = {inA_, outA_, inB_, outB_, rate_, buffer_};
     int row = 0;
     for (int i = 0; i < 6; ++i) {
         const bool shown = two || (i != 2 && i != 3);
+        if (i < 4) ShowWindow(led_[i], shown ? SW_SHOW : SW_HIDE);
         ShowWindow(labels_[1 + i], shown ? SW_SHOW : SW_HIDE);
         ShowWindow(pairs[i], shown ? SW_SHOW : SW_HIDE);
         if (!shown) continue;
         const int cx = m + (i % 2) * (colW + g), cy = y + row * (h + g);
         MoveWindow(labels_[1 + i], cx, cy, labelW, h, TRUE);
-        MoveWindow(pairs[i], cx + labelW + g, cy, cw, px(300), TRUE);
+        if (i < 4) { // a device: its LED first
+            MoveWindow(led_[i], cx + labelW + g, cy + (h - ledW) / 2, ledW, ledW, TRUE);
+            MoveWindow(pairs[i], cx + labelW + g + ledW + g, cy, cw - ledW - g, px(300), TRUE);
+        } else {
+            MoveWindow(pairs[i], cx + labelW + g, cy, cw, px(300), TRUE);
+        }
         if (i % 2) ++row;
     }
     y += row * (h + g);
@@ -391,10 +410,11 @@ void AudioWindow::layout() {
     y += h + g;
     // not with ASIO: the driver is the only output there
     const bool fallbackRow = !asio();
-    for (HWND b : {labels_[14], fallback_, labels_[15], retry_}) ShowWindow(b, fallbackRow ? SW_SHOW : SW_HIDE);
+    for (HWND b : {labels_[14], led_[4], fallback_, labels_[15], retry_}) ShowWindow(b, fallbackRow ? SW_SHOW : SW_HIDE);
     if (fallbackRow) {
         MoveWindow(labels_[14], m, y, labelW, h, TRUE);
-        MoveWindow(fallback_, m + labelW + g, y, cw, px(300), TRUE);
+        MoveWindow(led_[4], m + labelW + g, y + (h - ledW) / 2, ledW, ledW, TRUE);
+        MoveWindow(fallback_, m + labelW + g + ledW + g, y, cw - ledW - g, px(300), TRUE);
         MoveWindow(labels_[15], m + colW + g, y, labelW, h, TRUE);
         MoveWindow(retry_, m + colW + g + labelW + g, y, cw, px(300), TRUE);
         y += h + g;
@@ -1040,8 +1060,98 @@ std::wstring AudioWindow::healthCounters() const {
     return hb;
 }
 
+LRESULT CALLBACK AudioWindow::ledProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_ERASEBKGND) return 1;
+    if (msg != WM_PAINT) return DefWindowProcW(hwnd, msg, wp, lp);
+    PAINTSTRUCT ps;
+    HDC dc = BeginPaint(hwnd, &ps);
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+    auto* self = reinterpret_cast<AudioWindow*>(GetWindowLongPtrW(GetParent(hwnd), GWLP_USERDATA));
+    if (self) self->metal_.paint(dc, rc, hwnd); // the metal behind it
+    const LONG_PTR state = GetWindowLongPtrW(hwnd, GWLP_USERDATA);
+    if (state != 0) {
+        const COLORREF fill = state == 1 ? RGB(60, 200, 90) : state == 2 ? RGB(225, 55, 45) : RGB(150, 154, 160);
+        const int d = std::min(static_cast<int>(rc.right), static_cast<int>(rc.bottom)) - 1;
+        SelectObject(dc, GetStockObject(DC_PEN));
+        SelectObject(dc, GetStockObject(DC_BRUSH));
+        SetDCPenColor(dc, RGB(60, 62, 66));
+        SetDCBrushColor(dc, fill);
+        Ellipse(dc, 0, 0, d, d);
+        // a small highlight: a LED, not a dot
+        SetDCPenColor(dc, RGB(255, 255, 255));
+        SetDCBrushColor(dc, RGB(255, 255, 255));
+        const int s = std::max(2, d / 4);
+        if (state != 3) Ellipse(dc, d / 4, d / 4, d / 4 + s, d / 4 + s);
+    }
+    EndPaint(hwnd, &ps);
+    return 0;
+}
+
+// The LEDs: each chosen device among the devices now (read on a thread of their own every kListEveryMs - a list takes
+// a few 100 ms; the window would stall), an ASIO driver by being open.
+void AudioWindow::updateLeds() {
+    AudioApi current = AudioApi::Asio, inApi = AudioApi::Asio;
+    apiFromName(settings_.api, current);
+    apiFromName(settings_.asioInputs, inApi);
+    const AudioApi listApi = current == AudioApi::Asio ? inApi : current; // the API whose devices count
+    if (listing_.valid() && listing_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        listed_ = listing_.get();
+        haveListed_ = listed_.ok;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (!listing_.valid() && listApi != AudioApi::Asio && IsWindowVisible(hwnd_) &&
+        (now - listedAt_ >= kListEveryMs || listed_.api != listApi)) {
+        listedAt_ = now;
+        listing_ = std::async(std::launch::async, [listApi] {
+            Listing l;
+            l.api = listApi;
+            std::string err;
+            l.ok = SysAudio::devices(listApi, l.inputs, l.outputs, err);
+            return l;
+        });
+    }
+    const bool known = haveListed_ && listed_.api == listApi;
+    auto there = [](const std::vector<SysDevice>& list, const std::string& name) {
+        return std::any_of(list.begin(), list.end(), [&](const SysDevice& x) { return x.name == name; });
+    };
+    auto device = [&](bool input, const std::string& name) -> LONG_PTR {
+        if (name.empty()) return 0;
+        if (!known) return 3;
+        return there(input ? listed_.inputs : listed_.outputs, name) ? 1 : 2;
+    };
+    LONG_PTR driver = 3;
+    if (settings_.driver.empty()) driver = 0;
+#if AP_HAVE_ASIO
+    else if (audio_.driverOpen() && audio_.driverName() == settings_.driver) driver = 1;
+    else {
+        const std::vector<AsioDriverEntry> installed = AsioHost::drivers(); // (the registry, read now)
+        if (std::none_of(installed.begin(), installed.end(),
+                         [&](const AsioDriverEntry& e) { return e.name == settings_.driver; }))
+            driver = 2;
+    }
+#endif
+    LONG_PTR state[kLeds] = {};
+    for (int d = 0; d < 2; ++d) {
+        if (current == AudioApi::Asio) {
+            state[2 * d] = mixed() && !settings_.asioInputDevice[d].empty() ? device(true, settings_.asioInputDevice[d]) : driver;
+            state[2 * d + 1] = driver;
+        } else {
+            state[2 * d] = device(true, settings_.inDevice[d]);
+            state[2 * d + 1] = device(false, settings_.outDevice[d]);
+        }
+    }
+    state[4] = current == AudioApi::Asio ? 0 : device(false, settings_.fallbackOutput);
+    for (int i = 0; i < kLeds; ++i)
+        if (GetWindowLongPtrW(led_[i], GWLP_USERDATA) != state[i]) {
+            SetWindowLongPtrW(led_[i], GWLP_USERDATA, state[i]);
+            InvalidateRect(led_[i], nullptr, TRUE);
+        }
+}
+
 void AudioWindow::refresh() {
     if (!hwnd_) return;
+    updateLeds();
     const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
     EnableWindow(close_, asio() && open);
     EnableWindow(panel_, asio() && open);

@@ -18,6 +18,7 @@
 #include <windows.h>
 
 #include <functional>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,8 @@ public:
 
 private:
     static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+    static LRESULT CALLBACK ledProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
+    void updateLeds(); // from refresh(): whether each chosen device is there now
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
     void createControls();
     void setFonts();
@@ -67,6 +70,20 @@ private:
     Changed onChange_;
     HWND hwnd_ = nullptr, owner_ = nullptr;
     HWND labels_[16] = {};
+    // a LED before each device list (client, 2026-11-05: "a LED that shows green or red whether the interface is
+    // online"): deck A input, output, deck B input, output, the fallback output - its state 0 none, 1 there, 2 not there,
+    // 3 not known (an ASIO driver that is installed but not open)
+    static constexpr int kLeds = 5;
+    HWND led_[kLeds] = {};
+    struct Listing {
+        AudioApi api = AudioApi::Wasapi;
+        bool ok = false;
+        std::vector<SysDevice> inputs, outputs;
+    };
+    std::future<Listing> listing_; // the devices, read on a thread of its own (a list takes up to a few 100 ms)
+    Listing listed_;
+    bool haveListed_ = false;
+    ULONGLONG listedAt_ = 0;
     HWND fallback_ = nullptr, retry_ = nullptr; // WASAPI / DirectSound / MME: the fallback output, the time to try again
     HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, drift_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
     HWND inPeriod_ = nullptr; // ASIO with WASAPI inputs: their period (in drift_'s place, which ASIO does not use)

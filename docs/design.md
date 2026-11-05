@@ -706,7 +706,11 @@ Close driver (opening asks first: it takes the interface from other programs), C
 output channel pair of each deck (with the driver's channel names once it is open; pairs must differ), sample rate
 (the driver's own when it refuses the one asked for), buffer size (the driver's preferred, or the sizes its
 granularity allows), Start / Stop audio, beside them Audio properties and Sound settings (client, 2026-11-05: Windows'
-Sound window, `control.exe mmsys.cpl,,0`, and its settings page, `ms-settings:sound`). Choices are saved at once; while the audio runs, a new device, channel pair, sample rate, buffer size,
+Sound window, `control.exe mmsys.cpl,,0`, and its settings page, `ms-settings:sound`), and a LED before each device list (client, 2026-11-05: "a LED that shows green or red
+whether the interface is online": deck A / B input and output, the fallback output; green = among the devices now, red
+= not, grey = not known - an ASIO driver installed but not open; ASIO pairs follow the driver). The devices are read
+every 3 s while the window shows, on a thread of their own (`std::async`: a list of one API takes up to a few 100 ms,
+the window would stall). Choices are saved at once; while the audio runs, a new device, channel pair, sample rate, buffer size,
 deck-input API or the exclusive switch is applied at once by starting the audio again (client, 2026-10-25: a deck
 input changed while running had only been saved, so the deck kept recording the old device); `StartAudio` remembers the user's last Start (1) or Stop / Close driver /
 other API (0) and starts the audio with the same choices at the next program start (client, 2026-10-25: "the audio
