@@ -35,13 +35,13 @@ const SpanChoice kSpans[] = {{L"Last minute", 60, 10}, {L"Last 10 minutes", 600,
 const wchar_t* const kPanelTips[] = {
     L"Processing load per second, in % of a period's time. Peak: the heaviest period of that second - at 100 % it was not "
     L"ready in time, a dropout. Average: the mean, the room left for the rest of the computer's work.",
-    L"Timing per second, in ms. Audio late: how much later than a period's length the latest periods began (the driver's "
+    L"Timing per second, in ms. Audio latency: how much later than a period's length the latest periods began (the driver's "
     L"or Windows' call came late) - well under half a period is fine, near the period (the red line) the sound is in "
     L"danger. Windows latency: how much later than asked Windows wakes a waiting thread (a thread of DJAP's own, 1000 "
     L"times a second, below the audio's priority) - what a DPC / ISR latency monitor measures; high values point at a "
     L"driver that holds the processor (network, Bluetooth, graphics, power saving). It cannot tell which one.",
-    L"What went wrong, per second; beside each name the number in the time shown. Late: a period not ready in time (a "
-    L"dropout). Over half: a period that needed more than half its time (a warning). Silence: a period answered with "
+    L"What went wrong, per second; beside each name the number in the time shown. Late periods: a period not ready in time (a "
+    L"dropout). Over half time: a period that needed more than half its time (a warning). Silence: a period answered with "
     L"silence, the engine was not ready. Underruns: the input fell behind. Overruns: input blocks dropped. Resyncs and "
     L"overloads: reported by the ASIO driver. A flat line at 0 is what you want.",
     L"How far the clock of an input of another audio API (or of another device) runs from the output's, in parts per "
@@ -371,10 +371,10 @@ void HealthWindow::paintGraphs(HDC dc, const RECT& rc) {
                   {L"average", kGreen, 2, false, running(&HealthPoint::averagePercent)}},
                  L"Not running"};
     panels[1] = {L"Timing, ms", Scale::Time,
-                 // the thin Windows latency line last, on top: it lies close to audio late and hid under it (client,
+                 // the thin Windows latency line last, on top: it lies close to audio latency and hid under it (client,
                  // 2026-11-05: "the Windows latency line does not come after ticking it")
                  {{L"period", kRed, 1, false, running(&HealthPoint::periodMs)},
-                  {L"audio late", kOrange, 2, true, running(&HealthPoint::lateMs)},
+                  {L"audio latency", kOrange, 2, true, running(&HealthPoint::lateMs)},
                   {L"Windows latency", kBlue, 1, true,
                    [](const HealthPoint& p, float& v) {
                        if (!p.probeOn) return false;
@@ -383,13 +383,13 @@ void HealthWindow::paintGraphs(HDC dc, const RECT& rc) {
                    }}},
                  L"Not running"};
     panels[2] = {L"Problems per second", Scale::Count,
-                 {{L"over half", kAmber, 1, true, running(&HealthPoint::overHalf), true},
+                 {{L"over half time", kAmber, 1, true, running(&HealthPoint::overHalf), true},
                   {L"silence", kPurple, 1, true, running(&HealthPoint::refused), true},
                   {L"underruns", kBlue, 1, true, running(&HealthPoint::underruns), true},
                   {L"overruns", kTeal, 1, true, running(&HealthPoint::overruns), true},
                   {L"resyncs", kWhite, 1, true, running(&HealthPoint::resyncs), true},
                   {L"overloads", kPink, 1, true, running(&HealthPoint::overloads), true},
-                  {L"late", kRed, 2, true, running(&HealthPoint::late), true}},
+                  {L"late periods", kRed, 2, true, running(&HealthPoint::late), true}},
                  L"Not running"};
     panels[3] = {L"Clock drift, ppm", Scale::Free, {}, L"No input with a drift buffer"};
     panels[4] = {L"Drift buffer, ms", Scale::Fill, {}, L"No input with a drift buffer"};
