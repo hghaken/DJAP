@@ -111,6 +111,8 @@ struct DeckStream {
     std::atomic<long long> busyNs{0};
     std::atomic<int> core{-1};
     std::atomic<bool> resetHealth{false}, stopping{false}, failed{false};
+    long long seenBlocks = -1; // SysAudio::stalled, on the GUI thread
+    double seenAt = 0.0;
     SysStreamInfo info;
 };
 
@@ -669,6 +671,20 @@ double SysAudio::takePeakPercent() {
 void SysAudio::resetHealth() {
     for (const auto& s : impl_->decks)
         if (s) s->resetHealth.store(true, std::memory_order_release);
+}
+
+bool SysAudio::stalled(double now) {
+    for (const auto& s : impl_->decks) {
+        if (!s || !s->info.running || (s->capture && !s->playInited)) continue; // (a capture-only stream counts no periods)
+        const long long blocks = s->blocks.load(std::memory_order_acquire);
+        if (blocks != s->seenBlocks) {
+            s->seenBlocks = blocks;
+            s->seenAt = now;
+        } else if (now - s->seenAt >= kStallSeconds) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool SysAudio::failed() const {

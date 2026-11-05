@@ -66,7 +66,8 @@ private:
     AudioIO& audio_;
     Changed onChange_;
     HWND hwnd_ = nullptr, owner_ = nullptr;
-    HWND labels_[14] = {};
+    HWND labels_[16] = {};
+    HWND fallback_ = nullptr, retry_ = nullptr; // WASAPI / DirectSound / MME: the fallback output, the time to try again
     HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, drift_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
     HWND inPeriod_ = nullptr; // ASIO with WASAPI inputs: their period (in drift_'s place, which ASIO does not use)
     HWND driver_ = nullptr, open_ = nullptr, close_ = nullptr, panel_ = nullptr, info_ = nullptr;

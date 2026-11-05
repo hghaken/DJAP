@@ -708,8 +708,20 @@ Sound window, `control.exe mmsys.cpl,,0`, and its settings page, `ms-settings:so
 deck-input API or the exclusive switch is applied at once by starting the audio again (client, 2026-10-25: a deck
 input changed while running had only been saved, so the deck kept recording the old device); `StartAudio` remembers the user's last Start (1) or Stop / Close driver /
 other API (0) and starts the audio with the same choices at the next program start (client, 2026-10-25: "the audio
-processing must start with the interfaces used last"); a failed start there is tried again every 5 s for 2 minutes
-(devices not there yet just after Windows starts) and does not clear `StartAudio`.
+processing must start with the interfaces used last"); a failed start there, and a device that goes away while the
+audio runs, are handled by one rule (client, 2026-11-05: "a default output device I can choose: first try again for a
+certain time, 5 minutes for example, then fall back on it"; a device that went away used to stop the audio until the next
+Start). `DeviceRecovery` (`src/core/recovery.*`, `recovery_test`; the main window asks it every 5 s while `StartAudio`
+is 1): try the chosen devices for `RetryMinutes` (1, 2, 5, 10, 30; `StartAudio` stays 1), then, with WASAPI / DirectSound /
+MME and a chosen output that is not among the devices, start with `FallbackOutput` in the place of the outputs that are
+gone; every 5 s look whether they are back, and start the chosen devices again (a return that fails: the fallback again,
+a next try after 30 s). No fallback chosen: go on trying. ASIO: stop trying after the time - each try opens a driver,
+which may take the interface from DJ software. A fallback of the same name as an input is refused: a virtual cable's
+two ends carry one name, and DJAP would hear itself. Whether it runs on the fallback is read from what runs
+(`SysStreamInfo::output` against the choice), no state to go stale after a Start in the Setup window. The main window's
+Out line and the message say so. Stop audio stays enabled while it tries, and ends it. `SysAudio::stalled`: a stream that
+plays without a period for 10 s counts as stopped - miniaudio stops only a default device on a state change, and warns
+that a disconnected playback device can hang; not sooner, a Bluetooth device may take seconds to wake up.
 
 Start with Windows (client, 2026-10-25: "the application must start automatically after Windows starts"): Audio ->
 Start with Windows (a check mark) writes the value `DJAP` = `"<program>" --autostart` under
@@ -735,7 +747,7 @@ by a balloon at the notification-area icon (a click opens About), in the status 
 is downloaded before the user clicks Install update there (client, 2026-10-27: the update buttons moved from Setup to
 About; Setup keeps the daily switch). While the audio runs it asks first (the audio stops during the update); the audio then stops
 with the program's usual fade-out, `StartAudio` stays 1, and the restarted program starts it again (`startSavedAudio`,
-retried every 5 s for 2 minutes). Not during a simulation.
+tried again as above). Not during a simulation.
 The setup asset `DJAP-Setup-<version>.exe` is downloaded into `%TEMP%\DJAP-update` and checked against the SHA-256
 GitHub publishes for it (the asset's `digest`, else a `<setup>.sha256` asset); without a checksum, or when it does
 not match, nothing is installed; a `.sha256` file counts only when it is clear which hash is the setup's (the line

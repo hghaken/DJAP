@@ -246,9 +246,10 @@ void AudioIO::poll() {
         }
     }
 #endif
-    if (sys_.running() && sys_.failed()) { // a stream stopped by itself
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (sys_.running() && (sys_.failed() || sys_.stalled(seconds))) { // a stream stopped by itself, or hangs
         stopDevice(); // with ASIO too, when it was a deck's input
-        deviceError_ = "an audio device stopped (unplugged, or taken by another program); start the audio again";
+        deviceError_ = "an audio device stopped (unplugged, or taken by another program)";
     }
     for (int d = 0; d < 2; ++d) monitor_[d].poll(engine_.deck(d), engine_.sampleRate(), dt);
 }

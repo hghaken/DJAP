@@ -11,6 +11,7 @@
 #include "analysiswnd.h"
 #include "audiodlg.h"
 #include "healthwnd.h"
+#include "recovery.h"
 #include "audioio.h"
 #include "editwnd.h"
 #include "settings.h"
@@ -141,7 +142,10 @@ private:
     HICON iconSmall_ = nullptr;
     bool quitting_ = false; // Shutdown chosen (or Windows ends the session): WM_CLOSE really closes
     bool testRun_ = false;
-    int startTries_ = 0; // attempts of startSavedAudio() so far
+    DeviceRecovery recovery_; // a device that went away, or was not there at the start: try again, then the fallback
+    std::string startError_;  // why the last start failed
+    void recoverAudio();      // every 5 s
+    bool startChosen(bool useFallback, const std::vector<SysDevice>& outputs);
     Updater updater_;
     ULONGLONG nextCheck_ = 0;   // GetTickCount64() of the next daily update check
     std::string notified_;      // the version the notification-area message was shown for

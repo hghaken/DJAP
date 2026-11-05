@@ -86,6 +86,10 @@ public:
     bool mono = false;           // both decks' outputs mono: (L + R) / 2 (Setup window; DeckControl::mono)
     int bufferSize = 0;          // driver buffer in frames; 0 = the driver's preferred size
     bool startAudio = false;     // start the audio at program start (the last Start, not stopped since)
+    // WASAPI / DirectSound / MME: a device that goes away is tried again for retryMinutes (1, 2, 5, 10 or 30), then the
+    // output plays on fallbackOutput (empty: none, go on trying) until the chosen one is back (recovery.h)
+    std::string fallbackOutput;
+    int retryMinutes = 5;
     // the outputs follow the volume (and mute) of Windows' default playback device - the volume keys; one choice
     // per mode, [0] one channel (on by default), [1] two decks (off: a DJ's outputs do not move with a key)
     bool followVolume[2] = {true, false};

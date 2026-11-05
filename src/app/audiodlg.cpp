@@ -22,7 +22,7 @@ namespace {
 const wchar_t* const kClass = L"APAudioWindow";
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
           idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
-          idCheckUpdates, idTooltips, idDrift, idInPeriod, idMono, idSoundPanel, idSoundSettings };
+          idCheckUpdates, idTooltips, idDrift, idInPeriod, idMono, idSoundPanel, idSoundSettings, idFallback, idRetry };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 // limiter look-ahead choices (ms; 1.5 the default). Nothing between 0 and 1.5: below about 1.3 ms the true-peak
@@ -159,10 +159,11 @@ void AudioWindow::createControls() {
         return CreateWindowExW(0, cls, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 10, 10, hwnd_,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
     };
-    const wchar_t* labels[14] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
+    const wchar_t* labels[16] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
                                  L"Sample rate", L"Buffer size",  L"Status",        L"Audio API",    L"Deck inputs",
-                                 L"Processing",  L"Look-ahead",   L"Updates",       L"Oversampling"};
-    for (int i = 0; i < 14; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
+                                 L"Processing",  L"Look-ahead",   L"Updates",       L"Oversampling",
+                                 L"Fallback output", L"Try again for"};
+    for (int i = 0; i < 16; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
     const DWORD combo = CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP;
     decks_ = make(WC_COMBOBOXW, L"", combo, idDecks);
     api_ = make(WC_COMBOBOXW, L"", combo, idApi);
@@ -188,6 +189,8 @@ void AudioWindow::createControls() {
                    BS_AUTOCHECKBOX | WS_TABSTOP, idFollow);
     mono_ = make(L"BUTTON", L"Mono (left and right mixed, the same sound on both outputs)", BS_AUTOCHECKBOX | WS_TABSTOP,
                  idMono);
+    fallback_ = make(WC_COMBOBOXW, L"", combo, idFallback);
+    retry_ = make(WC_COMBOBOXW, L"", combo, idRetry);
     start_ = make(L"BUTTON", L"Start audio", BS_OWNERDRAW | WS_TABSTOP, idStart);
     stop_ = make(L"BUTTON", L"Stop audio", BS_OWNERDRAW | WS_TABSTOP, idStop);
     soundPanel_ = make(L"BUTTON", L"Audio properties", BS_OWNERDRAW | WS_TABSTOP, idSoundPanel);
@@ -211,7 +214,7 @@ void AudioWindow::createControls() {
                  SS_LEFT, 0);
 
     for (HWND b : {open_, close_, panel_, start_, stop_, soundPanel_, soundSettings_}) theme::makeButton(b);
-    for (HWND c : {decks_, api_, inputs_, drift_, inPeriod_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_}) theme::makeCombo(c);
+    for (HWND c : {decks_, api_, inputs_, drift_, inPeriod_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_, fallback_, retry_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
                       L"players or a mixer's channels).\nOne channel: one stereo processor, for example for everything "
@@ -282,7 +285,13 @@ void AudioWindow::createControls() {
                        L"should not move a DJ's outputs).");
     tips_.add(start_, L"Starts the audio with the choices above (opens the driver first when needed). If the audio "
                       L"runs when you close the program, it starts again by itself next time.");
-    tips_.add(stop_, L"Stops the audio. An ASIO driver stays open until Close driver.");
+    tips_.add(stop_, L"Stops the audio, and stops trying to start it again. An ASIO driver stays open until Close driver.");
+    tips_.add(fallback_, L"Where the sound goes when a chosen output is gone (a Bluetooth headset switched off) and the "
+                         L"time under Try again for is over. It goes back by itself as soon as the chosen output returns. "
+                         L"(none): no fallback, DJAP goes on trying. Never the virtual cable you use as an input: DJAP "
+                         L"would hear itself, and it refuses that.");
+    tips_.add(retry_, L"How long DJAP keeps trying the chosen devices, every 5 seconds, after one went away or was not "
+                      L"there at the start. Then the sound goes to the fallback output.");
     tips_.add(soundPanel_, L"Opens Windows' Sound window: the playback and recording devices, their levels and formats. "
                            L"Windows' own window: DJAP changes nothing there.");
     tips_.add(soundSettings_, L"Opens Windows' Sound settings: where Windows plays its sound (for example a virtual cable "
@@ -317,7 +326,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, inPeriod_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, soundPanel_, soundSettings_, state_, note_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
+                   start_, stop_, soundPanel_, soundSettings_, state_, note_, fallback_, retry_, look_, oversampling_, startup_, checkUpdates_, tooltips_, mono_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -380,6 +389,16 @@ void AudioWindow::layout() {
     MoveWindow(labels_[13], m + colW + g, y, labelW, h, TRUE);
     MoveWindow(oversampling_, m + colW + g + labelW + g, y, cw, px(300), TRUE);
     y += h + g;
+    // not with ASIO: the driver is the only output there
+    const bool fallbackRow = !asio();
+    for (HWND b : {labels_[14], fallback_, labels_[15], retry_}) ShowWindow(b, fallbackRow ? SW_SHOW : SW_HIDE);
+    if (fallbackRow) {
+        MoveWindow(labels_[14], m, y, labelW, h, TRUE);
+        MoveWindow(fallback_, m + labelW + g, y, cw, px(300), TRUE);
+        MoveWindow(labels_[15], m + colW + g, y, labelW, h, TRUE);
+        MoveWindow(retry_, m + colW + g + labelW + g, y, cw, px(300), TRUE);
+        y += h + g;
+    }
     SetWindowTextW(labels_[9], two ? L"Deck inputs" : L"Input from");
     SetWindowTextW(labels_[1], two ? L"Deck A input" : L"Input");
     SetWindowTextW(labels_[2], two ? L"Deck A output" : L"Output");
@@ -599,6 +618,11 @@ void AudioWindow::fillAll() {
         devices(inB_, sysInputs_, listedIn, settings_.inDevice[1], L"(none)");
         devices(outA_, sysOutputs_, listedOut, settings_.outDevice[0], L"(none)");
         devices(outB_, sysOutputs_, listedOut, settings_.outDevice[1], L"(none)");
+        devices(fallback_, sysOutputs_, listedOut, settings_.fallbackOutput, L"(none)");
+        SendMessageW(retry_, CB_RESETCONTENT, 0, 0);
+        for (const int minutes : {1, 2, 5, 10, 30})
+            addItem(retry_, std::to_wstring(minutes) + (minutes == 1 ? L" minute" : L" minutes") + (minutes == 5 ? L" (default)" : L""), minutes);
+        selectData(retry_, settings_.retryMinutes);
         bufferSizes_.assign(std::begin(kPeriods), std::end(kPeriods));
         bufferSizes_.insert(bufferSizes_.begin(), 0);
     }
@@ -661,6 +685,8 @@ void AudioWindow::readChoices() {
         settings_.inDevice[1] = name(inB_, sysInputs_);
         settings_.outDevice[0] = name(outA_, sysOutputs_);
         settings_.outDevice[1] = name(outB_, sysOutputs_);
+        settings_.fallbackOutput = name(fallback_, sysOutputs_);
+        settings_.retryMinutes = static_cast<int>(selectedData(retry_, settings_.retryMinutes));
     }
     settings_.sampleRate = static_cast<int>(selectedData(rate_, settings_.sampleRate));
     settings_.bufferSize = static_cast<int>(selectedData(buffer_, settings_.bufferSize));
@@ -807,6 +833,13 @@ void AudioWindow::command(int id, int code) {
         settings_.linkPresets = SendMessageW(link_, BM_GETCHECK, 0, 0) == BST_CHECKED;
         if (settings_.linkPresets) settings_.deck[1].preset = settings_.deck[0].preset; // deck B follows deck A
         onChange_();
+        return;
+    }
+    if ((id == idFallback || id == idRetry) && code == CBN_SELCHANGE) { // what runs now does not change
+        if (!filling_) {
+            readChoices();
+            onChange_();
+        }
         return;
     }
     if ((code == CBN_SELCHANGE && !filling_) || (id == idExclusive && code == BN_CLICKED)) {
@@ -1012,7 +1045,7 @@ void AudioWindow::refresh() {
     const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
     EnableWindow(close_, asio() && open);
     EnableWindow(panel_, asio() && open);
-    EnableWindow(stop_, running);
+    EnableWindow(stop_, running || settings_.startAudio); // (not running but wanted: Stop ends the tries to start it)
     EnableWindow(start_, !running);
     EnableWindow(open_, asio() && !running);
     std::wstring info, full;

@@ -101,6 +101,11 @@ public:
     void resetHealth();
     // A stream stopped by itself (device unplugged, taken by another program in exclusive mode). Cleared by stop().
     bool failed() const;
+    // A stream that plays but has processed no period for kStallSeconds (GUI thread; `now` in seconds): miniaudio warns
+    // that a disconnected playback device can hang instead of stopping, and then says nothing. Not sooner: a Bluetooth
+    // device may take seconds to wake up.
+    static constexpr double kStallSeconds = 10.0;
+    bool stalled(double now);
     // Test aid (sysaudio_test): every API is miniaudio's null backend - devices that make no sound, on a timer.
     static void useNullBackend(bool on);
     // Test aid: every input and output counts as one device (one clock) - the null backend cannot say so itself.

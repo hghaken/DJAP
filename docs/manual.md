@@ -130,7 +130,7 @@ Only one DJAP runs at a time: starting it a second time brings the running one t
 With "Start DJAP when Windows starts" on (Setup window, or the setup's option), DJAP starts hidden in the
 notification area when you log on, and starts the audio with the devices of the last session if the audio was
 running when it was last closed. Devices that are not ready yet right after logging on are tried again every 5
-seconds for 2 minutes. If you stopped the audio before closing DJAP, it stays stopped at the next start.
+seconds (5.1, *Try again for*). If you stopped the audio before closing DJAP, it stays stopped at the next start.
 
 Windows' own list of startup apps (Settings > Apps > Startup) can switch it off too; DJAP shows that as off.
 
@@ -468,6 +468,7 @@ the audio again (a short fade-out and fade-in).
 | **Buffer size** | ASIO: the driver's preferred size, or a size it allows. Other APIs: the period asked of Windows. Smaller = less latency, more risk of dropouts (watch Health). |
 | **Look-ahead** | The limiter's look-ahead: 0, 1.5 (default), 2, 3 or 5 ms, the same for both decks. Longer handles peaks more gently. Every choice above 0 limits the true peak; at 0 ms the limiter holds only the sample peak (true peaks can pass the ceiling) and adds no delay. Changed at once with a short fade. (The former 0.5 and 1.0 ms were too short for the true-peak detector and are now 1.5 ms.) |
 | **Oversampling** | 2x, 4x (default) or 8x, both decks: how many times the sample rate the soft clipper and the exciter work at. Their overtones above the audio band would fold back as harsh tones that do not belong to the music; 2x leaves a rest on hard-driven high tones (about 40 dB under a 15 kHz tone), 4x and 8x take it away (60 to more than 100 dB under) at a little more CPU. Adds no latency. Changed with a short fade of those two stages. |
+| **Fallback output**, **Try again for** (WASAPI, DirectSound, MME) | When a device goes away while the audio runs - a Bluetooth headset switched off - DJAP tries the chosen devices again every 5 seconds, for the time chosen here (1, 2, 5 (default), 10 or 30 minutes). After it, the sound goes to the fallback output if a chosen output is still gone, and back by itself as soon as that output returns; the main window's route and the status say so. *(none)*: no fallback, DJAP goes on trying. The same goes for a device that is not there when the audio starts at program start. **Stop audio** ends the tries. Do not choose the virtual cable you use as an input: DJAP would hear itself, so it does not use such a fallback. With ASIO there is no fallback (the driver is the only output); a stopped input is tried again for 5 minutes. |
 
 ### 5.2 Options
 
@@ -1163,6 +1164,7 @@ old file stays.
 
 | Problem | What to do |
 |---|---|
+| **The sound stops when a Bluetooth headset goes away** | Choose a **Fallback output** in the Setup window (5.1): after *Try again for* the sound goes there, and back when the headset returns. Windows' default output cannot be the fallback when that is the virtual cable DJAP listens to. |
 | **No sound** | Is the audio started (Setup window)? Are the right input and output pairs or devices chosen? Is a deck on *(none)*? Do the In bars move? If In moves and Out does not, check the output route and the amplifier. |
 | **"Open driver" fails** | Another program (DJ software) may hold the ASIO driver. Close it or use another interface. Check that the interface is connected and its driver installed. |
 | **A device shows "(not found)"** | The saved device is not connected, or it was chosen under another API (each API names devices differently). Choose it again. |

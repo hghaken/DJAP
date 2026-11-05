@@ -39,7 +39,10 @@ void run(bool drift, const SysRoute& route) {
     const SysStreamInfo info = sys.info(0);
     CHECK(info.running && info.driftCorrected == drift);
     CHECK(!sys.info(1).running); // a deck without devices does not run
+    // a stream that runs is not stalled, however late the look (its periods go on); the first look starts the clock
+    CHECK(!sys.stalled(1000.0));
     std::this_thread::sleep_for(std::chrono::seconds(3));
+    CHECK(!sys.stalled(1000.0 + SysAudio::kStallSeconds + 1.0));
     const EngineHealth h = sys.health();
     const uint64_t frames = engine.deck(0).processedFrames();
     const AsyncInputState a = async.state();

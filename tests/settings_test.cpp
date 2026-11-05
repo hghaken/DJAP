@@ -80,6 +80,7 @@ void checkSame(const Settings& a, const Settings& b) {
     }
     CHECK(a.snapToBands == b.snapToBands && a.showTooltips == b.showTooltips);
     CHECK(a.checkUpdates == b.checkUpdates && a.updateUrl == b.updateUrl);
+    CHECK(a.fallbackOutput == b.fallbackOutput && a.retryMinutes == b.retryMinutes);
     CHECK(a.presets.size() == b.presets.size());
     for (size_t i = 0; i < a.presets.size() && i < b.presets.size(); ++i) {
         CHECK(a.presets[i].name == b.presets[i].name);
@@ -132,6 +133,7 @@ void defaults() {
     CHECK(s.deck[0].preset == "Medium" && s.deck[1].preset == "Medium");
     // first start: no device chosen (the program opens the Audio window); a driver, or a device of another API
     CHECK(!s.audioConfigured() && !s.trayHintShown);
+    CHECK(s.fallbackOutput.empty() && s.retryMinutes == 5);
     CHECK(s.checkUpdates && s.updateUrl.empty()); // the daily update check is on unless switched off
     Settings a = s;
     a.driver = "Some ASIO Driver";
@@ -189,6 +191,8 @@ Settings busy() {
     s.snapToBands = true;
     s.showTooltips = false;
     s.trayHintShown = true;
+    s.fallbackOutput = "Speakers (USB Audio)";
+    s.retryMinutes = 10;
     s.checkUpdates = false;
     s.updateUrl = "http://127.0.0.1:8765/latest.json";
     // shipped preset with values changed, among them the band count

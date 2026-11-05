@@ -12,6 +12,7 @@
 #include <commctrl.h>
 #include <windowsx.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <iterator>
@@ -26,7 +27,6 @@ const UINT_PTR kTimer = 1;
 const UINT kTimerMs = 50; // meters at 20 Hz
 const UINT_PTR kStartTimer = 2; // startSavedAudio() again
 const UINT kStartRetryMs = 5000;
-const int kStartTries = 24; // 2 minutes
 
 // control ids: deck d uses 1000 + 100 d + item
 enum Item { iPreset = 1, iProcessing, iEdit = 5, iColour, iEditColour, iGraphs, iMeter = 30 };
@@ -170,6 +170,7 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     // hidden: the icon in the notification area opens it
     ShowWindow(hwnd_, hidden ? SW_HIDE : placement::showCommand(hwnd_));
     SetTimer(hwnd_, kTimer, kTimerMs, nullptr);
+    SetTimer(hwnd_, kStartTimer, kStartRetryMs, nullptr);
     // the icon in the notification area: the small size for this screen (16 px at 100 %, 24 at 150 %, ...)
     if (FAILED(LoadIconMetric(instance, MAKEINTRESOURCEW(IDI_APP), LIM_SMALL, &iconSmall_))) iconSmall_ = nullptr;
     tray_.add(hwnd_, iconSmall_ ? iconSmall_ : wc.hIconSm, L"DJAP");
@@ -191,45 +192,119 @@ UINT MainWindow::showMessage() {
 
 void MainWindow::openAudioWindow() { audioWindow_.show(hwnd_); }
 
-void MainWindow::startSavedAudio() {
-    KillTimer(hwnd_, kStartTimer);
-    // stopped by the user in the meantime, or started from the Audio window: nothing more to do
-    if (!settings_.startAudio || audio_.simulating() || audio_.deviceRunning() || audio_.systemRunning()) {
-        startTries_ = 0;
-        return;
-    }
-    ++startTries_;
+void MainWindow::startSavedAudio() { recoverAudio(); }
+
+// The chosen devices; with `useFallback` the fallback output in the place of the outputs that are gone.
+bool MainWindow::startChosen(bool useFallback, const std::vector<SysDevice>& outputs) {
     // the Windows volume first: the decks take it over without a glide when the stream starts (prepare); else the
     // first 50 ms played at 100 % and glided down - a loud blast at program start (client, 2026-10-25)
     updateVolume();
-    std::string err;
-    bool ok = false;
+    startError_.clear();
     AudioApi api = AudioApi::Asio;
     apiFromName(settings_.api, api);
+    bool ok = false;
     if (api == AudioApi::Asio) {
-        if (settings_.driver.empty()) err = "no ASIO driver chosen";
-        else {
-            if (audio_.driverOpen() && audio_.driverName() != settings_.driver) audio_.closeDriver();
-            ok = (audio_.driverOpen() || audio_.openDriver(settings_.driver, hwnd_, err)) &&
-                 audio_.startDevice(settings_.sampleRate, settings_.bufferSize, asioChannelsFrom(settings_),
-                                    sysInputsFrom(settings_), err);
-        }
+        if (audio_.driverOpen() && audio_.driverName() != settings_.driver) audio_.closeDriver();
+        ok = (audio_.driverOpen() || audio_.openDriver(settings_.driver, hwnd_, startError_)) &&
+             audio_.startDevice(settings_.sampleRate, settings_.bufferSize, asioChannelsFrom(settings_),
+                                sysInputsFrom(settings_), startError_);
     } else {
         SysRoute routes[2];
         sysRoutesFrom(settings_, routes);
+        if (useFallback)
+            for (SysRoute& r : routes)
+                if (!r.output.empty() && std::none_of(outputs.begin(), outputs.end(),
+                                                      [&](const SysDevice& o) { return o.name == r.output; }))
+                    r.output = settings_.fallbackOutput;
         ok = audio_.startSystem(api, routes, settings_.sampleRate, static_cast<unsigned>(settings_.bufferSize),
-                                settings_.exclusive, settings_.driftCorrection, err);
+                                settings_.exclusive, settings_.driftCorrection, startError_);
     }
-    if (ok) {
-        startTries_ = 0;
-        applyAll();
-        setMessage("");
-    } else if (startTries_ < kStartTries && !(api == AudioApi::Asio && settings_.driver.empty())) {
-        setMessage("audio not started yet, trying again: " + err);
-        SetTimer(hwnd_, kStartTimer, kStartRetryMs, nullptr);
-    } else {
-        startTries_ = 0;
-        setMessage("audio not started: " + err);
+    if (ok) applyAll();
+    return ok;
+}
+
+// Every 5 s (and at program start): the audio that should run and does not (client, 2026-11-05). DeviceRecovery says
+// what to do.
+void MainWindow::recoverAudio() {
+    if (audio_.simulating()) return;
+    AudioApi api = AudioApi::Asio;
+    apiFromName(settings_.api, api);
+    const bool system = api != AudioApi::Asio;
+    if (settings_.startAudio && !system && settings_.driver.empty()) {
+        if (message_.empty()) setMessage("audio not started: no ASIO driver chosen");
+        return;
+    }
+    DeviceRecovery::Facts f;
+    f.wanted = settings_.startAudio;
+    f.running = audio_.deviceRunning();
+    f.keepTrying = system;
+    f.retrySeconds = settings_.retryMinutes * 60.0;
+    SysRoute routes[2];
+    sysRoutesFrom(settings_, routes);
+    std::vector<SysDevice> inputs, outputs;
+    std::string missing, fallbackNote;
+    if (system && f.wanted) {
+        for (int d = 0; d < 2; ++d)
+            if (f.running && audio_.systemRunning() && audio_.sys().info(d).running &&
+                audio_.sys().info(d).output != routes[d].output)
+                f.onFallback = true;
+        if (!f.running || f.onFallback) { // (not every 5 s while all is well)
+            std::string err;
+            SysAudio::devices(api, inputs, outputs, err);
+            auto listed = [&](const std::string& name) {
+                return std::any_of(outputs.begin(), outputs.end(), [&](const SysDevice& o) { return o.name == name; });
+            };
+            for (const SysRoute& r : routes)
+                if (!r.output.empty() && !listed(r.output)) missing = r.output;
+            f.chosenOutputsThere = missing.empty();
+            const std::string& fb = settings_.fallbackOutput;
+            bool usable = !fb.empty() && listed(fb) && !missing.empty();
+            for (const SysRoute& r : routes)
+                if (fb == r.input) { // a virtual cable's two ends carry one name: DJAP would hear itself
+                    if (usable) fallbackNote = "; the fallback output is this input's own device: not used";
+                    usable = false;
+                }
+            f.fallbackUsable = usable;
+        }
+    }
+    const double now = static_cast<double>(GetTickCount64()) * 1e-3;
+    const std::string gone = missing.empty() ? std::string("audio not running") : "the output \"" + missing + "\" is gone";
+    switch (recovery_.tick(now, f)) {
+    case DeviceRecovery::Action::None:
+        if (f.onFallback) {
+            const std::string text = gone + ": playing on \"" + settings_.fallbackOutput + "\" until it is back";
+            if (message_ != text) setMessage(text);
+        }
+        break;
+    case DeviceRecovery::Action::Retry:
+        if (startChosen(false, outputs)) {
+            setMessage("");
+        } else {
+            const int left = static_cast<int>(std::ceil(recovery_.secondsLeft(now, f.retrySeconds)));
+            std::string text = gone + ", trying again";
+            if (left > 0 && f.fallbackUsable)
+                text += " for " + std::to_string(left / 60) + ":" + (left % 60 < 10 ? "0" : "") + std::to_string(left % 60) +
+                        ", then on \"" + settings_.fallbackOutput + "\"";
+            setMessage(text + ": " + startError_ + fallbackNote);
+        }
+        break;
+    case DeviceRecovery::Action::StartFallback:
+        if (startChosen(true, outputs)) setMessage(gone + ": playing on \"" + settings_.fallbackOutput + "\" until it is back");
+        else setMessage(gone + "; the fallback output did not start either: " + startError_);
+        break;
+    case DeviceRecovery::Action::ReturnToChosen:
+        if (startChosen(false, outputs)) {
+            setMessage("");
+        } else { // listed, but it cannot be opened yet: the fallback goes on
+            recovery_.returnFailed(now);
+            for (const SysRoute& r : routes)
+                if (!r.output.empty()) outputs.erase(std::remove_if(outputs.begin(), outputs.end(), [&](const SysDevice& o) { return o.name == r.output; }), outputs.end());
+            startChosen(true, outputs);
+        }
+        break;
+    case DeviceRecovery::Action::GiveUp:
+        setMessage("audio not started: " + startError_);
+        break;
     }
 }
 
@@ -311,7 +386,7 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_TIMER:
         if (wp == kStartTimer) {
-            startSavedAudio();
+            recoverAudio();
             return 0;
         }
         if (wp == kTimer) {
@@ -651,7 +726,9 @@ void MainWindow::refreshStrip(int d) {
         in = fromUtf8(settings_.api) + L": no devices (not used)";
     } else {
         in = fromUtf8(settings_.api + ": " + settings_.inDevice[d]);
-        out = fromUtf8(settings_.api + ": " + settings_.outDevice[d]);
+        // what runs: on the fallback output that one
+        const bool other = audio_.systemRunning() && audio_.sys().info(d).running && audio_.sys().info(d).output != settings_.outDevice[d];
+        out = fromUtf8(settings_.api + ": " + (other ? audio_.sys().info(d).output + " (fallback)" : settings_.outDevice[d]));
     }
     if (d == 1 && linked()) (out.empty() ? in : out) += L"   (linked to deck A)"; // deck B has no controls: say why
     SetWindowTextW(s.route, out.empty() ? in.c_str() : (L"In:  " + in).c_str());

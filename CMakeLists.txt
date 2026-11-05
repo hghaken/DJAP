@@ -57,7 +57,8 @@ add_library(apcore STATIC
     src/core/monitor.cpp
     src/core/colour.cpp
     src/core/engine.cpp
-    src/core/healthhistory.cpp)
+    src/core/healthhistory.cpp
+    src/core/recovery.cpp)
 target_include_directories(apcore PUBLIC src/core)
 ap_own(apcore)
 
