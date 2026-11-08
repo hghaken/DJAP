@@ -277,11 +277,13 @@ private:
     double postFast_ = 0.0, postMid_ = 0.0, postSlow_ = 0.0; // the leveller detector: 0.4 s, 1.5 s, 3 s
     double postGated_ = 0.0; // 0.4 s, blocks far under the 1.5 s level left out: the trend (falling, steady)
     double quietTime_ = 1e9, silenceTime_ = 1e9, musicTime_ = 0.0;
+    double stillTime_ = 0.0; // seconds every control block has been under -60 LUFS (real silence: the start at the top)
     bool quiet_ = true, longSilence_ = true, catchPending_ = false, catching_ = false;
     bool pauseSeen_ = true; // the quiet time so far held at least 1 s of silence (a pause: warm start after it)
     bool fastDown_ = false; // the leveller comes down at the fast speed until it reaches the wanted gain
     bool fastUp_ = false;   // ... or goes up at the fast-up speed (clearly too soft, not falling)
     bool fell_ = false;     // the level fell (or a quiet section was released): the 3 s level restarts after it
+    bool startHigh_ = false; // a long silence put the gain at the top: the next song's catch-up needs no warm start
     double quietSteady_ = 0.0; // seconds the music has stayed under the hold level, steady (a quiet section)
     static constexpr int kLevHist = 24;
     double midHist_[kLevHist] = {}; // the gated level (LUFS) every 0.25 s for the last 6 s

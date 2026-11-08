@@ -43,7 +43,8 @@ Markdown (markdown-it-py and Chrome or Edge).
 Per deck, in this order (`docs/design.md` sections 2-4):
 
 - **Leveller** - slow automatic gain that brings each song to the loudness preset's target loudness (EBU R 128 / BS.1770),
-  holds during fades, breakdowns and pauses, catches up quickly after a stopped deck.
+  holds during fades, breakdowns and short pauses, goes to +12 dB after 2 s of silence (a stopped deck) and comes down
+  from there as far as the next song needs.
 - **Compressor** - wide-band, soft knee, threshold relative to the target.
 - **MB Compressor** - multiband (1-7 bands, flat sum): each band is compared with its own recent level.
 - **Bass enhancer, exciter, de-esser, stereo width** - optional stages that shape the sound.

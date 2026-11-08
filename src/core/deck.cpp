@@ -50,6 +50,14 @@ const double kSteadyDb = 3.5;
 const double kQuietMusicLu = 12.0;
 const double kFastUpDb = 4.0;
 const double kFastUpDoneDb = 1.0;
+// After a long silence (a stopped deck) the gain goes to +12 dB, or the preset's Range if that is less, whatever it was
+// (client, 2026-11-08: "after a silence the leveller always starts at +12 dB"): a soft intro is on level from its first
+// moment, and a louder song comes down from there at once at the Attack speed. The move is made in the silence, as a
+// ramp: no step in whatever noise is left.
+const double kLongSilenceSeconds = 2.0;
+const double kSilencePower = lufsToPower(-60.0);
+const double kSilenceStartDb = 12.0;
+const double kSilenceRiseDbPerSecond = 60.0;
 
 // Crossfade position (-1..0 warm-up, 0..1 fade) to weight: raised cosine, so the fade starts and ends without a
 // corner (a linear fade's corner showed as a click on a 120 Hz tone).
@@ -659,7 +667,7 @@ void DeckProcessor::resetStage(int s) {
     case sLeveller:
         levGainDb_ = 0.0;
         levGainLin_ = 1.0;
-        catching_ = catchPending_ = fastDown_ = fastUp_ = fell_ = false;
+        catching_ = catchPending_ = fastDown_ = fastUp_ = fell_ = startHigh_ = false;
         quietSteady_ = 0.0;
         break;
     case sNoise:
@@ -740,6 +748,7 @@ void DeckProcessor::resetStates() {
     pauseSeen_ = true;
     quietTime_ = 1e9;
     silenceTime_ = 1e9;
+    stillTime_ = 0.0;
     longSilence_ = true;
     musicTime_ = 0.0;
     quiet_ = true;
@@ -780,6 +789,10 @@ void DeckProcessor::controlUpdate() {
     } else {
         silenceTime_ = 0.0;
     }
+    // real silence, block by block: the 0.4 s level above needs some 2 s more to fall from a loud song to -60 LUFS. Only
+    // silence that was measured counts: a stream that starts in the music does not jump to the top
+    stillTime_ = inPow < kSilencePower ? stillTime_ + dt : 0.0;
+    if (stillTime_ >= kLongSilenceSeconds) pauseSeen_ = longSilence_ = true;
     if (quiet_) {
         quietTime_ += dt;
     } else {
@@ -846,7 +859,14 @@ void DeckProcessor::controlUpdate() {
     const bool rising = powerToLufs(postFast_) > riseHist_[(riseIdx_ + 1) & 3] + kRiseCatchDb; // 0.75..1 s ago
 
     if (running_[sLeveller]) {
-        if (!hold && !warm && !c.freeze) {
+        if (stillTime_ >= kLongSilenceSeconds && !c.freeze) {
+            levGainDb_ = moveToward(levGainDb_, std::min(kSilenceStartDb, c.levRange), kSilenceRiseDbPerSecond * dt);
+            fastDown_ = fastUp_ = false;
+            startHigh_ = true;
+        }
+        // from the top the gain can only come down, and the 0.4 s level, still rising from nothing, can only read too
+        // low: no need to wait for the warm start
+        if (!hold && (!warm || startHigh_) && !c.freeze) {
             if (catchPending_) {
                 catching_ = true;
                 catchPending_ = false;
@@ -888,7 +908,7 @@ void DeckProcessor::controlUpdate() {
             if (catching_) {
                 catchTime_ += dt;
                 if ((!rising && std::fabs(levGainDb_ - wanted) < 0.1) || catchTime_ > kCatchMaxSeconds) {
-                    catching_ = false;
+                    catching_ = startHigh_ = false;
                     postSlow_ = postFast_; // the slow level starts from the level caught up to, not from its lag
                 }
             }
