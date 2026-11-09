@@ -1,9 +1,21 @@
-# DJAP (DJ Audio Processor)
+# DJAP — DJ Audio Processor
 
-A standalone Windows loudness and dynamics processor. For DJs: two independent stereo channels - deck A and deck
-B - come in on an ASIO® interface, each runs its own processing chain with its own preset, and goes out again on
-its own output pair. For other Windows users: one channel, one stereo processor (Setup window, "Processing"). A
-plug-in brings the same processing into DJ software, one deck per plug-in. The same code renders WAV files offline.
+**Free, open-source loudness and dynamics processing for DJs on Windows.**
+
+DJAP keeps every track at a consistent loudness (LUFS / EBU R 128 / ITU-R BS.1770) so you spend less time riding gain between quiet old masters and loud modern tracks. Two independent stereo decks (ASIO / WASAPI / DirectSound / MME), adjustable loudness presets (−18 to −10 LUFS plus broadcast-style presets), EQ that does not break the loudness target, analysis meters, and a matching **VST3** plugin for DJ software. GPL-3.0.
+
+**[Website](https://hhaken.nl/djap/)** · **[Download for Windows](https://github.com/hghaken/DJAP/releases/latest)** · [Watch the 3‑minute demo](https://www.youtube.com/watch?v=1PePjk0rk-Y) · [User manual](docs/manual.md) · [Technical manual](docs/technical.md)
+
+![DJAP main window](docs/images/main.jpg)
+
+![Setup](docs/images/setup.jpg)
+
+![VST3 plugin](docs/images/plugin.jpg)
+
+![Spectrum](docs/images/spectrum.jpg)
+
+![Analysis](docs/images/analysis.png)
+
 Copyright (C) 2026 hghaken. Licence: GPL-3.0-or-later (`LICENSE`); free software, with ABSOLUTELY NO WARRANTY.
 The code was written with the AI assistant Claude (Anthropic), implemented from public standards and papers (the
 sources are listed in the technical manual), and improved with outside reviews by Grok (xAI).
