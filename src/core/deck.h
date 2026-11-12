@@ -91,6 +91,8 @@ struct DeckConfig {
     // leveller (control rate)
     double aim = -14.0, levRange = 12.0, levStep = 0.0, levFastStep = 0.0, levFastUpStep = 0.0, holdLufs = -24.0,
            catchStep = 0.0, quietWait = 3.0;
+    bool levSilenceHold = false; // After silence "hold": the gain stays in a long silence
+    double levSilenceDb = 12.0;  // ... else the gain it goes to (at most the range)
     double levDetMax = 1e30; // the most power one control block may add to the leveller detector
     double aFast = 0.0, aMid = 0.0, aSlow = 0.0;
     // noise reduction (control rate): 1 or 4 bands, LR4 splits with phase-aligning all-passes (flat sum)
@@ -283,7 +285,7 @@ private:
     bool fastDown_ = false; // the leveller comes down at the fast speed until it reaches the wanted gain
     bool fastUp_ = false;   // ... or goes up at the fast-up speed (clearly too soft, not falling)
     bool fell_ = false;     // the level fell (or a quiet section was released): the 3 s level restarts after it
-    bool startHigh_ = false; // a long silence put the gain at the top: the next song's catch-up needs no warm start
+    bool afterSilence_ = false; // a long silence set the gain: the next song's catch-up needs no warm start (only down in it)
     double quietSteady_ = 0.0; // seconds the music has stayed under the hold level, steady (a quiet section)
     static constexpr int kLevHist = 24;
     double midHist_[kLevHist] = {}; // the gated level (LUFS) every 0.25 s for the last 6 s

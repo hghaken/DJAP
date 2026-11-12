@@ -563,7 +563,7 @@ void positions() {
         const ParamInfo& in = paramInfo(p);
         const int n = paramPositions(p);
         CHECK(n >= 1);
-        if (p == pCompMakeup) CHECK(paramValueAt(p, 0) < 0);
+        if (p == pCompMakeup || p == pLevSilence) CHECK(paramValueAt(p, 0) < 0);
         else if (p == pCompSideHpf) CHECK(paramValueAt(p, 0) == 0);
         else CHECK(paramValueAt(p, 0) == in.min);
         CHECK(paramValueAt(p, n) == in.max);

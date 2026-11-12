@@ -41,7 +41,7 @@ Each deck runs the same chain of processing stages:
 
 | Step | What it does for you |
 |---|---|
-| **Leveller** | A slow, automatic hand on the volume: quiet and loud songs come out at the same loudness. It does not follow the music within a song and holds still during fades and short pauses; a quiet part that stays (a soft verse, a breakdown) comes up to the target after a few seconds. After 2 seconds of silence (a stopped deck) it goes to +12 dB, so the next song starts from the top and comes down as far as it needs. |
+| **Leveller** | A slow, automatic hand on the volume: quiet and loud songs come out at the same loudness. It does not follow the music within a song and holds still during fades and short pauses; a quiet part that stays (a soft verse, a breakdown) comes up to the target after a few seconds. After 2 seconds of silence (a stopped deck) it goes to +12 dB (the "After silence" setting), so the next song starts from the top and comes down as far as it needs. |
 | **Noise** | Noise reduction (off unless you switch it on): hiss, hum and rumble are turned down in pauses and quiet passages, in four bands; the music above its threshold passes untouched. |
 | **EQ** | The tone of the music: bass, low-mid, presence and treble, an automatic tone correction per song, a sub-bass generator and a contour for quiet listening. |
 | **Compressor** | Evens out the loud parts within a song. |
@@ -604,11 +604,12 @@ Defaults below are those of Medium (the general defaults of a new own preset).
 | Release | s per 10 dB | 0.2 .. 20 | 1.5 (Gentle, DAB+: 5) | How fast the gain goes up when the music is clearly too soft (a soft intro, a quiet song after a loud one). Shorter: on level sooner, but the rise is easier to hear; longer: a gentler turn of the knob. |
 | Hold below | LU | 5 .. 20 | 10 | Holds the gain while the music is this far under the target: fades and pauses are not pumped up. A quiet part that stays this low for the Quiet wait without fading (a soft intro or verse, a breakdown) is levelled like the rest. |
 | Quiet wait | s | 0.5 .. 10 | 1 (Gentle, DAB+: 3) | How long such a quiet part waits before it is levelled. Shorter: a soft intro comes up sooner; longer: the start of a breakdown or a fade is surer to be left alone. |
+| After silence | dB | hold, 0 .. 15 | 12 | The gain after at least 2 seconds of silence (a stopped deck), where the next song starts (at most the Range). Higher: a soft intro is on level at once, a loud song is too loud for its first moments; lower: a gentler start, a soft song comes up a little later. "hold" (the slider's left end): the gain stays where the last song left it. |
 
 Attack and Release never move slower than Speed. After at least 2 seconds of silence (a stopped deck) the gain goes to
-+12 dB (or the Range, if that is less), whatever it was: a soft intro is on level from its first moment, and a louder
-song comes down from there at once at the Attack speed. A loud song is therefore too loud for its first 1 to 2 seconds
-(with the limiter holding the peaks); a shorter Attack shortens that. A shorter gap changes nothing. The defaults were
+After silence, +12 dB by default (or the Range, if that is less), whatever it was: a soft intro is on level from its
+first moment, and a louder song comes down from there at once at the Attack speed. A loud song is therefore too loud for
+its first 1 to 2 seconds (with the limiter holding the peaks); a shorter Attack or a lower After silence shortens that. A shorter gap changes nothing. The defaults were
 chosen on 18 songs with soft intros: they bring such an intro to the target about a quarter sooner than before,
 without a song coming in louder at its loud part.
 
@@ -723,7 +724,7 @@ limiter on.
 - For mixed old and new music, an **EQ** with auto tone (Oldies or Auto) usually does more for the balance than
   changing the loudness preset.
 - If the volume seems to drift within songs, lower the leveller **Speed**; if new songs take too long to settle,
-  raise it (a song after a silence starts from +12 dB and comes down at the Attack speed).
+  raise it (a song after a silence starts from "After silence", +12 dB, and comes down at the Attack speed).
 - If the sound "breathes" or pumps, lengthen the compressor and MB Compressor **Release**, or lower the MB Compressor **Amount**.
 - Watch the stage rows: a limiter that reduces more than a few dB all the time means the stages before it push too
   hard (lower input gain, clipper drive or target).

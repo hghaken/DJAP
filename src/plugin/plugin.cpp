@@ -107,6 +107,7 @@ public:
         if (in.isSwitch) std::snprintf(text, sizeof text, "%s", x >= 0.5 ? "On" : "Off");
         else if (p_ == pCompMakeup && x < 0) std::snprintf(text, sizeof text, "auto");
         else if (p_ == pCompSideHpf && x <= 0) std::snprintf(text, sizeof text, "off");
+        else if (p_ == pLevSilence && x < 0) std::snprintf(text, sizeof text, "hold");
         else std::snprintf(text, sizeof text, "%.*f", in.decimals, x);
         ascii(out, text);
     }
@@ -114,6 +115,7 @@ public:
         const std::string s = StringConvert::convert(string);
         if (p_ == pCompMakeup && s.find("auto") != std::string::npos) return v = 0.0, true;
         if (p_ == pCompSideHpf && s.find("off") != std::string::npos) return v = 0.0, true;
+        if (p_ == pLevSilence && s.find("hold") != std::string::npos) return v = 0.0, true;
         if (paramInfo(p_).isSwitch && (s == "On" || s == "on")) return v = 1.0, true;
         if (paramInfo(p_).isSwitch && (s == "Off" || s == "off")) return v = 0.0, true;
         std::string t = s;

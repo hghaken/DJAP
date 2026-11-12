@@ -36,6 +36,10 @@ const ParamInfo kInfo[kParamCount] = {
     {"LevellerQuietWait", "Leveller", "Quiet wait", "s", 0.5, 10, 1, 0.5, 1, false,
      "How long a steady quiet part (more than Hold below under the target: a soft intro) waits before it is "
      "levelled; short = a soft intro comes up sooner, long = fades and breakdowns are surer to be left alone"},
+    {"LevellerSilence", "Leveller", "After silence", "dB", -1, 15, 12, 0.5, 1, false,
+     "The gain the leveller goes to after 2 s of silence (a stopped deck), so the next song starts there (at most "
+     "Range); high = a soft intro is on level at once and a loud start comes down at the Attack speed, low = a gentler "
+     "start; hold = the gain stays where the last song left it"},
 
     {"NoiseOn", "Noise", "On", "", 0, 1, 0, 1, 0, true,
      "Noise reduction: a band whose level falls under the threshold is turned down (hiss, hum, rumble between and "
@@ -386,6 +390,7 @@ void normaliseValues(PresetValues& v) {
     v[pNoiseBands] = v[pNoiseBands] >= 2.5 ? kNoiseBands : 1; // 1 or 4, nothing between
     if (v[pCompSideHpf] > 0 && v[pCompSideHpf] < 40) v[pCompSideHpf] = 40;
     if (v[pCompMakeup] < 0) v[pCompMakeup] = -1;
+    if (v[pLevSilence] < 0) v[pLevSilence] = -1;
     enforceSplits(v, 0);
     enforceNoiseSplits(v, 0);
 }
@@ -406,6 +411,7 @@ Scale scaleOf(int p) {
     s.hi = in.max;
     if (p == pCompMakeup) s.special = true, s.lo = 0.0;
     if (p == pCompSideHpf) s.special = true, s.lo = 40.0;
+    if (p == pLevSilence) s.special = true, s.lo = 0.0;
     const std::string unit = in.unit;
     s.log = (unit == "Hz" || unit == "ms" || unit == "s") && s.lo > 0.0 && s.hi / s.lo >= 8.0;
     s.positions = s.log ? kLogPositions : static_cast<int>(std::lround((s.hi - s.lo) / in.step));
@@ -421,7 +427,7 @@ double paramValueAt(int p, int pos) {
     const Scale s = scaleOf(p);
     pos = std::min(s.positions, std::max(0, pos));
     if (s.special) {
-        if (pos <= 0) return p == pCompMakeup ? -1.0 : 0.0;
+        if (pos <= 0) return p == pCompMakeup || p == pLevSilence ? -1.0 : 0.0;
         --pos;
     }
     const int n = s.positions - (s.special ? 1 : 0);
@@ -436,7 +442,7 @@ int paramPositionOf(int p, double v) {
     const Scale s = scaleOf(p);
     int off = 0;
     if (s.special) {
-        if ((p == pCompMakeup && v < 0.0) || (p == pCompSideHpf && v <= 0.0)) return 0;
+        if (((p == pCompMakeup || p == pLevSilence) && v < 0.0) || (p == pCompSideHpf && v <= 0.0)) return 0;
         off = 1;
     }
     const int n = s.positions - off;

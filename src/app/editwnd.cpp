@@ -39,6 +39,7 @@ std::string valueText(int p, double v) {
     if (in.isSwitch) return v >= 0.5 ? "on" : "off";
     if (p == pCompMakeup && v < 0) return "auto";
     if (p == pCompSideHpf && v <= 0) return "off";
+    if (p == pLevSilence && v < 0) return "hold";
     return number(v, in.decimals);
 }
 
@@ -48,6 +49,7 @@ std::string rangeText(int p) {
     std::string r = number(in.min, in.decimals) + " .. " + number(in.max, in.decimals);
     if (p == pCompMakeup) r = "auto, 0 .. " + number(in.max, in.decimals);
     if (p == pCompSideHpf) r = "off, 40 .. " + number(in.max, in.decimals);
+    if (p == pLevSilence) r = "hold, 0 .. " + number(in.max, in.decimals);
     return r;
 }
 
@@ -64,6 +66,7 @@ bool parseValue(int p, std::wstring t, double& out) {
     }
     if (p == pCompMakeup && t == L"auto") return out = -1, true;
     if (p == pCompSideHpf && t == L"off") return out = 0, true;
+    if (p == pLevSilence && t == L"hold") return out = -1, true;
     for (wchar_t& c : t)
         if (c == L',') c = L'.';
     if (t.empty()) return false;

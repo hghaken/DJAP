@@ -50,13 +50,12 @@ const double kSteadyDb = 3.5;
 const double kQuietMusicLu = 12.0;
 const double kFastUpDb = 4.0;
 const double kFastUpDoneDb = 1.0;
-// After a long silence (a stopped deck) the gain goes to +12 dB, or the preset's Range if that is less, whatever it was
-// (client, 2026-11-08: "after a silence the leveller always starts at +12 dB"): a soft intro is on level from its first
-// moment, and a louder song comes down from there at once at the Attack speed. The move is made in the silence, as a
-// ramp: no step in whatever noise is left.
+// After a long silence (a stopped deck) the gain goes to the preset's After silence (+12 dB by default), at most its
+// Range, whatever it was (client, 2026-11-08: "after a silence the leveller always starts at +12 dB"; 2026-11-12: "make
+// this adjustable"): a soft intro is on level from its first moment, and a louder song comes down from there at once at
+// the Attack speed. The move is made in the silence, as a ramp: no step in whatever noise is left.
 const double kLongSilenceSeconds = 2.0;
 const double kSilencePower = lufsToPower(-60.0);
-const double kSilenceStartDb = 12.0;
 const double kSilenceRiseDbPerSecond = 60.0;
 
 // Crossfade position (-1..0 warm-up, 0..1 fade) to weight: raised cosine, so the fade starts and ends without a
@@ -128,6 +127,8 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.levDetMax = lufsToPower(c.aim + c.levRange + 6.0);
     c.holdLufs = c.aim - v[pLevHold];
     c.quietWait = v[pLevQuietWait];
+    c.levSilenceHold = v[pLevSilence] < 0.0;
+    c.levSilenceDb = std::min(v[pLevSilence], c.levRange);
     c.catchStep = c.levFastUpStep; // a new song after a pause: up at the Release speed, down at the Attack speed
                                    // (was a switch and 20 dB/s both ways)
     c.aFast = onePoleCoeff(0.4, ctrlRate);
@@ -667,7 +668,7 @@ void DeckProcessor::resetStage(int s) {
     case sLeveller:
         levGainDb_ = 0.0;
         levGainLin_ = 1.0;
-        catching_ = catchPending_ = fastDown_ = fastUp_ = fell_ = startHigh_ = false;
+        catching_ = catchPending_ = fastDown_ = fastUp_ = fell_ = afterSilence_ = false;
         quietSteady_ = 0.0;
         break;
     case sNoise:
@@ -792,7 +793,14 @@ void DeckProcessor::controlUpdate() {
     // real silence, block by block: the 0.4 s level above needs some 2 s more to fall from a loud song to -60 LUFS. Only
     // silence that was measured counts: a stream that starts in the music does not jump to the top
     stillTime_ = inPow < kSilencePower ? stillTime_ + dt : 0.0;
-    if (stillTime_ >= kLongSilenceSeconds) pauseSeen_ = longSilence_ = true;
+    if (stillTime_ >= kLongSilenceSeconds) {
+        pauseSeen_ = longSilence_ = true;
+        // the trend starts again with the next song: the gated level kept the last song's level through the silence,
+        // and a soft song after a loud one read as a fall (no turning up for 6 s - with After silence under the top)
+        postGated_ = 0.0;
+        for (double& h : midHist_) h = kFloorDb;
+        fallTime_ = 0.0;
+    }
     if (quiet_) {
         quietTime_ += dt;
     } else {
@@ -859,14 +867,15 @@ void DeckProcessor::controlUpdate() {
     const bool rising = powerToLufs(postFast_) > riseHist_[(riseIdx_ + 1) & 3] + kRiseCatchDb; // 0.75..1 s ago
 
     if (running_[sLeveller]) {
-        if (stillTime_ >= kLongSilenceSeconds && !c.freeze) {
-            levGainDb_ = moveToward(levGainDb_, std::min(kSilenceStartDb, c.levRange), kSilenceRiseDbPerSecond * dt);
+        if (stillTime_ >= kLongSilenceSeconds && !c.levSilenceHold && !c.freeze) {
+            levGainDb_ = moveToward(levGainDb_, c.levSilenceDb, kSilenceRiseDbPerSecond * dt);
             fastDown_ = fastUp_ = false;
-            startHigh_ = true;
+            afterSilence_ = true;
         }
-        // from the top the gain can only come down, and the 0.4 s level, still rising from nothing, can only read too
-        // low: no need to wait for the warm start
-        if (!hold && (!warm || startHigh_) && !c.freeze) {
+        // the 0.4 s level, still rising from nothing, can only read too low: in the warm start after the silence the
+        // gain only comes down (from the top it can do nothing else), and goes up once the warm start is over
+        const bool early = warm && afterSilence_;
+        if (!hold && (!warm || afterSilence_) && !c.freeze) {
             if (catchPending_) {
                 catching_ = true;
                 catchPending_ = false;
@@ -880,6 +889,8 @@ void DeckProcessor::controlUpdate() {
             }
             // catching up follows the 0.4 s level: a track that is still fading in is followed up its fade
             double wanted = clampd(c.aim - powerToLufs(catching_ ? postFast_ : postSlow_), -c.levRange, c.levRange);
+            const bool readsLow = early && wanted > levGainDb_;
+            if (readsLow) wanted = levGainDb_;
             if (falling) {
                 wanted = std::min(wanted, levGainDb_);
                 fastUp_ = false;
@@ -907,8 +918,8 @@ void DeckProcessor::controlUpdate() {
             levGainDb_ = moveToward(levGainDb_, wanted, step);
             if (catching_) {
                 catchTime_ += dt;
-                if ((!rising && std::fabs(levGainDb_ - wanted) < 0.1) || catchTime_ > kCatchMaxSeconds) {
-                    catching_ = startHigh_ = false;
+                if ((!rising && !readsLow && std::fabs(levGainDb_ - wanted) < 0.1) || catchTime_ > kCatchMaxSeconds) {
+                    catching_ = afterSilence_ = false;
                     postSlow_ = postFast_; // the slow level starts from the level caught up to, not from its lag
                 }
             }

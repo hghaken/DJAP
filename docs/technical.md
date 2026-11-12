@@ -264,7 +264,7 @@ enough not to follow the phrases of a song.
   trend rule).
 - **Warm start.** A 3 s average starting from nothing reads new music as far too quiet for seconds. After a pause
   (at least 1 s of silence), the slow detector follows the fast one for the first 1.5 s of music, and the gain is held
-  meanwhile (not after a start at +12 dB, see below). A quiet passage without silence is not a pause: the leveller goes
+  meanwhile (after a start after silence it may come down meanwhile, see below). A quiet passage without silence is not a pause: the leveller goes
   on from where it was.
 - **Fast up.** When the gain is more than 4 dB under what the 3 s level needs and the music is not falling - a quiet
   verse after a loud chorus, a soft intro - it goes up at the *Release* speed (seconds per 10 dB: 1.5, so 6.7 dB/s;
@@ -288,10 +288,12 @@ enough not to follow the phrases of a song.
   rises more than 1 dB per second (a track fading in), for at most 15 s; then the 3 s detector starts from the level
   reached. Measured: a 12 s fade-in from -50 dB ended 5.1 LU too loud without, 0.04 LU with.
 - **Start after silence.** After at least 2 s in which every control block is under -60 LUFS (a stopped deck) the gain
-  goes to +12 dB (or the Range, if that is less), whatever it was, as a 60 dB/s ramp inside the silence (client,
-  2026-11-08). A soft intro is on level from its first moment. A louder song starts the catch-up at once, without the
-  1.5 s of the warm start: from the top the gain can only come down, and the 0.4 s level, rising from nothing, can only
-  read too low. The price is a loud song's first moments: at -8 LUFS after 3 s of silence in Medium (target -14) the
+  goes to *After silence* (+12 dB by default, at most the Range), whatever it was, as a 60 dB/s ramp inside the silence
+  (client, 2026-11-08; a slider since 2026-11-12, "hold" leaves the gain where it was). A soft intro is on level from
+  its first moment. A louder song starts the catch-up at once, without the 1.5 s of the warm start, but in those 1.5 s
+  the gain only comes down: the 0.4 s level, rising from nothing, can only read too low (from the top the gain can
+  only come down anyway). A softer song goes on up after them. The silence also clears the trend detector: it kept
+  the last song's level, and a soft song after a loud one read as a fall (no turning up for 6 s). The price is a loud song's first moments: at -8 LUFS after 3 s of silence in Medium (target -14) the
   output is -7 .. -9 LUFS for the first second and on target after about 3 s; the Attack sets how long that lasts.
   Freeze keeps its gain, and a stream that starts in the music starts as before: only measured silence counts.
 - **Fast down (Attack).** When the gain is more than 3 dB above what the 3 s level needs - a loud song after a quiet intro or a

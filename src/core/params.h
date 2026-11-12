@@ -20,6 +20,7 @@ enum Param : int {
     pLevRelease,   // s per 10 dB up while clearly too soft, and after a pause (was a fixed fast-up and "Catch up")
     pLevHold,
     pLevQuietWait, // s a steady quiet section waits before it is levelled
+    pLevSilence,   // dB the gain goes to after a long silence; negative = hold (written as -1)
     // noise reduction: a downward expander in 1 or 4 bands (client, 2026-10-29)
     pNoiseOn,
     pNoiseBands,     // 1 or 4

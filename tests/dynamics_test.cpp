@@ -291,6 +291,37 @@ void levellerSilenceStart() {
     std::printf("   range 6 dB: gain %.2f dB in the first 100 ms\n", g0);
     CHECK_NEAR(g0, 6.0, 0.1);
 
+    // After silence lower than the top (client, 2026-11-12: "make it adjustable"): the start there, a soft song goes on
+    // up after the warm start (this one, 10 LU under the target with the start's 6 dB, after Quiet wait too) - not held
+    // as a fall from the loud song before the pause (it was, for 6 s) - and a loud one comes down at once
+    PresetValues lower = v;
+    lower[pLevSilence] = 6;
+    s = song(3.0, -40.0);
+    o = run(fs, lower, s.l, s.r);
+    g0 = gainAt(s, o, 0.0, 0.1);
+    double g05 = gainAt(s, o, 0.5, 0.6);
+    g1 = gainAt(s, o, 6.0, 7.0);
+    std::printf("   after silence 6 dB, soft song: gain %.2f dB in the first 100 ms, %.2f at 0.5 s, %.2f at 6-7 s\n", g0,
+                g05, g1);
+    CHECK_NEAR(g0, 6.0, 0.1);
+    CHECK_NEAR(g05, 6.0, 0.1); // not up on the 0.4 s level that still rises from nothing
+    CHECK_NEAR(g1, 12.0, 0.5);
+    s = song(3.0, -20.0);
+    o = run(fs, lower, s.l, s.r);
+    g0 = gainAt(s, o, 0.0, 0.05);
+    g1 = gainAt(s, o, 1.0, 1.1);
+    std::printf("   after silence 6 dB, loud song: gain %.2f dB in the first 50 ms, %.2f at 1 s\n", g0, g1);
+    CHECK_NEAR(g0, 6.0, 0.5);
+    CHECK(g1 < 0.0); // down without a warm start
+
+    PresetValues held = v; // "hold": the gain stays where the last song left it
+    held[pLevSilence] = -1;
+    s = song(3.0, -40.0);
+    o = run(fs, held, s.l, s.r);
+    g0 = gainAt(s, o, 0.0, 0.1);
+    std::printf("   after silence hold: gain %.2f dB in the first 100 ms\n", g0);
+    CHECK_NEAR(g0, before, 0.5);
+
     // a frozen leveller stays frozen, also in a silence
     DeckProcessor d;
     d.prepare(fs);
