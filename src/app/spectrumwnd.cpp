@@ -132,7 +132,7 @@ void SettingsSpectrum::reset(int d, bool colour, HWND owner) {
     const Preset* p = settings_.find(name, kind);
     if (!p) return;
     const std::wstring q = L"Set every value of \"" + fromUtf8(name) + L"\" back to " +
-                           (p->shipped ? L"its shipped values?" : colour ? L"neutral?" : L"the generic defaults?");
+                           (p->shipped ? L"its shipped values?" : L"the values it was saved with?");
     if (placement::messageBox(owner, q.c_str(), colour ? L"Reset EQ" : L"Reset loudness",
                               MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
         return;
@@ -142,10 +142,11 @@ void SettingsSpectrum::reset(int d, bool colour, HWND owner) {
 
 const wchar_t* SettingsSpectrum::resetTip(bool colour) const {
     return colour ? L"Reset EQ: every value of the deck's EQ back - a shipped EQ to its shipped values, your "
-                    L"own to neutral - as the EQ window's button does (asks first). The coloured points go back with it."
+                    L"own to the values it was saved with - as the EQ window's button does (asks first). The coloured "
+                    L"points go back with it."
                   : L"Reset loudness: every value of the deck's loudness preset back - a shipped one to its shipped "
-                    L"values, your own to the generic defaults - as the loudness window's button does (asks first). The "
-                    L"MB Compressor band handles go back with it.";
+                    L"values, your own to the values it was saved with - as the loudness window's button does (asks "
+                    L"first). The MB Compressor band handles go back with it.";
 }
 
 std::wstring SettingsSpectrum::hint(int d) const {

@@ -183,7 +183,14 @@ lossless files need nothing special (any preset at -1 dBTP), lossy ones what Web
 
 Users can change every value of any preset, save as a new named preset, rename and delete their own presets, reset
 one value or a whole shipped preset to its shipped values (shipped presets cannot be deleted). Changes are saved and
-heard at once.
+heard at once. An own preset (and an own colour) resets to the values it was saved with (`Preset::saved`,
+`Settings::resetValues`; client, 2026-11-12: "when an own loudness or EQ setting is saved, the current settings are
+the default for it" - until then the generic defaults were its reset values, so a preset just saved showed every
+value it had changed in bold, and its reset buttons took it away from what was saved). "Save as" - also over an own
+preset - sets them; the file keeps them only where they differ from the value itself (`<key>.Saved=` after the
+value's line, also for a split the saved band count uses and the present one does not), so a file without such lines
+- every preset of an earlier version - means "as it is now". A shipped preset ignores such lines. The program and the
+plug-in merge a preset's values and reset values together.
 
 ### 3.2 Density band splits per band count
 
@@ -606,7 +613,7 @@ tooltips on or off, in Setup"): the Setup window's "Show tooltips", `[Window] To
 plug-in reads it from the settings file when it is loaded (it never writes it).
 
 Preset window (`editwnd`, "Edit..." beside a deck's preset choice): the preset choice, Save as / Rename / Delete (own
-presets only) / Reset preset (shipped values, or the generic defaults for an own preset), and a tab per stage
+presets only) / Reset preset (shipped values; for an own preset "Reset to saved": the values it was saved with), and a tab per stage
 (client, 2026-10-25: the one long table was hard to read; a stage that is switched off says "(off)" on its tab).
 The stage's on / off switch is the first row of its tab, a check box (client, 2026-10-25: it was a bar of nine
 buttons above the tabs). Each tab has a row per parameter: name, a
@@ -631,7 +638,9 @@ make-up has "auto" and the side-chain high-pass "off" at the left end. A change 
 is saved when it is let go. Values outside the range are clamped, text that is no value gives a warning. Only the
 splits and band gains of the
 band count in use are listed; a new band count brings its default splits; a split change keeps the splits in
-order (>= 1.25x apart). Reset values of splits are the default splits of the band count in use. "Save as" moves
+order (>= 1.25x apart). Reset values of splits are the default splits of the band count in use (an own preset:
+the splits it was saved with while it has the band count it was saved with, and they come back with that count's
+reset). "Save as" moves
 the deck the window was opened from to the new preset; deleting a preset moves its decks to Medium. The colour
 window (`editwnd` with the colour kind, "Edit..." beside the colour choice) is the same window for colours: no stage switches, and
 deleting a colour moves its decks to Neutral.

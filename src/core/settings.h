@@ -14,6 +14,12 @@ namespace ap {
 struct Preset {
     std::string name;
     PresetValues values{};
+    // An own preset's reset values: its values when it was last saved with "Save as" (client, 2026-11-12: "when an
+    // own loudness or EQ setting is saved, the current settings are the default for it" - they were the generic
+    // defaults, so a preset just saved showed every value it had changed in bold, with a reset button that took it
+    // away from what was saved). A shipped preset resets to its shipped values (Settings::resetValues); this is then
+    // a copy of those.
+    PresetValues saved{};
     bool shipped = false;
 };
 
@@ -169,7 +175,10 @@ public:
     // shipped: shipped values; own: generic defaults
     void resetPreset(const std::string& name, PresetKind k = PresetKind::Dynamics);
     void resetValue(const std::string& name, int param); // the same, one value (the kind follows the parameter)
-    static double resetValueOf(const std::string& presetName, int param);
+    // What "reset" goes back to: a shipped preset's shipped values, an own preset's values as it was saved
+    // (Preset::saved); the generic defaults for a name that is not in the list.
+    PresetValues resetValues(const std::string& name, PresetKind k = PresetKind::Dynamics) const;
+    double resetValueOf(const std::string& presetName, int param) const;
     static PresetValues shippedValues(const std::string& name, PresetKind k); // or the generic defaults
 };
 

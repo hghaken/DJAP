@@ -94,7 +94,10 @@ void checkSame(const Settings& a, const Settings& b) {
             std::printf("   preset \"%s\": %s %.4f -> %.4f\n", a.presets[i].name.c_str(), paramInfo(diff).key,
                         a.presets[i].values[static_cast<size_t>(diff)], b.presets[i].values[static_cast<size_t>(diff)]);
         CHECK(same);
+        if (!a.presets[i].shipped) CHECK(sameValues(a.presets[i].saved, b.presets[i].saved)); // its reset values
     }
+    for (size_t i = 0; i < a.colours.size() && i < b.colours.size(); ++i)
+        if (!a.colours[i].shipped) CHECK(sameValues(a.colours[i].saved, b.colours[i].saved));
 }
 
 fs::path tempDir() {
@@ -323,10 +326,13 @@ void presetRules() {
     s.resetPreset("Loud");
     CHECK(sameValues(loud, shippedPresetValues(3)));
     CHECK(s.saveAs("Own", shippedPresetValues(4), err));
-    s.resetPreset("Own");
-    CHECK(sameValues(s.find("Own")->values, defaultValues()));
-    CHECK_NEAR(Settings::resetValueOf("Gentle", pLevRange), 12, 1e-12);
-    CHECK_NEAR(Settings::resetValueOf("Own", pLevRange), paramInfo(pLevRange).def, 1e-12);
+    s.find("Own")->values[pTarget] = -20;
+    s.find("Own")->values[pCompRatio] = 6;
+    s.resetPreset("Own"); // an own preset goes back to the values it was saved with (until 2026-11-12: the generic defaults)
+    CHECK(sameValues(s.find("Own")->values, shippedPresetValues(4)));
+    CHECK_NEAR(s.resetValueOf("Gentle", pLevRange), 12, 1e-12);
+    CHECK_NEAR(s.resetValueOf("Own", pTarget), shippedPresetValues(4)[pTarget], 1e-12);
+    CHECK_NEAR(s.resetValueOf("No such preset", pTarget), paramInfo(pTarget).def, 1e-12);
 
     // colour presets: the same rules, in their own list; decks fall back to Neutral
     const PresetKind C = PresetKind::Colour;
@@ -341,8 +347,8 @@ void presetRules() {
     s.resetValue("Oldies", pAutoAmount); // the kind follows the parameter
     CHECK_NEAR(s.find("Oldies", C)->values[pAutoAmount], 70, 1e-12);
     s.find("Club kleur", C)->values[pToneBass] = 7;
-    s.resetPreset("Club kleur", C);
-    CHECK(sameValues(s.find("Club kleur", C)->values, defaultValues()));
+    s.resetPreset("Club kleur", C); // back to what it was saved with
+    CHECK(sameValues(s.find("Club kleur", C)->values, shippedColourValues(1)));
     CHECK(s.remove("Club kleur", err, C));
     CHECK(s.deck[0].colour == "Neutral" && s.deck[1].colour == "Neutral");
     CHECK(s.colours.size() == static_cast<size_t>(kShippedColourCount));
@@ -830,9 +836,142 @@ void failedSave(const fs::path& dir) {
 
 } // namespace
 
+// An own preset's reset values are the values it was saved with (client, 2026-11-12: "when an own loudness or EQ
+// setting is saved, the current settings are the default for it"; they were the generic defaults): nothing differs
+// from its reset value right after "Save as", a later change does and goes back to what was saved, the file keeps
+// both, a preset of an older version takes its values, and the program and the plug-in merge them.
+void savedValues(const fs::path& dir) {
+    std::printf("-- an own preset's reset values: what it was saved with\n");
+    std::string err;
+    const PresetKind C = PresetKind::Colour;
+    Settings s;
+    PresetValues mine = shippedPresetValues(shippedPresetIndex("Medium"));
+    mine[pLevRange] = 15;
+    mine[pLevAttack] = 0.5;
+    mine[pLevSilence] = 6;
+    CHECK(s.saveAs("Medium (mine)", mine, err));
+    const Preset* p = s.find("Medium (mine)");
+    CHECK(p && sameValues(p->saved, p->values)); // just saved: every value is its reset value
+    for (int i = 0; i < kFirstColourParam; ++i)
+        CHECK(s.resetValueOf("Medium (mine)", i) == p->values[static_cast<size_t>(i)]);
+    CHECK_NEAR(s.resetValueOf("Medium (mine)", pLevRange), 15, 1e-12);
+    std::string text = s.toText();
+    CHECK(text.find(".Saved=") == std::string::npos); // nothing to tell apart: the file is as it was
+    // a later change differs from it, is written with it, and comes back by the reset
+    s.find("Medium (mine)")->values[pLevRange] = 9;
+    s.find("Medium (mine)")->values[pCompRatio] = 4;
+    CHECK_NEAR(s.resetValueOf("Medium (mine)", pLevRange), 15, 1e-12);
+    text = s.toText();
+    CHECK(text.find("LevellerRange=9\nLevellerRange.Saved=15\n") != std::string::npos);
+    CHECK(text.find("CompressorRatio=4\nCompressorRatio.Saved=2\n") != std::string::npos);
+    CHECK(text.find("LevellerAttack.Saved") == std::string::npos); // unchanged since it was saved
+    Settings back;
+    back.fromText(text);
+    checkSame(s, back);
+    CHECK_NEAR(back.find("Medium (mine)")->values[pLevRange], 9, 1e-12);
+    CHECK_NEAR(back.resetValueOf("Medium (mine)", pLevRange), 15, 1e-12);
+    back.resetValue("Medium (mine)", pLevRange);
+    CHECK_NEAR(back.find("Medium (mine)")->values[pLevRange], 15, 1e-12);
+    CHECK_NEAR(back.find("Medium (mine)")->values[pCompRatio], 4, 1e-12); // the other change stays
+    back.resetPreset("Medium (mine)");
+    CHECK(sameValues(back.find("Medium (mine)")->values, back.find("Medium (mine)")->saved));
+    CHECK_NEAR(back.find("Medium (mine)")->values[pCompRatio], 2, 1e-12);
+    CHECK(back.toText().find(".Saved=") == std::string::npos);
+    // saved over (Save as with its own name): the values of now are its reset values
+    CHECK(s.saveAs("Medium (mine)", s.find("Medium (mine)")->values, err));
+    CHECK_NEAR(s.resetValueOf("Medium (mine)", pLevRange), 9, 1e-12);
+    CHECK(s.toText().find(".Saved=") == std::string::npos);
+    // renamed: it keeps them
+    s.find("Medium (mine)")->values[pLevRange] = 11;
+    CHECK(s.rename("Medium (mine)", "Mine", err));
+    CHECK_NEAR(s.resetValueOf("Mine", pLevRange), 9, 1e-12);
+
+    // the band count comes back with the splits it was saved with: 5 bands with a split of its own, changed to 3
+    PresetValues five = defaultValues();
+    five[pDensBands] = 5;
+    loadDefaultSplits(five, 5);
+    five[pDensSplit3] = 3000; // (the default is 2500)
+    CHECK(s.saveAs("Five", five, err));
+    Preset* f = s.find("Five");
+    f->values[pDensBands] = 3;
+    loadDefaultSplits(f->values, 3);
+    Settings three;
+    three.fromText(s.toText());
+    const Preset* g = three.find("Five");
+    CHECK(g != nullptr);
+    if (g) {
+        CHECK_NEAR(g->values[pDensBands], 3, 1e-12);
+        CHECK_NEAR(g->saved[pDensBands], 5, 1e-12);
+        for (int k = pDensSplit1; k <= pDensSplit4; ++k) // the four splits five bands use
+            CHECK_NEAR(g->saved[static_cast<size_t>(k)], five[static_cast<size_t>(k)], 1e-9);
+        three.resetValue("Five", pDensBands);
+        CHECK_NEAR(g->values[pDensBands], 5, 1e-12);
+        CHECK_NEAR(g->values[pDensSplit3], 3000, 1e-9);
+        for (int k = pDensSplit1; k <= pDensSplit4; ++k)
+            CHECK_NEAR(g->values[static_cast<size_t>(k)], five[static_cast<size_t>(k)], 1e-9);
+    }
+
+    // an EQ of one's own: the same
+    PresetValues eq = shippedColourValues(shippedColourIndex("Warm"));
+    CHECK(s.saveAs("My EQ", eq, err, C));
+    s.find("My EQ", C)->values[pToneBass] = -3;
+    Settings eqBack;
+    eqBack.fromText(s.toText());
+    CHECK_NEAR(eqBack.find("My EQ", C)->values[pToneBass], -3, 1e-12);
+    CHECK_NEAR(eqBack.resetValueOf("My EQ", pToneBass), eq[pToneBass], 1e-12);
+    eqBack.resetPreset("My EQ", C);
+    CHECK(sameValues(eqBack.find("My EQ", C)->values, eqBack.find("My EQ", C)->saved));
+    CHECK_NEAR(eqBack.find("My EQ", C)->values[pToneBass], eq[pToneBass], 1e-12);
+
+    // a preset of a version before this (no .Saved lines; the generic defaults were its reset values): what it holds
+    Settings old;
+    old.fromText("[Preset Old one]\nTarget=-11\nLevellerRange=15\nCompressorRatio=3\n[Colour Old EQ]\nBass=4\n");
+    CHECK(old.find("Old one") && old.find("Old EQ", C));
+    CHECK_NEAR(old.resetValueOf("Old one", pLevRange), 15, 1e-12);
+    CHECK_NEAR(old.resetValueOf("Old one", pTarget), -11, 1e-12);
+    CHECK_NEAR(old.resetValueOf("Old EQ", pToneBass), 4, 1e-12);
+    CHECK(sameValues(old.find("Old one")->saved, old.find("Old one")->values));
+    // a shipped preset keeps its shipped values as reset values, whatever the file says
+    Settings ship;
+    ship.fromText("[Preset Loud]\nTarget=-9\nTarget.Saved=-3\n");
+    CHECK_NEAR(ship.find("Loud")->values[pTarget], -9, 1e-12);
+    CHECK_NEAR(ship.resetValueOf("Loud", pTarget), shippedPresetValues(shippedPresetIndex("Loud"))[pTarget], 1e-12);
+
+    // the program and the plug-in: a preset saved over in the program (its values the same, its reset values new)
+    // reaches the plug-in, and the plug-in's own save does not bring the old reset values back
+    const fs::path file = dir / "saved.ini";
+    Settings program;
+    PresetValues club = defaultValues();
+    club[pTarget] = -12;
+    CHECK(program.saveAs("Club", club, err));
+    program.find("Club")->values[pLevRange] = 8; // changed after it was saved: differs from its reset value
+    CHECK(program.save(file));
+    Settings programBase = program;
+    Settings plugin;
+    CHECK(plugin.load(file));
+    Settings pluginBase = plugin;
+    CHECK_NEAR(plugin.resetValueOf("Club", pLevRange), paramInfo(pLevRange).def, 1e-12);
+    CHECK(program.saveAs("Club", program.find("Club")->values, err)); // saved over: 8 dB is its reset value now
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    plugin.windows["PluginSpectrum"] = WindowPlace{1, 2, 300, 200, false}; // something of its own to save
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK_NEAR(plugin.resetValueOf("Club", pLevRange), 8, 1e-12); // taken over from the file
+    Settings after;
+    CHECK(after.load(file));
+    CHECK_NEAR(after.find("Club")->values[pLevRange], 8, 1e-12);
+    CHECK_NEAR(after.resetValueOf("Club", pLevRange), 8, 1e-12);
+    // ... and a change in the plug-in (its window's slider) keeps the reset value the program gave it
+    plugin.find("Club")->values[pLevRange] = 5;
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK_NEAR(program.find("Club")->values[pLevRange], 5, 1e-12);
+    CHECK_NEAR(program.resetValueOf("Club", pLevRange), 8, 1e-12);
+}
+
 int main() {
     const fs::path dir = tempDir();
     defaults();
+    savedValues(dir);
     positions();
     roundTrip(dir);
     presetRules();

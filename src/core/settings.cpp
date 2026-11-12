@@ -106,6 +106,9 @@ std::string decodeText(const std::string& raw) {
 }
 
 const char* const kPresetPrefix = "Preset ";
+// An own preset's reset values (Preset::saved), written only where they differ from the value itself
+const char* const kSavedSuffix = ".Saved";
+const char* const kSavedNote = "; <key>.Saved: the value it was saved with (Save as), where that differs: what its reset button goes back to\n";
 const char* const kColourPrefix = "Colour ";
 
 bool validName(const std::string& name, std::string& error) {
@@ -126,14 +129,14 @@ Settings::Settings() {
     for (int i = 0; i < kShippedPresetCount; ++i) {
         Preset p;
         p.name = shippedPresetName(i);
-        p.values = shippedPresetValues(i);
+        p.values = p.saved = shippedPresetValues(i);
         p.shipped = true;
         presets.push_back(p);
     }
     for (int i = 0; i < kShippedColourCount; ++i) {
         Preset p;
         p.name = shippedColourName(i);
-        p.values = shippedColourValues(i);
+        p.values = p.saved = shippedColourValues(i);
         p.shipped = true;
         colours.push_back(p);
     }
@@ -196,12 +199,14 @@ bool Settings::saveAs(const std::string& name, const PresetValues& values, std::
         }
         p->values = values;
         normaliseValues(p->values); // as for a new preset
+        p->saved = p->values;       // saved over: these are its reset values now
         return true;
     }
     Preset p;
     p.name = name;
     p.values = values;
     normaliseValues(p.values);
+    p.saved = p.values; // what it is saved with is what "reset" goes back to
     list(k).push_back(p);
     if (k == PresetKind::Dynamics) sortPresets(); // in its place by loudness
     return true;
@@ -250,14 +255,19 @@ bool Settings::remove(const std::string& name, std::string& error, PresetKind k)
     return false;
 }
 
-double Settings::resetValueOf(const std::string& presetName, int param) {
-    return shippedValues(presetName, kindOf(param))[static_cast<size_t>(param)];
+PresetValues Settings::resetValues(const std::string& name, PresetKind k) const {
+    const Preset* p = find(name, k);
+    return p && !p->shipped ? p->saved : shippedValues(name, k);
+}
+
+double Settings::resetValueOf(const std::string& presetName, int param) const {
+    return resetValues(presetName, kindOf(param))[static_cast<size_t>(param)];
 }
 
 void Settings::resetPreset(const std::string& name, PresetKind k) {
     Preset* p = find(name, k);
     if (!p) return;
-    p->values = shippedValues(name, k);
+    p->values = resetValues(name, k);
 }
 
 void Settings::resetValue(const std::string& name, int param) {
@@ -265,7 +275,11 @@ void Settings::resetValue(const std::string& name, int param) {
     Preset* p = find(name, kindOf(param));
     if (!p) return;
     p->values[static_cast<size_t>(param)] = resetValueOf(name, param);
-    if (param == pDensBands) loadDefaultSplits(p->values, static_cast<int>(p->values[pDensBands]));
+    if (param == pDensBands) { // the band count brings its splits: the shipped count's own, or the ones saved with it
+        if (p->shipped) loadDefaultSplits(p->values, static_cast<int>(p->values[pDensBands]));
+        else
+            for (int s = pDensSplit1; s <= pDensSplit6; ++s) p->values[static_cast<size_t>(s)] = p->saved[static_cast<size_t>(s)];
+    }
     normaliseValues(p->values);
 }
 
@@ -362,14 +376,20 @@ std::string Settings::toText() const {
         }
         o << "\n[" << kPresetPrefix << p.name << "]\n";
         if (shipped >= 0) o << "; Shipped preset: only values that differ from the shipped ones are listed\n";
+        else o << kSavedNote;
         for (int i = 0; i < kFirstColourParam; ++i) {
             const ParamInfo& info = paramInfo(i);
             const double v = p.values[static_cast<size_t>(i)];
             const double ref = i == pDensBands ? shippedBands : base[static_cast<size_t>(i)];
             if (shipped >= 0 && std::fabs(v - ref) < 1e-9) continue;
             if (i >= pDensSplit1 && i <= pDensSplit6 && i - pDensSplit1 + 1 >= static_cast<int>(p.values[pDensBands]) &&
-                shipped < 0)
-                continue; // unused split
+                shipped < 0) {
+                // unused split - but one the saved band count uses is kept as its reset value (its value is not
+                // written, so the reader could not tell)
+                if (i - pDensSplit1 + 1 < static_cast<int>(p.saved[pDensBands]))
+                    o << info.key << kSavedSuffix << "=" << compact(p.saved[static_cast<size_t>(i)]) << "\n";
+                continue;
+            }
             o << "; " << info.stage << " - " << info.name << ": " << info.help;
             if (info.isSwitch)
                 o << " (1 = on, 0 = off";
@@ -378,6 +398,8 @@ std::string Settings::toText() const {
                   << number(info.max, info.decimals);
             o << ", reset value " << number(resetValueOf(p.name, i), info.decimals) << ")\n";
             o << info.key << "=" << compact(v) << "\n";
+            if (shipped < 0 && std::fabs(p.saved[static_cast<size_t>(i)] - v) > 1e-9)
+                o << info.key << kSavedSuffix << "=" << compact(p.saved[static_cast<size_t>(i)]) << "\n";
         }
     }
     for (const Preset& p : colours) {
@@ -385,14 +407,17 @@ std::string Settings::toText() const {
         const PresetValues base = shippedValues(p.name, PresetKind::Colour);
         o << "\n[" << kColourPrefix << p.name << "]\n";
         if (shipped) o << "; Shipped EQ: only values that differ from the shipped ones are listed\n";
+        else o << kSavedNote;
         for (int i = kFirstColourParam; i < kParamCount; ++i) {
             const ParamInfo& info = paramInfo(i);
             const double v = p.values[static_cast<size_t>(i)];
             if (shipped && std::fabs(v - base[static_cast<size_t>(i)]) < 1e-9) continue;
             o << "; " << info.stage << " - " << info.name << ": " << info.help << " (" << info.unit
               << (info.unit[0] ? ", " : "") << number(info.min, info.decimals) << ".." << number(info.max, info.decimals)
-              << ", reset value " << number(base[static_cast<size_t>(i)], info.decimals) << ")\n";
+              << ", reset value " << number(resetValueOf(p.name, i), info.decimals) << ")\n";
             o << info.key << "=" << compact(v) << "\n";
+            if (!shipped && std::fabs(p.saved[static_cast<size_t>(i)] - v) > 1e-9)
+                o << info.key << kSavedSuffix << "=" << compact(p.saved[static_cast<size_t>(i)]) << "\n";
         }
     }
     return o.str();
@@ -563,12 +588,25 @@ void Settings::fromText(const std::string& text) {
                 values[pLevAttack] = attackFromFastDown(d, values[pLevSpeed]);
         }
         normaliseValues(values);
+        // an own preset's reset values: as saved where the file says so (<key>.Saved), else its values - so a preset of
+        // a version before 2026-11-12 resets to what it holds, not to the generic defaults
+        PresetValues saved = shipped >= 0 ? shippedPresetValues(shipped) : values;
+        if (shipped < 0) {
+            for (int i = 0; i < kFirstColourParam; ++i) {
+                auto it = keys.find(std::string(paramInfo(i).key) + kSavedSuffix);
+                double d;
+                if (it != keys.end() && parseDouble(it->second, d)) saved[static_cast<size_t>(i)] = d;
+            }
+            normaliseValues(saved);
+        }
         if (Preset* p = find(name)) {
             p->values = values;
+            if (!p->shipped) p->saved = saved;
         } else {
             Preset p2;
             p2.name = name;
             p2.values = values;
+            p2.saved = saved;
             presets.push_back(p2);
         }
     }
@@ -587,12 +625,24 @@ void Settings::fromText(const std::string& text) {
             if (it != keys.end() && parseDouble(it->second, d)) values[static_cast<size_t>(i)] = d;
         }
         normaliseValues(values);
+        const bool shippedColour = shippedColourIndex(name) >= 0;
+        PresetValues saved = shippedColour ? shippedValues(name, PresetKind::Colour) : values;
+        if (!shippedColour) {
+            for (int i = kFirstColourParam; i < kParamCount; ++i) {
+                auto it = keys.find(std::string(paramInfo(i).key) + kSavedSuffix);
+                double d;
+                if (it != keys.end() && parseDouble(it->second, d)) saved[static_cast<size_t>(i)] = d;
+            }
+            normaliseValues(saved);
+        }
         if (Preset* p = find(name, PresetKind::Colour)) {
             p->values = values;
+            if (!p->shipped) p->saved = saved;
         } else {
             Preset p2;
             p2.name = name;
             p2.values = values;
+            p2.saved = saved;
             colours.push_back(p2);
         }
     }
@@ -685,9 +735,13 @@ void mergeList(std::vector<Preset>& result, const std::vector<Preset>& ours, con
                          result.end());
     for (const Preset& p : ours) { // added or changed here
         const Preset* b = named(base, p.name);
-        if (b && b->values == p.values) continue; // not touched here: the file's version stays
-        if (Preset* r = named(result, p.name)) r->values = p.values;
-        else result.push_back(p);
+        if (b && b->values == p.values && b->saved == p.saved) continue; // not touched here: the file's version stays
+        if (Preset* r = named(result, p.name)) {
+            r->values = p.values;
+            r->saved = p.saved;
+        } else {
+            result.push_back(p);
+        }
     }
 }
 

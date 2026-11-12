@@ -97,10 +97,12 @@ bool isStageSwitch(int p) {
     return false;
 }
 
-// What "reset" goes back to: the shipped values (or the generic defaults for an own preset), with the default
-// splits of the preset's band count when that differs (the same rule as the settings file).
-PresetValues referenceValues(const std::string& preset, const PresetValues& now, PresetKind kind) {
-    PresetValues ref = Settings::shippedValues(preset, kind);
+// What "reset" goes back to: the shipped values, or for an own preset the values it was saved with
+// (Settings::resetValues), with the default splits of the preset's band count when that differs (the same rule as the
+// settings file).
+PresetValues referenceValues(const Settings& settings, const std::string& preset, const PresetValues& now,
+                             PresetKind kind) {
+    PresetValues ref = settings.resetValues(preset, kind);
     if (kind == PresetKind::Colour) return ref;
     // the band count itself keeps its own reset value; only the splits follow the band count in use
     if (ref[pDensBands] != now[pDensBands]) loadDefaultSplits(ref, static_cast<int>(now[pDensBands]));
@@ -592,21 +594,24 @@ void EditWindow::createControls() {
         tips_.add(preset_, L"The EQ preset shown in this window (opened on the deck's own): tone, auto tone, sub "
                            L"bass, loudness. Every change is saved at once and heard on every deck that uses it.");
         tips_.add(saveAs_, L"Saves these values as an EQ under a new name (or over one of your own) and moves the "
-                           L"deck this window was opened from to it. Shipped EQs cannot be saved over.");
+                           L"deck this window was opened from to it. What it is saved with becomes its reset values: "
+                           L"nothing is bold then. Shipped EQs cannot be saved over.");
         tips_.add(rename_, L"Renames your own EQ; the decks that use it follow.");
         tips_.add(delete_, L"Deletes your own EQ (asks first); a deck that used it goes to Neutral.");
-        tips_.add(resetPreset_, L"Shipped EQ: back to its shipped values. Own EQ: back to neutral (asks first).");
+        tips_.add(resetPreset_, L"Shipped EQ: back to its shipped values. Own EQ: back to the values it was saved "
+                                L"with (asks first).");
         tips_.add(note_, L"Whether this is a shipped or an own EQ and which decks use it.");
     } else {
         tips_.add(preset_, L"The loudness preset shown in this window (opened on the deck's own). Every change is saved at "
                            L"once and heard on every deck that uses this loudness preset.");
         tips_.add(saveAs_, L"Saves these values under a new name (or over one of your own loudness presets) and moves the "
-                           L"deck this window was opened from to it. Shipped loudness presets cannot be saved over.");
+                           L"deck this window was opened from to it. What it is saved with becomes its reset values: "
+                           L"nothing is bold then. Shipped loudness presets cannot be saved over.");
         tips_.add(rename_, L"Renames your own loudness preset; the decks that use it follow. Shipped ones keep their names.");
         tips_.add(delete_, L"Deletes your own loudness preset (asks first); a deck that used it goes to Medium. "
                            L"Shipped ones cannot be deleted.");
-        tips_.add(resetPreset_, L"Shipped loudness preset: back to its shipped values. Own one: back to the generic "
-                                L"defaults. Every value at once (asks first).");
+        tips_.add(resetPreset_, L"Shipped loudness preset: back to its shipped values. Own one: back to the values "
+                                L"it was saved with. Every value at once (asks first).");
         tips_.add(note_, L"Whether this is a shipped or an own loudness preset and which decks use it.");
     }
     createRows();
@@ -898,7 +903,7 @@ void EditWindow::updateRow(size_t r, bool moveSlider) {
     const Row& row = rows_[r];
     const int i = row.param;
     const double v = p->values[static_cast<size_t>(i)];
-    const double ref = referenceValues(current_, p->values, kind_)[static_cast<size_t>(i)];
+    const double ref = referenceValues(settings_, current_, p->values, kind_)[static_cast<size_t>(i)];
     const bool changed = std::fabs(v - ref) > 1e-9;
     if (row.slider && moveSlider) SendMessageW(row.slider, TBM_SETPOS, TRUE, paramPositionOf(i, v));
     if (row.check) {
@@ -942,7 +947,7 @@ void EditWindow::updateButtons() {
     const bool own = p && !p->shipped;
     EnableWindow(rename_, own);
     EnableWindow(delete_, own);
-    SetWindowTextW(resetPreset_, own ? L"Reset to defaults" : colour() ? L"Reset EQ" : L"Reset loudness");
+    SetWindowTextW(resetPreset_, own ? L"Reset to saved" : colour() ? L"Reset EQ" : L"Reset loudness");
     std::wstring users;
     for (int d = 0; d < 2; ++d)
         if (d < settings_.decks && used(d) == current_)
@@ -1072,7 +1077,16 @@ void EditWindow::command(int id, int code) {
         if (part == rpValue && code == EN_KILLFOCUS) {
             commitValue(static_cast<size_t>(r));
         } else if (part == rpReset && code == BN_CLICKED) {
-            setValue(row.param, referenceValues(current_, p->values, kind_)[static_cast<size_t>(row.param)]);
+            setValue(row.param, referenceValues(settings_, current_, p->values, kind_)[static_cast<size_t>(row.param)]);
+            if (row.param == pDensBands) { // an own preset's band count comes back with the splits it was saved with
+                Preset* own = settings_.find(current_, kind_);
+                if (own && !own->shipped) {
+                    for (int s = pDensSplit1; s <= pDensSplit6; ++s)
+                        own->values[static_cast<size_t>(s)] = own->saved[static_cast<size_t>(s)];
+                    normaliseValues(own->values);
+                    onChange_(false, true);
+                }
+            }
             updateRows();
         } else if (part == rpCheck && code == BN_CLICKED) {
             setValue(row.param, SendMessageW(row.check, BM_GETCHECK, 0, 0) == BST_CHECKED ? 1.0 : 0.0);
@@ -1139,7 +1153,7 @@ void EditWindow::command(int id, int code) {
         select(used(deck_));
     } else if (id == idResetPreset) {
         const std::wstring q = L"Set every value of \"" + fromUtf8(current_) + L"\" back to " +
-                               (shipped ? L"its shipped values?" : L"the generic defaults?");
+                               (shipped ? L"its shipped values?" : L"the values it was saved with?");
         if (placement::messageBox(hwnd_, q.c_str(), colour() ? L"Reset EQ" : L"Reset loudness",
                                   MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
             return;

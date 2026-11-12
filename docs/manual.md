@@ -560,9 +560,12 @@ These values are starting points; change them to taste.
 Click **Edit...** next to a deck's loudness preset. At the top:
 
 - **Loudness** - the loudness preset shown; choosing another one here also moves the deck it was opened from to it.
-- **Save as...** saves the current values under a new name; the deck moves to the new loudness preset.
+- **Save as...** saves the current values under a new name; the deck moves to the new loudness preset. The values
+  it is saved with are its reset values from then on: right after saving nothing is bold. Saving over one of your own
+  (Save as with its own name) makes the values of that moment its reset values.
 - **Rename...** and **Delete** - for your own loudness presets only. Deleting a loudness preset moves the decks that used it to Medium.
-- **Reset loudness** - back to the shipped values (for an own preset: to the general defaults).
+- **Reset loudness** - back to the shipped values. For an own preset the button reads **Reset to saved**: back to
+  the values it was saved with.
 - Under it, what the loudness preset does to the sound, and "Some values are changed" when they differ from the shipped ones.
 
 Below that, a **tab per stage**. A stage that is switched off says "(off)" on its tab. On each tab:
@@ -571,7 +574,8 @@ Below that, a **tab per stage**. A stage that is switched off says "(off)" on it
 - A row per value: name, **slider**, the **value** (it can be typed - press Enter or leave the field; a comma counts
   as the decimal sign), the unit, a small **reset** button (back to the reset value; only enabled when the value
   differs, and its tooltip names the reset value) and a short explanation. A value in **bold** differs from its reset
-  value. The row's tooltip has the full explanation and the range.
+  value: the shipped value of a shipped loudness preset, the value an own one was saved with. The row's tooltip has
+  the full explanation and the range.
 - Under the rows, what the stage does to the sound and what more or less of its values sounds like.
 
 The window can be made as large as you like; it cannot be made smaller than the size that shows every row of the
@@ -583,7 +587,7 @@ scale.
 
 ### 6.3 All values of a loudness preset
 
-Defaults below are those of Medium (the general defaults of a new own preset).
+Defaults below are those of Medium.
 
 **General**
 
@@ -1185,7 +1189,7 @@ The About window shows which file is in use. DJAP saves it after every change. I
 | `[Decks]` | Each deck's loudness preset, EQ and processing switch, linked presets |
 | `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options. The plug-in's windows have lines of their own (`PluginSpectrum`, `PluginSetup`, ...) |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |
-| `[Preset <name>]` | The values of a loudness preset that differ from its shipped values (own loudness presets: all values) |
+| `[Preset <name>]` | The values of a loudness preset that differ from its shipped values (own loudness presets: all values, and `<key>.Saved` for a value that was changed since the preset was saved - its reset value) |
 | `[Colour <name>]` | The same for an EQ |
 
 To start over, close DJAP and delete (or rename) the file; DJAP starts with the shipped loudness presets and opens the Setup
