@@ -731,12 +731,18 @@ and not to DJAP's outputs - and if it turned down a virtual cable DJAP reads, th
 DJAP follows that volume itself, when the option is on:
 
 - The program reads the default playback device's volume (in dB, as Windows or the driver applies it, at most 0 dB)
-  and mute 20 times a second.
+  and mute every 15 ms.
 - Each deck multiplies its output by it after the clip guard (only down, so the ceiling holds; volume 1 is
   bit-exact), with a 20 ms glide. The meters show the level before it.
 - When the default playback device is the deck's own input (a virtual cable) and Windows applies the volume in
   software, the deck's input is multiplied by the inverse (at most +40 dB), so the processing sees the music's own
   level and the volume counts once.
+- That factor cannot move at the very moment the music with the new volume arrives: the music is still on its way
+  through Windows' mixer, the cable and the input's buffers (30-60 ms with WASAPI). After the volume is turned down,
+  the chain therefore gets the old level with the new, higher factor for that long - 12 dB too much after a jump from
+  100 % to 25 %. For 100 ms after the factor was raised the compressor, the MB compressor and the de-esser keep the
+  gain they have, and the leveller's detectors leave those blocks out. Measured with the factor 40 ms before the
+  music: without this the output sagged 4.9 dB after the jump and needed 0.45 s to come back; with it 0.9 dB.
 
 ## 15. Meters and graphs
 

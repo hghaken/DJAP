@@ -25,6 +25,17 @@ enum Stage : int { sLeveller, sNoise, sCompressor, sDensity, sBass, sExciter, sD
 constexpr double kMaxLookMs = 5.0;
 constexpr double kMaxInputVolume = 100.0; // largest input factor of setVolume (+40 dB)
 constexpr double kVolumeGlideS = 0.020;   // setVolume's values glide with this one-pole
+// For this long after setVolume's input factor was raised, the compressor, the MB compressor and the de-esser keep
+// the gain they have, and the leveller's detectors leave the blocks out. The factor undoes a volume Windows applied
+// to the deck's input, but it cannot move at the very moment the music with the new volume arrives: that music is
+// still on its way (Windows' mixer, the virtual cable, the input's buffers - 30-60 ms with WASAPI), so for that long
+// the chain gets the old level with the new factor - 12 dB too much after a jump from 100 % to 25 %. The stages that
+// follow the level in milliseconds took that for music and needed their release times to let go of it again.
+// Measured (deck_test, Loud, the factor 40 ms before the music): the output sagged 4.9 dB after the jump and took
+// 0.45 s to come back; with the hold 0.9 dB. Only when the factor rises: the other way round (25 % to 100 %) the
+// chain gets too little for those 40 ms, which did nothing (0.08 dB) - and while the stages hold they do not follow
+// the music either (0.3 dB), so not longer than needed and not without a reason.
+constexpr double kVolumeHoldS = 0.100;
 constexpr double kFadeOutMs = 10.0;       // startFadeOut: raised-cosine fade to silence before a stream stops
 constexpr int kControlBlock = 16;      // frames per control-rate update
 static_assert(kControlBlock == kColourBlock, "the colour stage ramps its coefficients over one control block");
@@ -379,6 +390,8 @@ private:
     bool fadingOut_ = false;
     double fadeOutPos_ = 0.0; // 0..1 through the fade; 1 = silent
     double volOutS_ = 1.0, volInS_ = 1.0, volGlide_ = 0.0;
+    int volHold_ = 0; // frames the fast gain stages still keep their gain (kVolumeHoldS)
+    double volInAsked_ = 1.0; // the input factor last asked for: a higher one starts the hold
 
     // meter record being filled
     MeterRecord rec_;

@@ -658,7 +658,8 @@ leveller would bring the level back up (up to its range). So the program follows
 the Audio window, "The outputs follow the Windows volume", one choice per mode (`FollowWindowsVolumeOneChannel`,
 default on; `FollowWindowsVolumeTwoDecks`, default off - a key on the keyboard should not move a DJ's outputs).
 When on, the GUI reads the default playback device's level (in dB, as Windows or the driver applies it, at most
-0 dB) and mute 20 times a second (`src/app/winvolume.*`; the default device is looked up again every second) and
+0 dB) and mute every 15 ms (`src/app/winvolume.*`, a timer of its own; 20 times a second until 2026-11-12; the default
+device is looked up again every second; one read costs about 35 microseconds - `winvolume_test`) and
 each deck multiplies its output by it after the clip guard (`DeckProcessor::setVolume`, 20 ms one-pole; only down,
 so the ceiling holds; volume 1 = bit-exact). The meters and graphs show the processing before it. When the default
 playback device is the deck's own input (same device name - a virtual cable whose two ends share a name) and
@@ -666,6 +667,18 @@ Windows applies its volume in software (the driver reports no volume of its own)
 by the inverse (at most +40 dB), so the processing sees the music's own level and the volume counts once; a cable
 that handles the volume in its driver is not compensated (the program cannot know what that driver does). The
 status bar shows "Windows volume N %" or "muted".
+The input factor cannot move at the moment the music with the new volume reaches the deck: that music is still on
+its way (Windows' mixer, the cable, the input's period and the drift buffer - 30-60 ms with WASAPI), and until
+2026-11-12 the program noticed the change up to 50 ms late. So for some tens of milliseconds the chain got the old
+level with the new factor. Measured in `deck_test` (Loud, the factor 40 ms before the music): after a jump from
+100 % to 25 % the chain got 12 dB too much, the compressor and the MB compressor took it for music, and the output
+sagged 4.9 dB and needed 0.45 s to come back; the jump back up (12 dB too little for 40 ms) did nothing (0.08 dB).
+Two things since 2026-11-12: the volume is read every 15 ms, so the factor is never later than the music (only
+early), and for `kVolumeHoldS` (100 ms) after a raised input factor the compressor, the MB compressor and the
+de-esser keep their gain and the leveller's detectors and the MB compressor's levels leave the blocks out - the sag
+is 0.9 dB. Not when the factor falls: holding costs something too (the stages do not follow the music meanwhile:
+0.3 dB). Not measured on a real cable (it needs the Windows volume moved while music plays); a route with a much
+longer way than 100 ms (DirectSound, MME) is covered only for its first 100 ms.
 
 Audio APIs (client, 2026-10-25): one API for the whole program (except deck inputs of another API with ASIO
 output, 6.1) - ASIO, WASAPI (shared, or exclusive with a switch),
@@ -749,7 +762,14 @@ goes to the fallback at once (`fallbackRoutes`, the same rule as the recovery's)
 2026-11-05: "an output not found at the start: jump to the fallback at once and start the audio"; `Facts::atStart`, set by
 `startSavedAudio`; a fallback not there yet just after logging on: the tries as ever), and a Start that fails (WASAPI /
 DirectSound / MME) no longer clears `StartAudio` nor shows a message box - the recovery takes over at once (the Setup
-window's `onChange_` calls `recoverAudio`) with its countdown and its message in the status. ASIO keeps its message box. `SysAudio::stalled`: a stream that
+window's `onChange_` calls `recoverAudio`) with its countdown and its message in the status. ASIO keeps its message box. `SysAudio::recoverInputs` (2026-11-12): an input stream of its own - a drift-corrected deck's, or an ASIO route's input from
+another API - that runs but delivers no block for 10 s (a device that hangs instead of stopping: `stalled` does not see
+it, the output plays on with silence) is opened again, that stream alone, on a thread of its own (the GUI never waits
+for a device); the other deck and the output play on, and the deck's drift buffer goes on as after any underrun (a
+fade-in when it fills again). The wait doubles after every reopening, up to 120 s, and starts at 10 s again when blocks
+come: an input that is only idle is hardly touched. An input that cannot be opened counts as failed (the device is gone:
+the recovery below). `sysaudio_test` on null devices: 110 blocks before the hang, 260 after the reopening, for both
+kinds of stream; not tried on a real device that hangs. `SysAudio::stalled`: a stream that
 plays without a period for 10 s counts as stopped - miniaudio stops only a default device on a state change, and warns
 that a disconnected playback device can hang; not sooner, a Bluetooth device may take seconds to wake up.
 
@@ -815,7 +835,7 @@ preset (`[Preset X]`) and per colour (`[Colour X]`), readable and editable by ha
 | Compressor | static curve; step response | exact; 63 % in ~14 ms |
 | Limiter | single +12 dBFS samples at look 1.5 / 0.2 / 0.1 / 0 ms; +6 dBFS sine; fs/4 square; +9.5 dBFS full-band noise bursts | sample peak <= ceiling; true peak (16x reference) <= ceiling + 0.1 dB |
 | Bypass | master off = input delayed by look-ahead | bit-exact |
-| Windows volume | volume 0.5 from the start; input / 4 with an input factor of 4; mute and unmute while playing | half of every sample, bit-exact; the original output, bit-exact; no gain step > 0.01, silent after 0.3 s, bit-exact after unmute |
+| Windows volume | volume 0.5 from the start; input / 4 with an input factor of 4; mute and unmute while playing; the input factor 40 ms before the music with the new volume (100 % -> 25 % and back) | half of every sample, bit-exact; the original output, bit-exact; no gain step > 0.01, silent after 0.3 s, bit-exact after unmute; the output within 1.2 dB of an unchanged run from 60 ms after the music arrived (measured 0.86 and 0.08 dB; 4.89 without the hold) |
 | Neutral | -6 dBFS sine through a neutral chain | unchanged (< 0.01 dB) |
 | Density | band-sum flatness for every band count 1..7; tone two bands away | 0.01 dB; 0.001 dB |
 | Noise reduction (`noise_test`) | band sum while open (depth 0; depth 12 with the bands a tone does not reach closed); one band open; pink noise 19 dB under the threshold, depth 12 / 30, 4 bands and 1, and the meter; a 500 Hz tone at -20 dBFS with hiss; a tone stepping -20 -> -80 -> -20 dBFS; each of its values changed on a 1 kHz tone it turns down part of the way; the split rule, off in every shipped preset | 0.001 dB; 0.05 dB (the tone's leak into a closed band); bit-exact; the depth within 0.3 dB, the meter within 0.1; tone within 0.05 dB, hiss above 8 kHz down > 18 dB with 4 bands, unchanged with 1; open through the detector's fall and the hold, 63 % of the depth one release time later, open again within 10 ms; click ratio < 1.5 (measured 1.00); rising, 1.25x apart |

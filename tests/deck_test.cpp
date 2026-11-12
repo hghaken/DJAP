@@ -364,6 +364,54 @@ void volume() {
     CHECK(worstJump < 0.01);
     CHECK(afterMute < 1e-3);
     CHECK(badBack == 0);
+
+    // The input factor comes before the music that carries the new Windows volume - that music is still on its way
+    // (40 ms here): for that long the chain gets the old level with the new factor, 12 dB too much (volume down to
+    // 25 %) or too little (back up). After a raised factor the compressor, the MB compressor and the de-esser keep
+    // their gain for kVolumeHoldS and the leveller's detectors leave those blocks out: once the music has arrived the
+    // output is nearly what it would have been without any change. Without the hold they took the 40 ms for music
+    // and let go of it at their release times: a sag of 4.9 dB that took 0.45 s to come back.
+    {
+        const Buffer ml = music(5, 31, 0.9 / sig::peak(sig::beatMusic(fs, 5, 124, 31))),
+                     mr = music(5, 32, 0.9 / sig::peak(sig::beatMusic(fs, 5, 124, 32)));
+        const size_t block = 64, change = block * (frames(2.0) / block), late = frames(0.040);
+        // Windows' volume as a gain: `before` until the change, `after` from then on; the deck's output (left)
+        auto played = [&](double before, double after) {
+            DeckProcessor dk;
+            dk.setVolume(1.0, 1.0 / before);
+            dk.prepare(fs);
+            DeckControl c2;
+            dk.publish(makeDeckConfig(v, c2, fs));
+            Buffer xl = ml, xr = mr;
+            for (size_t i = 0; i < xl.size(); ++i) {
+                const float g = static_cast<float>(i < change + late ? before : after);
+                xl[i] *= g;
+                xr[i] *= g;
+            }
+            for (size_t pos = 0; pos < xl.size(); pos += block) {
+                if (pos == change && after != before) dk.setVolume(1.0, 1.0 / after);
+                dk.process(xl.data() + pos, xr.data() + pos, static_cast<int>(std::min(block, xl.size() - pos)));
+            }
+            return xl;
+        };
+        const Buffer plain = played(1.0, 1.0);
+        const double jumps[2][2] = {{1.0, 0.25}, {0.25, 1.0}};
+        for (const auto& j : jumps) {
+            const Buffer out = played(j[0], j[1]);
+            size_t badBefore = 0; // a quarter of the input with a factor of 4 is the input itself
+            for (size_t i = 0; i < change; ++i)
+                if (out[i] != plain[i]) ++badBefore;
+            // 50 ms windows, from 60 ms after the music with the new volume arrived, for half a second
+            double worst = 0.0;
+            const size_t w = frames(0.05);
+            for (size_t a0 = change + late + frames(0.06); a0 < change + late + frames(0.56); a0 += w)
+                worst = std::max(worst, std::fabs(tdeck::rmsDb(out, a0, w) - tdeck::rmsDb(plain, a0, w)));
+            std::printf("   Windows volume %3.0f %% -> %3.0f %%, the input factor 40 ms before the music: the output "
+                        "differs %.2f dB at most in the half second after\n", 100 * j[0], 100 * j[1], worst);
+            CHECK(badBefore == 0);
+            CHECK(worst < 1.2); // measured: 0.86 dB down (4.89 dB without the hold), 0.08 dB up
+        }
+    }
 }
 
 // ---- fade-out before a stream stops (startFadeOut) ----

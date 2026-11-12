@@ -55,6 +55,8 @@ struct SysStreamInfo {
     bool driftCorrected = false;  // a capture and a playback stream with the deck's AsyncInput between them
     bool sameDevice = false;      // drift correction asked for, but input and output are one device (one clock):
                                   // one duplex stream (WASAPI only can tell)
+    int inputRestarts = 0;        // times the input stream was opened again because it delivered nothing
+                                  // (SysAudio::recoverInputs)
 };
 
 class SysAudio {
@@ -108,6 +110,17 @@ public:
     // device may take seconds to wake up.
     static constexpr double kStallSeconds = 10.0;
     bool stalled(double now);
+    // An input stream of its own - a drift-corrected deck's, or an ASIO route's input from another API - that runs but
+    // has delivered no block for kStallSeconds: a device that hangs instead of stopping. stalled() does not see it
+    // (the output's periods go on, playing silence), and nothing brought the input back. That stream alone is opened
+    // again, on a thread of its own (the GUI does not wait for a device): the other deck and the output play on. Again
+    // after twice the wait each time, at most kInputRetrySeconds apart - an input that is only idle is hardly touched.
+    // An input that cannot be opened any more counts as failed (failed()). GUI thread; `now` in seconds. Returns the
+    // number of inputs whose reopening began in this call.
+    static constexpr double kInputRetrySeconds = 120.0;
+    int recoverInputs(double now);
+    // Test aid: stops a deck's input stream without a word, as a hanging device would.
+    void hangInputForTest(int deck);
     // Test aid (sysaudio_test): every API is miniaudio's null backend - devices that make no sound, on a timer.
     static void useNullBackend(bool on);
     // Test aid: every input and output counts as one device (one clock) - the null backend cannot say so itself.

@@ -107,6 +107,7 @@ struct DeckStream {
     float l[AudioEngine::kChunk] = {}, r[AudioEngine::kChunk] = {};
     // health, written by the stream's thread
     std::atomic<long long> blocks{0}, overHalf{0}, late{0};
+    std::atomic<long long> capBlocks{0}; // blocks of an input stream of its own (captureCallback)
     std::atomic<uint32_t> heaviest{0}, last{0}, recentPeak{0};
     std::atomic<long long> busyNs{0};
     std::atomic<int> core{-1};
@@ -115,6 +116,13 @@ struct DeckStream {
     std::atomic<uint32_t> recentLateUs{0}, periodUs{0};
     long long lastStartNs = 0; // the stream's thread's own
     double seenAt = 0.0;
+    // SysAudio::recoverInputs, on the GUI thread: the input stream's configuration (to open it again), when its blocks
+    // were last seen to go on, and how long to wait before the next reopening
+    ma_device_config capConfig{};
+    ma_device_id capId{};
+    bool ownInput = false;
+    long long seenCap = -1;
+    double capSeenAt = 0.0, capWait = 0.0;
     SysStreamInfo info;
 };
 
@@ -122,6 +130,11 @@ struct SysAudio::Impl {
     ma_context ctx{};
     bool ctxInited = false;
     std::unique_ptr<DeckStream> decks[2];
+    // recoverInputs: one input being opened again, on this thread; done (and how it went) when reopenDone is set
+    std::thread reopen;
+    int reopenDeck = -1;
+    std::atomic<bool> reopenDone{false}, reopenOk{false};
+    void finishReopen(); // waits for that thread and takes its result
 };
 
 namespace {
@@ -189,6 +202,7 @@ void captureCallback(ma_device* dev, void*, const void* input, ma_uint32 frames)
     DeckStream* s = static_cast<DeckStream*>(dev->pUserData);
     const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
     if (input) s->capture->write(static_cast<const float*>(input), static_cast<int>(frames), now);
+    s->capBlocks.store(s->capBlocks.load(std::memory_order_relaxed) + 1, std::memory_order_release);
     // with a playback stream of its own the deck's periods are that stream's (counted there)
     if (!s->playInited) s->blocks.store(s->blocks.load(std::memory_order_relaxed) + 1, std::memory_order_release);
 }
@@ -453,6 +467,10 @@ bool SysAudio::start(AudioApi api, const SysRoute routes[2], double sampleRate, 
                     return;
                 }
                 s->inited = true;
+                s->capId = *inId; // (the id in the context's list does not outlive the next device list)
+                s->capConfig = c;
+                s->capConfig.capture.pDeviceID = &s->capId;
+                s->ownInput = true;
                 r = ma_device_init(&m.ctx, &p, &s->play);
                 if (r != MA_SUCCESS) {
                     m.decks[d] = std::move(s); // stop() closes the input device
@@ -604,6 +622,10 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
                 return;
             }
             s->inited = true;
+            s->capId = *inId;
+            s->capConfig = c;
+            s->capConfig.capture.pDeviceID = &s->capId;
+            s->ownInput = true;
             // as above; the output (ASIO) already reads here - setDevicePeriod is atomic for that
             targets[d]->setDevicePeriod(
                 deckFrames(s->dev.capture.internalPeriodSizeInFrames, s->dev.capture.internalSampleRate, sampleRate));
@@ -635,9 +657,79 @@ bool SysAudio::startCapture(AudioApi api, const std::string devices[2], double s
     return ok;
 }
 
+void SysAudio::Impl::finishReopen() {
+    if (!reopen.joinable()) return;
+    reopen.join();
+    DeckStream* s = reopenDeck >= 0 ? decks[reopenDeck].get() : nullptr;
+    if (s) {
+        if (reopenOk.load()) ++s->info.inputRestarts;
+        else s->failed.store(true, std::memory_order_release); // the device is not there any more
+    }
+    reopenDeck = -1;
+    reopenDone.store(false);
+}
+
+int SysAudio::recoverInputs(double now) {
+    Impl& m = *impl_;
+    if (m.reopen.joinable()) { // one at a time: its result first
+        if (!m.reopenDone.load(std::memory_order_acquire)) return 0;
+        m.finishReopen();
+    }
+    for (int d = 0; d < 2; ++d) {
+        DeckStream* s = m.decks[d].get();
+        if (!s || !s->info.running || !s->ownInput || s->failed.load(std::memory_order_acquire)) continue;
+        const long long blocks = s->capBlocks.load(std::memory_order_acquire);
+        if (blocks != s->seenCap) { // it delivers (or this is the first look): the clock starts again
+            s->seenCap = blocks;
+            s->capSeenAt = now;
+            s->capWait = kStallSeconds;
+            continue;
+        }
+        if (now - s->capSeenAt < s->capWait) continue;
+        s->capSeenAt = now;
+        s->capWait = std::min(2.0 * s->capWait, kInputRetrySeconds);
+        m.reopenDeck = d;
+        m.reopenDone.store(false);
+        m.reopenOk.store(false);
+        ma_context* ctx = &m.ctx;
+        std::atomic<bool>* done = &m.reopenDone;
+        std::atomic<bool>* ok = &m.reopenOk;
+        m.reopen = std::thread([s, ctx, done, ok] {
+            // (the stream's own stop while it is closed here is no failure; the output's thread reads the deck's
+            // AsyncInput meanwhile as after any underrun: silence, then a fade-in when the input fills it again)
+            s->stopping.store(true, std::memory_order_release);
+            ma_device_uninit(&s->dev);
+            s->inited = false;
+            ma_result r = ma_device_init(ctx, &s->capConfig, &s->dev);
+            if (r == MA_SUCCESS) {
+                s->inited = true;
+                r = ma_device_start(&s->dev);
+            }
+            s->stopping.store(false, std::memory_order_release);
+            ok->store(r == MA_SUCCESS, std::memory_order_release);
+            done->store(true, std::memory_order_release);
+        });
+        return 1;
+    }
+    return 0;
+}
+
+void SysAudio::hangInputForTest(int deck) {
+    Impl& m = *impl_;
+    m.finishReopen();
+    DeckStream* s = m.decks[deck].get();
+    if (!s || !s->ownInput) return;
+    onHelper([&] {
+        s->stopping.store(true, std::memory_order_release); // (no "stopped by itself": a hang says nothing)
+        ma_device_stop(&s->dev);
+        s->stopping.store(false, std::memory_order_release);
+    });
+}
+
 void SysAudio::stop() {
     Impl& m = *impl_;
     capturing_ = false;
+    m.finishReopen(); // an input being opened again: first let it finish
     if (!m.ctxInited && !m.decks[0] && !m.decks[1]) return;
     onHelper([&] {
         for (auto& s : m.decks) {

@@ -238,6 +238,74 @@ void settingsLock() {
 
 } // namespace
 
+// An input stream of its own that hangs (no blocks, no word) is opened again by itself - that stream alone - after
+// kStallSeconds without a block; an input that delivers is left alone, and the wait doubles after every reopening.
+void inputRecovery(const SysRoute& route) {
+    std::printf("-- an input that hangs is opened again (drift-corrected route, then an input-only stream)\n");
+    for (int captureOnly = 0; captureOnly < 2; ++captureOnly) {
+        AudioEngine engine;
+        AsyncInput async;
+        async.reset(48000.0);
+        AsyncInput* targets[2] = {&async, nullptr};
+        SysAudio sys;
+        std::string err;
+        const SysRoute routes[2] = {route, SysRoute()};
+        const std::string inputs[2] = {route.input, std::string()};
+        const bool ok = captureOnly ? sys.startCapture(AudioApi::Wasapi, inputs, 48000.0, 0, false, targets, err)
+                                    : sys.start(AudioApi::Wasapi, routes, 48000.0, 480, false, targets, false, engine,
+                                                [](double) {}, err);
+        CHECK(ok);
+        if (!ok) {
+            std::printf("   start failed: %s\n", err.c_str());
+            continue;
+        }
+        double now = 5000.0;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        CHECK(sys.recoverInputs(now) == 0); // the first look
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        // an input that delivers is never opened again, however long ago the last look was
+        CHECK(sys.recoverInputs(now += 10.0 * SysAudio::kStallSeconds) == 0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(300)); // (blocks after that look: the next one sees them)
+        sys.hangInputForTest(0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        const long long hung = async.state().writes;
+        std::this_thread::sleep_for(std::chrono::milliseconds(400));
+        CHECK(async.state().writes == hung); // it delivers nothing; nothing says so
+        CHECK(!sys.failed());
+        CHECK(sys.recoverInputs(now += 1.0) == 0); // the last blocks before the hang were new: the clock starts
+        CHECK(sys.recoverInputs(now += SysAudio::kStallSeconds - 1.0) == 0); // not before kStallSeconds
+        CHECK(sys.recoverInputs(now += 2.0) == 1);                           // then: opened again
+        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+        CHECK(sys.recoverInputs(now += 1.0) == 0); // takes the result
+        const long long after = async.state().writes;
+        std::printf("   %s: %lld input blocks before the hang, %lld after the reopening; opened again %d time(s)\n",
+                    captureOnly ? "input-only stream" : "drift-corrected  ", hung, after, sys.info(0).inputRestarts);
+        CHECK(after > hung);
+        CHECK(sys.info(0).inputRestarts == 1);
+        CHECK(!sys.failed());
+        CHECK(sys.info(0).running);
+        // it delivers again: left alone from here on
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        CHECK(sys.recoverInputs(now += 10.0 * SysAudio::kStallSeconds) == 0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        CHECK(sys.recoverInputs(now += 10.0 * SysAudio::kStallSeconds) == 0);
+        CHECK(sys.info(0).inputRestarts == 1);
+        if (!captureOnly) {
+            // the output played on all the time, and reads the input again
+            std::this_thread::sleep_for(std::chrono::milliseconds(700));
+            CHECK(!sys.stalled(1000.0));
+            CHECK(async.state().active);
+        }
+        // a second hang waits twice as long... (the wait starts again when blocks come: kStallSeconds here)
+        sys.hangInputForTest(0);
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+        CHECK(sys.recoverInputs(now += 1.0) == 0);
+        CHECK(sys.recoverInputs(now += SysAudio::kStallSeconds + 1.0) == 1);
+        sys.stop(); // while the reopening may still run: stop waits for it
+        CHECK(!sys.running());
+    }
+}
+
 int main() {
     SysAudio::useNullBackend(true);
     std::vector<SysDevice> inputs, outputs;
@@ -254,6 +322,7 @@ int main() {
     failures(route);
     oneDevice(route);
     captureOnly(inputs[0].name);
+    inputRecovery(route);
     onStep();
     settingsLock();
     return test::finish("sysaudio_test");

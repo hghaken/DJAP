@@ -14,7 +14,7 @@ namespace ap {
 namespace {
 
 const PROPERTYKEY kFriendlyName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};
-constexpr int kLookupTicks = 20; // polls between two look-ups of the default device (1 s at the GUI's 20 Hz)
+constexpr unsigned long long kLookupMs = 1000; // between two look-ups of the default device
 
 template <class T> void releaseCom(T*& p) {
     if (p) p->Release();
@@ -76,7 +76,11 @@ bool WindowsVolume::open() {
 }
 
 bool WindowsVolume::poll() {
-    if (ticks_++ % kLookupTicks == 0 || !volume_) open();
+    const unsigned long long now = GetTickCount64();
+    if (!volume_ || lookedUp_ == 0 || now - lookedUp_ >= kLookupMs) {
+        lookedUp_ = now ? now : 1;
+        open();
+    }
     float db = 0.0f, scalar = 1.0f;
     BOOL mute = FALSE;
     if (!volume_ || FAILED(volume_->GetMasterVolumeLevel(&db)) || FAILED(volume_->GetMasterVolumeLevelScalar(&scalar)) ||

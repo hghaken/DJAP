@@ -342,15 +342,17 @@ struct DeckProcessor::DensityBank {
         outR = rightOf(out);
     }
 
-    void control(const DeckConfig& c, bool quiet, double dt) {
-        if (!quiet) learnTime += dt;
+    // `hold`: the levels, the references and the gains stay as they are (kVolumeHoldS: these blocks are not the
+    // music's level - 50 ms at 12 dB too much moved a band's 3 s reference by 1 dB)
+    void control(const DeckConfig& c, bool quiet, double dt, bool hold) {
+        if (!quiet && !hold) learnTime += dt;
         const bool warm = learnTime < 0.5; // fresh reference: learn fast, keep the gain at 0 dB
         const double k = 1.0 - 1.0 / c.densRatio;
         for (int b = 0; b < bands; ++b) {
             const double ms = acc[b] / kControlBlock;
             acc[b] = 0.0;
-            level[b] = toward(level[b], ms, c.densLevel);
-            if (!quiet) ref[b] = toward(ref[b], level[b], warm ? c.densRefFast : c.densRef);
+            if (!hold) level[b] = toward(level[b], ms, c.densLevel);
+            if (!quiet && !hold) ref[b] = toward(ref[b], level[b], warm ? c.densRefFast : c.densRef);
             if (ref[b] < level[b] * 1e-3) ref[b] = level[b] * 1e-3;
             const double excess = 10.0 * std::log10((level[b] + 1e-20) / (ref[b] + 1e-20));
             double target = 0.0;
@@ -360,7 +362,7 @@ struct DeckProcessor::DensityBank {
                 else if (!quiet && excess < -c.densLift && excess > -40.0)
                     target = std::min(c.densMaxLift, (-c.densLift - excess) * k);
             }
-            gainDb[b] = target < gainDb[b] ? toward(gainDb[b], target, c.densAtt) : toward(gainDb[b], target, c.densRel);
+            if (!hold) gainDb[b] = target < gainDb[b] ? toward(gainDb[b], target, c.densAtt) : toward(gainDb[b], target, c.densRel);
             fixed[b] = toward(fixed[b], c.densBandGain[b], c.densGainSmooth);
             gPrev[b] = gNext[b];
             gNext[b] = dbToLin(gainDb[b]) * fixed[b];
@@ -547,6 +549,8 @@ void DeckProcessor::prepare(double fs) {
     volGlide_ = onePoleCoeff(kVolumeGlideS, fs);
     volOutS_ = clampd(volOut_.load(std::memory_order_relaxed), 0.0, 1.0);
     volInS_ = clampd(volIn_.load(std::memory_order_relaxed), 0.0, kMaxInputVolume);
+    volHold_ = 0;
+    volInAsked_ = volInS_;
     haveConfig_ = false;
     fresh_ = true;
     fadeInStart_ = false;
@@ -805,8 +809,12 @@ void DeckProcessor::controlUpdate() {
     const DeckConfig& c = cfg_;
     const double dt = static_cast<double>(kControlBlock) / fs_;
 
-    // incoming level (K-weighted, 0.4 s and 1.5 s) -> quiet / silence / warm start
-    const double inPow = blockIn_ / kControlBlock;
+    // incoming level (K-weighted, 0.4 s and 1.5 s) -> quiet / silence / warm start. While the input factor of setVolume
+    // has just changed (kVolumeHoldS, deck.h) the level is not the music's: the detectors get their own 1.5 s level
+    // instead of these blocks (12 dB too much for 50 ms read as 4 dB on the 0.4 s level and 1 dB on the 3 s level,
+    // and the leveller went after it)
+    const bool volHold = volHold_ > 0;
+    const double inPow = volHold ? midIn_ : blockIn_ / kControlBlock;
     fastIn_ = toward(fastIn_, inPow, c.aFast);
     midIn_ = toward(midIn_, inPow, c.aMid);
     blockIn_ = 0.0;
@@ -845,7 +853,7 @@ void DeckProcessor::controlUpdate() {
     }
     // leveller detector after the width stage, with the leveller gain of the last block taken out: the averages
     // then do not lag behind the leveller's own moves (a closed loop through the 3 s average overshoots)
-    const double postPow = std::min(blockPost_ / kControlBlock / (levGainLin_ * levGainLin_), c.levDetMax);
+    const double postPow = volHold ? postMid_ : std::min(blockPost_ / kControlBlock / (levGainLin_ * levGainLin_), c.levDetMax);
     blockPost_ = 0.0;
     postFast_ = toward(postFast_, postPow, c.aFast);
     postMid_ = toward(postMid_, postPow, c.aMid);
@@ -1012,15 +1020,15 @@ void DeckProcessor::controlUpdate() {
     if (running_[sDensity]) {
         DensityBank& a = *banks_[activeBank_];
         if (a.learnTime > musicTime_) a.learnTime = musicTime_;
-        a.control(c, quiet_, dt);
-        if (bankFading_) banks_[1 - activeBank_]->control(c, quiet_, dt);
+        a.control(c, quiet_, dt, volHold_ > 0);
+        if (bankFading_) banks_[1 - activeBank_]->control(c, quiet_, dt, volHold_ > 0);
     }
 
     // de-esser: reduction as a high shelf, recomputed every control block; transparent at 0 dB
     if (running_[sDeEsser]) {
         const double over = powerToLufs(dessDet_) - c.dessThr;
         const double target = clampd(over * 0.75, 0.0, c.dessMax); // 4:1
-        dessRed_ = target > dessRed_ ? toward(dessRed_, target, c.dessAtt) : toward(dessRed_, target, c.dessRel);
+        if (volHold_ <= 0) dessRed_ = target > dessRed_ ? toward(dessRed_, target, c.dessAtt) : toward(dessRed_, target, c.dessRel);
         if (dessRed_ > 0.01) {
             if (!dessEngaged_) {
                 dessShelf_.reset();
@@ -1045,6 +1053,10 @@ void DeckProcessor::process(float* left, float* right, int frames) {
     const double fadeStep = 1.0 / (0.005 * fs_);
     const double volOut = clampd(volOut_.load(std::memory_order_relaxed), 0.0, 1.0);
     const double volIn = clampd(volIn_.load(std::memory_order_relaxed), 0.0, kMaxInputVolume);
+    if (volIn != volInAsked_) { // a higher input factor: the fast gain stages hold for kVolumeHoldS (deck.h)
+        if (volIn > volInAsked_) volHold_ = static_cast<int>(kVolumeHoldS * fs_);
+        volInAsked_ = volIn;
+    }
     // one-pole glide that lands exactly on the target
     auto glide = [&](double now, double target) {
         const double next = toward(now, target, volGlide_);
@@ -1056,6 +1068,8 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             volOutS_ = glide(volOutS_, volOut);
             volInS_ = glide(volInS_, volIn);
         }
+        const bool volHold = volHold_ > 0;
+        if (volHold) --volHold_;
         // non-finite or absurd input counts as 0; then the input factor of setVolume
         double xl = left[i], xr = right[i];
         if (!(std::fabs(xl) <= 1e6)) xl = 0.0;
@@ -1185,7 +1199,7 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             compDet_ = toward(compDet_, sl * sl + sr * sr, c.compDet);
             const double lvl = fastPowerToLufs(compDet_);
             const double red = lvl - compressorCurveDb(lvl, c.compThr, c.compRatio, c.compKnee);
-            compRed_ = red > compRed_ ? toward(compRed_, red, c.compAtt) : toward(compRed_, red, c.compRel);
+            if (!volHold) compRed_ = red > compRed_ ? toward(compRed_, red, c.compAtt) : toward(compRed_, red, c.compRel);
             compMakeupS_ = toward(compMakeupS_, c.compMakeup, c.gainSmooth);
             const double gc = fastDbToLin(compMakeupS_ - compRed_);
             const double ge = 1.0 + mix_[sCompressor] * (gc - 1.0);

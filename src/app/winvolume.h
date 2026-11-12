@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The volume of Windows' default playback device - what the keyboard's volume keys, the taskbar and the volume
-// flyout change. Read on the GUI thread by polling (COM in the GUI thread's apartment); the default device is looked
-// up again every second, so a new default device is followed.
+// flyout change. Read on the GUI thread by polling (COM in the GUI thread's apartment; about every 15 ms, see
+// MainWindow's volume timer); the default device is looked up again every second, so a new default device is followed.
 #pragma once
 
 #include <string>
@@ -41,7 +41,7 @@ private:
     std::string name_;
     double gain_ = 1.0, scalar_ = 1.0;
     bool muted_ = false, software_ = false;
-    int ticks_ = 0;
+    unsigned long long lookedUp_ = 0; // GetTickCount64 of the last look-up of the default device
 };
 
 } // namespace ap

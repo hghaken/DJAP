@@ -146,6 +146,11 @@ add_executable(latencyprobe_test tests/app/latencyprobe_test.cpp)
 target_include_directories(latencyprobe_test PRIVATE tests)
 ap_own(latencyprobe_test)
 target_link_libraries(latencyprobe_test PRIVATE apapp)
+# the Windows volume is only read (never changed): what one read costs, at the rate the main window reads it
+add_executable(winvolume_test tests/app/winvolume_test.cpp src/app/winvolume.cpp)
+target_include_directories(winvolume_test PRIVATE tests)
+ap_own(winvolume_test)
+target_link_libraries(winvolume_test PRIVATE apapp)
 target_link_options(DJAPCmd PRIVATE /PDBALTPATH:%_PDB%)
 
 # ---- Plug-in for DJ software (src/plugin): the Steinberg SDK in third_party/vst3sdk (MIT; not committed) ----

@@ -26,6 +26,12 @@ const wchar_t* const kClass = L"APMainWindow";
 const UINT_PTR kTimer = 1;
 const UINT kTimerMs = 50; // meters at 20 Hz
 const UINT_PTR kStartTimer = 2; // startSavedAudio() again
+// The Windows volume is read more often than the meters are drawn: the input factor that undoes it (updateVolume) must
+// not come later than the music that carries the new volume - that music needs 30-60 ms to get here (WASAPI), a look
+// every 50 ms could be later than that. Read in time, the factor is only ever early, which the deck covers
+// (kVolumeHoldS). One read takes some tens of microseconds (winvolume_test prints it).
+const UINT_PTR kVolumeTimer = 3;
+const UINT kVolumeMs = 15;
 const UINT kStartRetryMs = 5000;
 
 // control ids: deck d uses 1000 + 100 d + item
@@ -192,6 +198,7 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     ShowWindow(hwnd_, hidden ? SW_HIDE : placement::showCommand(hwnd_));
     SetTimer(hwnd_, kTimer, kTimerMs, nullptr);
     SetTimer(hwnd_, kStartTimer, kStartRetryMs, nullptr);
+    SetTimer(hwnd_, kVolumeTimer, kVolumeMs, nullptr);
     // the icon in the notification area: the small size for this screen (16 px at 100 %, 24 at 150 %, ...)
     if (FAILED(LoadIconMetric(instance, MAKEINTRESOURCEW(IDI_APP), LIM_SMALL, &iconSmall_))) iconSmall_ = nullptr;
     tray_.add(hwnd_, iconSmall_ ? iconSmall_ : wc.hIconSm, L"DJAP");
@@ -428,9 +435,14 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             recoverAudio();
             return 0;
         }
+        if (wp == kVolumeTimer) {
+            // (not followed: the volume is only shown in the status bar - every fourth look is enough for that)
+            static unsigned looks = 0;
+            if (settings_.followsVolume() || looks++ % 4 == 0) updateVolume();
+            return 0;
+        }
         if (wp == kTimer) {
             audio_.poll();
-            updateVolume();
             updateMeters();
             analysisWindow_.refresh();
             spectrumWindow_.refresh();
@@ -471,6 +483,7 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
     case WM_DESTROY:
         KillTimer(hwnd_, kTimer);
         KillTimer(hwnd_, kStartTimer);
+        KillTimer(hwnd_, kVolumeTimer);
         tray_.remove();
         if (iconSmall_) DestroyIcon(iconSmall_);
         iconSmall_ = nullptr;
