@@ -239,7 +239,8 @@ void AsyncInput::beginPeriod(int frames, double now) {
     const double target = targetS_;
     periodOk_ = false;
     if (!active_) {
-        if (block > 0 && playGaps_ >= 2 && written - static_cast<double>(pos_) >= target) { // filled: start at the target
+        // (a running fade-out is finished first: starting its fade-in from gain 0 in the middle of it was a step)
+        if (block > 0 && playGaps_ >= 2 && fadeOut_ == 0 && written - static_cast<double>(pos_) >= target) { // filled: start at the target
             pos_ = std::max(pos_, static_cast<int64_t>(std::floor(est - target)));
             frac_ = 0.0;
             active_ = true;
@@ -247,9 +248,14 @@ void AsyncInput::beginPeriod(int frames, double now) {
             fade_ = 0.0;
         }
     } else if (est - (pos_ + frac_) > 2.0 * target + 0.05 * fs_) { // far too full (blocks dropped, a stall)
-        pos_ = static_cast<int64_t>(std::floor(est - target));
-        frac_ = 0.0;
+        // no jump at full gain (a waveform step - a click): go out through the fade-out like an underrun does (there is
+        // plenty in the ring - it is far too full), then the restart below moves the position to the target
+        // (`est - target` is ahead of the old one) and fades in
+        active_ = false;
         haveAvg_ = false;
+        fadeOutTotal_ = fadeOut_ = static_cast<int>(kFadeOutMs * fs_ / 1000.0);
+        const double avail = (written - static_cast<double>(pos_) - frac_ - kHalfTaps - 1) / ratio_;
+        fadeRing_ = static_cast<int>(std::clamp(std::floor(avail), 0.0, static_cast<double>(fadeOutTotal_)));
         bump(resyncs_);
     }
     if (active_) {

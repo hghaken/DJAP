@@ -165,6 +165,7 @@ void levellerFastDown() {
     v[pLevRange] = 12;
     v[pLevSpeed] = 0.5;
     v[pLevRelease] = 5.0; // Gentle's
+    v[pLevWindow] = 0;    // this test compares settled levels to 0.3 dB: inside the window the gain only drifts
     Buffer l = sig::beatMusic(fs, 46, 124, 7), r = sig::beatMusic(fs, 46, 124, 8);
     tdeck::setLoudness(fs, l, r, -9);
     const size_t entry = static_cast<size_t>(6 * fs);
@@ -215,6 +216,132 @@ void levellerFastDown() {
     }
     std::printf("   chorus +4 LU for 8 s: %.2f LUFS without fast down, %.2f with\n", chorus[0], chorus[1]);
     CHECK_NEAR(chorus[1], chorus[0], 0.5);
+}
+
+// Fast down behind the compressor (2026-11-12). The leveller's detector sits after the compressor, which hid most of
+// a loud entry from it: with Loud's compressor (2.5:1 from the target) an entry 14 dB up never started fast down - the
+// gain came down at Speed alone and the output stayed 4 LU over the target for 4 s, under 6-7 dB of compression. The
+// leveller now also judges the entry at its own output (deck.cpp, kBaseSettledDb): with the compressor on the level
+// must be back as soon as without it.
+void levellerFastDownCompressor() {
+    std::printf("-- leveller fast down behind the compressor (target -18 LUFS, 1.5 dB/s; 20 s at -28, then -14 LUFS)\n");
+    PresetValues v = allOff();
+    v[pLevOn] = 1;
+    v[pTarget] = -18;
+    v[pLevSpeed] = 1.5;
+    v[pCompThreshold] = 0; // Loud's compressor
+    v[pCompRatio] = 2.5;
+    Buffer l = sig::beatMusic(fs, 46, 124, 11), r = sig::beatMusic(fs, 46, 124, 12);
+    tdeck::setLoudness(fs, l, r, -14);
+    const size_t entry = static_cast<size_t>(20 * fs);
+    const float verse = static_cast<float>(dbToLin(-14.0));
+    for (size_t i = 0; i < entry; ++i) {
+        l[i] *= verse;
+        r[i] *= verse;
+    }
+    for (int comp = 0; comp < 2; ++comp) {
+        v[pCompOn] = comp;
+        const tdeck::Stereo o = run(fs, v, l, r);
+        auto at = [&](double from, double to) {
+            return tdeck::loudness(fs, o.l, o.r, entry + static_cast<size_t>(from * fs), entry + static_cast<size_t>(to * fs));
+        };
+        const double before = at(-6, 0), soon = at(2, 6), late = at(14, 24);
+        std::printf("   compressor %s: %.2f LUFS in the 6 s before the entry, %.2f at 2-6 s after it, %.2f at 14-24 s\n",
+                    comp ? "on " : "off", before, soon, late);
+        CHECK_NEAR(before, -18.0, 1.0);
+        CHECK_NEAR(soon, -18.0, 1.5); // was about 4 LU over with the compressor on
+        CHECK_NEAR(late, -18.0, 1.0);
+    }
+}
+
+// The window (2026-11-12; the gain travelled 31 dB per minute of music, following every move of the 3 s level): a
+// song that goes 0.7 dB up and down every 4 s is left alone - inside the window the gain only drifts - while a step of
+// 4 dB is followed as before, and the level still ends on the target.
+void levellerWindow() {
+    std::printf("-- leveller window (target -14 LUFS, 1 dB/s; a song at -17 LUFS, 0.7 dB up and down every 4 s, 4 dB up at 50 s)\n");
+    PresetValues v = allOff();
+    v[pLevOn] = 1;
+    v[pTarget] = -14;
+    v[pLevSpeed] = 1.0;
+    Buffer l = sig::beatMusic(fs, 70, 124, 13), r = sig::beatMusic(fs, 70, 124, 14);
+    tdeck::setLoudness(fs, l, r, -17);
+    for (size_t i = static_cast<size_t>(10 * fs); i < l.size(); ++i) {
+        const double t = i / fs;
+        const double db = t >= 50.0 ? 4.0 : (static_cast<int>(t / 4.0) & 1) ? -0.7 : 0.7;
+        l[i] *= static_cast<float>(dbToLin(db));
+        r[i] *= static_cast<float>(dbToLin(db));
+    }
+    double travel[2], song[2], after[2];
+    const double window[2] = {0.0, paramInfo(pLevWindow).def};
+    for (int k = 0; k < 2; ++k) {
+        v[pLevWindow] = window[k];
+        const tdeck::Stereo o = run(fs, v, l, r);
+        // the leveller's gain per 0.5 s (nothing else is on), and how far it travelled from 12 s to 50 s
+        const size_t w = static_cast<size_t>(0.5 * fs);
+        travel[k] = 0.0;
+        double last = 0.0;
+        for (size_t a0 = static_cast<size_t>(12 * fs); a0 + w <= static_cast<size_t>(50 * fs); a0 += w) {
+            const double g = tdeck::rmsDb(o.l, a0, w) - tdeck::rmsDb(l, a0, w);
+            if (a0 > static_cast<size_t>(12 * fs)) travel[k] += std::fabs(g - last);
+            last = g;
+        }
+        song[k] = tdeck::loudness(fs, o.l, o.r, static_cast<size_t>(18 * fs), static_cast<size_t>(50 * fs));
+        after[k] = tdeck::loudness(fs, o.l, o.r, static_cast<size_t>(56 * fs), static_cast<size_t>(68 * fs));
+        std::printf("   window %.1f dB: the gain travelled %.1f dB in 38 s; %.2f LUFS at 18-50 s, %.2f at 6-18 s after "
+                    "the step\n", window[k], travel[k], song[k], after[k]);
+        CHECK_NEAR(song[k], -14.0, 0.7);
+        CHECK_NEAR(after[k], -14.0, 0.7);
+    }
+    CHECK(window[1] >= 1.0);                // the shipped window covers this song's ups and downs
+    CHECK(travel[0] > 5.0);                 // without it the gain follows every move
+    CHECK(travel[1] < 0.5 * travel[0]);     // what is left is the drift inside the window (0.1 dB/s)
+}
+
+// The side-chain high-pass (150 Hz since 2026-11-12, was 80): a kick must not pull the rest of the mix down with it.
+// A 60 Hz burst every 0.5 s over a steady 3 kHz tone, through Loud's compressor alone: how far the tone moves per beat.
+void compressorKick() {
+    std::printf("-- compressor and a kick (threshold 0 LU re -12 LUFS, ratio 2.5; a 60 Hz burst at -3 dBFS every 0.5 s over "
+                "a 3 kHz tone at -26 dBFS)\n");
+    PresetValues v = allOff();
+    v[pCompOn] = 1;
+    v[pTarget] = -12;
+    v[pCompThreshold] = 0;
+    v[pCompRatio] = 2.5;
+    Buffer in = sig::sine(fs, 3000, -26, 6.0);
+    for (size_t i = 0; i < in.size(); ++i) {
+        const double t = std::fmod(i / fs, 0.5);
+        in[i] += static_cast<float>(dbToLin(-3.0) * std::sin(2.0 * kPi * 60.0 * t) * std::exp(-t / 0.12) *
+                                    std::min(1.0, t / 0.002));
+    }
+    // the tone's level per 20 ms, Hann-weighted (the burst does not leak into it), over the last 3 s
+    auto toneMoves = [&](const Buffer& out) {
+        const size_t w = static_cast<size_t>(0.02 * fs);
+        double lo = 1e9, hi = -1e9;
+        for (size_t a0 = static_cast<size_t>(3 * fs); a0 + w <= out.size(); a0 += w / 2) {
+            double re = 0.0, im = 0.0;
+            for (size_t k = 0; k < w; ++k) {
+                const double h = 0.5 - 0.5 * std::cos(2.0 * kPi * k / w), ph = 2.0 * kPi * 3000.0 * k / fs;
+                re += h * out[a0 + k] * std::cos(ph);
+                im += h * out[a0 + k] * std::sin(ph);
+            }
+            const double db = 10.0 * std::log10(re * re + im * im + 1e-30);
+            lo = std::min(lo, db);
+            hi = std::max(hi, db);
+        }
+        return hi - lo;
+    };
+    const double hpf[3] = {0.0, 80.0, paramInfo(pCompSideHpf).def};
+    double moves[3];
+    for (int k = 0; k < 3; ++k) {
+        v[pCompSideHpf] = hpf[k];
+        moves[k] = toneMoves(run(fs, v, in, in).l);
+        std::printf("   side-chain high-pass %s%.0f Hz: the tone moves %.2f dB per beat\n", hpf[k] > 0 ? "" : "off / ",
+                    hpf[k], moves[k]);
+    }
+    CHECK(hpf[2] >= 150.0);
+    CHECK(moves[0] > 3.0);  // the fault: the kick pulls the tone down
+    CHECK(moves[2] < 0.5);  // the shipped filter: it does not
+    CHECK(moves[2] < 0.4 * moves[1]);
 }
 
 // After a silence of at least 2 s the leveller always starts at +12 dB (client, 2026-11-08), whatever it was: a loud
@@ -817,9 +944,12 @@ void colour() {
 int main() {
     compressorCurve();
     compressorTimes();
+    compressorKick();
     leveller();
     levellerFadeIn();
     levellerFastDown();
+    levellerFastDownCompressor();
+    levellerWindow();
     levellerQuietSections();
     levellerSilenceStart();
     levellerIntro();

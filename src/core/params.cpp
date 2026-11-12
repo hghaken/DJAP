@@ -40,6 +40,10 @@ const ParamInfo kInfo[kParamCount] = {
      "The gain the leveller goes to after 2 s of silence (a stopped deck), so the next song starts there (at most "
      "Range); high = a soft intro is on level at once and a loud start comes down at the Attack speed, low = a gentler "
      "start; hold = the gain stays where the last song left it"},
+    {"LevellerWindow", "Leveller", "Window", "dB", 0, 3, 1.0, 0.5, 1, false,
+     "The gain rests - it only drifts, at a tenth of Speed - while the music's 3 s level stays within this many dB of "
+     "the target, and moves at Speed again, all the way to the target, when the level leaves that window; 0 = the gain "
+     "follows every move, wide = a calm gain that leaves a song's own ups and downs alone"},
 
     {"NoiseOn", "Noise", "On", "", 0, 1, 0, 1, 0, true,
      "Noise reduction: a band whose level falls under the threshold is turned down (hiss, hum, rumble between and "
@@ -69,8 +73,12 @@ const ParamInfo kInfo[kParamCount] = {
     {"CompressorKnee", "Compressor", "Knee", "dB", 0, 12, 6, 0.5, 1, false, "Width of the soft knee"},
     {"CompressorAttack", "Compressor", "Attack", "ms", 1, 100, 10, 1, 0, false, "Time to compress more"},
     {"CompressorRelease", "Compressor", "Release", "ms", 20, 1000, 200, 10, 0, false, "Time to let go"},
-    {"CompressorSideHpf", "Compressor", "Side-chain high-pass", "Hz", 0, 200, 80, 5, 0, false,
-     "Bass under this frequency does not trigger the compressor (0 = off)"},
+    // 150 Hz (was 80 until 2026-11-12): at 80 Hz a kick still drove the compressor and ducked everything else in its
+    // rhythm - a kick at -1 dBFS over a steady pad pulled the pad's highs down 2.0 dB per beat in Medium, 3.5 in Loud,
+    // 6.3 in Very Loud, 8.0 in FM Station; at 150 Hz 0.3 / 0.9 / 2.2 / 3.3 dB, with the same output loudness
+    {"CompressorSideHpf", "Compressor", "Side-chain high-pass", "Hz", 0, 200, 150, 5, 0, false,
+     "Bass under this frequency does not trigger the compressor (0 = off); low = a kick pulls the whole mix down "
+     "with it (pumping)"},
     {"CompressorMakeup", "Compressor", "Make-up", "dB", -1, 12, -1, 0.5, 1, false,
      "Gain after compression; auto = the target level passes unchanged (written as -1)"},
 

@@ -380,6 +380,39 @@ int main(int argc, char** argv) {
         a.close();
     }
 
+    // 3c. a host that passes the window's edits on to process() hands back slider positions: the position of an exact
+    // value (the preset's 2500 Hz split is position 217 of a logarithmic scale = 2520 Hz) must not replace it
+    {
+        Instance a;
+        CHECK(a.open(module, &host));
+        const State st = a.state();
+        a.start();
+        ap::DeckProcessor ref;
+        ref.prepare(kRate);
+        configure(ref, st);
+        ref.startFadeIn();
+        const int p = ap::pDensSplit3;
+        const double exact = st.values[static_cast<size_t>(p)];
+        const int position = ap::paramPositionOf(p, exact);
+        CHECK(ap::paramValueAt(p, position) != exact); // else this test shows nothing
+        ParameterChanges changes(1);
+        int32 qi = 0, pi = 0;
+        changes.addParameterData(ap::plugin::paramId(p), qi)
+            ->addPoint(0, static_cast<double>(position) / ap::paramPositions(p), pi);
+        std::vector<float> pl(frames), pr(frames), rl(inL), rr(inR);
+        for (int pos = 0; pos < frames; pos += 441) {
+            const int n = std::min(441, frames - pos);
+            a.run(&inL[static_cast<size_t>(pos)], &inR[static_cast<size_t>(pos)], &pl[static_cast<size_t>(pos)],
+                  &pr[static_cast<size_t>(pos)], n, pos == 441 ? &changes : nullptr);
+            ref.process(&rl[static_cast<size_t>(pos)], &rr[static_cast<size_t>(pos)], n);
+        }
+        const int diff = differences(pl, rl) + differences(pr, rr);
+        std::printf("-- a host that hands back the position of an exact value (%.0f Hz, position %d = %.0f Hz): %d "
+                    "samples differ\n", exact, position, ap::paramValueAt(p, position), diff);
+        CHECK(diff == 0);
+        a.close();
+    }
+
     // 4. the look-ahead parameter changes the latency the host is told
     {
         Instance a;

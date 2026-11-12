@@ -64,7 +64,8 @@ struct Sim {
     int firstPeriod = 0;      // the output's first callback this long instead (a DirectSound stream: its whole buffer)
     int devicePeriod = 0;     // AsyncInput::setDevicePeriod (0: not set)
     bool catchUp = false;     // the capture blocks of a capPause come all at once after it (else they are lost)
-    double capJitter = 0.0;   // s: capture callbacks come up to this late
+    double catchGap = 2e-5;   // s between the blocks of that catch-up (0.8 ms: not one burst - a quick refill)
+    double capJitter = 0.0;  // s: capture callbacks come up to this late
     double outJitter = 0.0;   // s: output callbacks come up to this late
     double capPause[2] = {-1, -1}, outPause[2] = {-1, -1}; // no callbacks in [from, to) (s since start)
     std::function<void(int64_t n, float& l, float& r)> signal; // capture frame n
@@ -102,7 +103,7 @@ struct Sim {
                     double t = tc;
                     for (size_t at = 0; at < held.size(); at += 2 * static_cast<size_t>(block)) { // the catch-up
                         ai.write(held.data() + at, block, t);
-                        t += 2e-5;
+                        t += catchGap;
                     }
                     held.clear();
                     if (!pieces.empty()) {
@@ -555,6 +556,86 @@ void fadeOut() {
     }
 }
 
+// A resync (the fill far too high) and a quick refill after an underrun must not step the output (a waveform
+// discontinuity is a click): the resync went on at full gain from the new position, and a restart within the fade-out
+// cut it short and began the fade-in from 0.
+void fadeContinuity() {
+    std::printf("-- a resync and a quick restart leave no step\n");
+    // a 1 kHz sine of 0.5 moves at most 0.5 x 2 pi x 1000 / 48000 = 0.065 per frame (left and right alike); the fade
+    // gains add at most a few percent of that (a 3 ms raised cosine); a jump to another phase is up to 1.0
+    const double sineStep = 0.5 * 2.0 * pi * 1000.0 / 48000.0;
+    { // the reader stalls 400 ms: the fill passes 2 x target + 50 ms (1 x: 0.1 s) - a resync when it comes back
+        AsyncInput ai;
+        ai.reset(48000);
+        Sim s;
+        s.period = 256;
+        s.outPause[0] = 3.0;
+        s.outPause[1] = 3.4037; // (not a whole number of the sine's periods: a jump lands on another phase)
+        s.signal = sine(1000.0, 0.5, 48000);
+        s.run(ai, 4.5);
+        const size_t from = 48000 * 29 / 10; // the stall (the output has no gap in it: it starts after 3.0 s) and on
+        double worst = 0.0, worstR = 0.0;
+        for (size_t i = from; i < s.outL.size(); ++i) {
+            worst = std::max(worst, static_cast<double>(std::fabs(s.outL[i] - s.outL[i - 1])));
+            worstR = std::max(worstR, static_cast<double>(std::fabs(s.outR[i] - s.outR[i - 1])));
+        }
+        // full level again: the last output frame with a gain under 0.99 of the sine, measured as the peak over 1 ms
+        // windows; look for the first 1 ms after the silence in which the peak is >= 0.49
+        size_t quiet = 0; // the last frame (from `from`) where the output is under 0.4 of the amplitude, over a ms
+        for (size_t i = from; i + 48 < s.outL.size(); ++i) {
+            float peak = 0.0f;
+            for (size_t k = 0; k < 48; ++k) peak = std::max(peak, std::fabs(s.outL[i + k]));
+            if (peak < 0.4f * 0.5f) quiet = i;
+        }
+        const AsyncInputState st = ai.state();
+        size_t full = 0;
+        for (size_t i = quiet; quiet && i + 48 < s.outL.size() && !full; ++i) {
+            float peak = 0.0f;
+            for (size_t k = 0; k < 48; ++k) peak = std::max(peak, std::fabs(s.outL[i + k]));
+            if (peak >= 0.495f) full = i;
+        }
+        const double backMs = quiet && full ? static_cast<double>(full - quiet) / 48.0 : -1.0;
+        std::printf("   400 ms stall: largest step %.2f x the sine's own (L), %.2f (R); resyncs %lld, underruns %lld; "
+                    "full level %.1f ms after the quiet\n", worst / sineStep, worstR / sineStep, st.resyncs,
+                    st.underruns, backMs);
+        CHECK(st.resyncs == 1);
+        CHECK(worst < 1.25 * sineStep && worstR < 1.25 * sineStep);
+        // the fade-out is 3 ms, the fade-in 10 ms; the sound is back at full level within 15 ms of the quietest moment
+        CHECK(st.active && backMs >= 0.0 && backMs < 15.0);
+    }
+    { // an underrun, then the missing blocks soon after, faster than they were lost but not as one burst (0.8 ms
+      // apart: pieces of 64 frames are separate bursts from 0.67 ms on): reading restarts as early as the
+      // buffer's target allows (a catch-up of 1.9 x real time at most: about the length of the 3 ms fade-out), 64-frame
+      // periods; a guard on the fade-out / fade-in hand-over (the refill never came within the fade-out here, so this
+      // case passes without the restart rule too)
+        double worst = 0.0;
+        long long underruns = 0, resyncs = 0;
+        int moments = 0;
+        for (int k = 0; k < 120; ++k) {
+            AsyncInput ai;
+            ai.reset(48000);
+            Sim s;
+            s.block = 64;
+            s.period = 64;
+            s.catchUp = true;
+            s.catchGap = 7e-4;
+            s.capPause[0] = 3.0 + 0.000231 * k;
+            s.capPause[1] = s.capPause[0] + 0.004 + 0.0001 * k; // 4 - 16 ms: around the time the buffer (6 ms) runs out
+            s.signal = sine(1000.0, 0.5, 48000);
+            s.run(ai, 3.5);
+            for (size_t i = 48000; i < s.outL.size(); ++i)
+                worst = std::max(worst, static_cast<double>(std::fabs(s.outL[i] - s.outL[i - 1])));
+            underruns += ai.state().underruns;
+            resyncs += ai.state().resyncs;
+            ++moments;
+        }
+        std::printf("   short stall then a quick catch-up, 64-frame periods, %d moments: largest step %.2f x the "
+                    "sine's own, %lld underruns, %lld resyncs\n", moments, worst / sineStep, underruns, resyncs);
+        CHECK(underruns >= moments / 2); // (the longer catch-ups come in time for some)
+        CHECK(worst < 1.25 * sineStep);
+    }
+}
+
 // A stream fills its buffer at the start with callbacks straight after each other: not a burst (sixth outside
 // review: the buffer stood 20 ms higher for 20-40 s after every start), whether the output starts before the first
 // capture block or after it (seventh review: "no input yet" held only in the first order).
@@ -944,6 +1025,7 @@ int main() {
     bursts();
     stallCatchUp();
     fadeOut();
+    fadeContinuity();
     priming();
     blockSizes();
     repeatedBlocks();

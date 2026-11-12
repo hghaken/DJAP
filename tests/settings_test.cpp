@@ -731,6 +731,103 @@ void merged(const fs::path& dir) {
                 "except the two switches it changed; the plug-in's choices per instance merged and kept\n");
 }
 
+// A guest is one deck: its stale second deck entry (what it read from the file) never brings back a preset or colour
+// the program deleted; its own deck and both of the owner's decks still keep what they use.
+void guestDecks(const fs::path& dir) {
+    std::printf("-- the decks a writer protects\n");
+    const fs::path file = dir / "decks.ini";
+    std::string err;
+    Settings program;
+    CHECK(program.saveAs("Club", defaultValues(), err));
+    CHECK(program.saveAs("Hue", defaultValues(), err, PresetKind::Colour));
+    CHECK(program.saveAs("Mine", defaultValues(), err));
+    program.deck[1].preset = "Club";
+    program.deck[1].colour = "Hue";
+    CHECK(program.save(file));
+    Settings programBase = program;
+
+    Settings plugin;
+    CHECK(plugin.load(file)); // deck[1] still names the program's Club / Hue
+    CHECK(plugin.deck[1].preset == "Club" && plugin.deck[1].colour == "Hue");
+    Settings pluginBase = plugin;
+    plugin.deck[0].preset = "Mine"; // its own deck uses Mine
+
+    // the program renames its deck B's preset away and deletes the colour, and deletes Mine
+    CHECK(program.rename("Club", "Club2", err));
+    CHECK(program.remove("Hue", err, PresetKind::Colour));
+    CHECK(program.remove("Mine", err));
+    program.deck[1].preset = "Club2";
+    program.deck[1].colour = "Neutral";
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+
+    plugin.windows["PluginX"] = WindowPlace{1, 2, 300, 200, false}; // something to write
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    Settings check;
+    CHECK(check.load(file));
+    CHECK(!check.find("Club") && !check.find("Hue", PresetKind::Colour)); // not brought back by deck[1]
+    CHECK(check.find("Club2") != nullptr);
+    CHECK(check.find("Mine") != nullptr); // deck[0] of the guest uses it: stays
+    // and the program's next save does not meet them either
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(check.load(file));
+    CHECK(!check.find("Club") && !check.find("Hue", PresetKind::Colour));
+
+    // an owner still protects both of its decks
+    CHECK(program.saveAs("Own B", defaultValues(), err));
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest)); // takes Own B in
+    program.deck[1].preset = "Own B";
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(plugin.remove("Own B", err));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest)); // deletes it from the file
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner)); // deck B uses it: back
+    CHECK(check.load(file));
+    CHECK(check.find("Own B") != nullptr);
+}
+
+// A save that fails (the folder is not there) leaves every change pending: the next save to a good place writes it.
+void failedSave(const fs::path& dir) {
+    std::printf("-- a failed save keeps the changes pending\n");
+    const fs::path file = dir / "pending.ini";
+    const fs::path bad = dir / "no such folder" / "pending.ini";
+    Settings program;
+    CHECK(program.save(file));
+    Settings plugin;
+    CHECK(plugin.load(file));
+    Settings pluginBase = plugin;
+    plugin.showTooltips = !plugin.showTooltips;
+    plugin.scope[2] = {true, 5};
+    plugin.spectrumAverageMs[1] = 100;
+    plugin.windows["PluginSpectrum"] = WindowPlace{10, 20, 700, 500, false};
+    PluginSlot slot;
+    slot.preset = "Loud";
+    slot.lookAheadMs = 3.0;
+    plugin.pluginSlots[1] = slot;
+    const bool tooltips = plugin.showTooltips;
+    CHECK(!plugin.saveMerged(bad, pluginBase, Settings::SaveRole::Guest));
+    std::error_code ec;
+    CHECK(!fs::exists(bad.parent_path(), ec));
+    CHECK(plugin.showTooltips == tooltips && pluginBase.showTooltips != tooltips); // still pending, not in base
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    Settings check;
+    CHECK(check.load(file));
+    CHECK(check.showTooltips == tooltips);
+    CHECK(check.scope[2] == (ScopeChoice{true, 5}) && check.spectrumAverageMs[1] == 100);
+    CHECK(check.windows.count("PluginSpectrum") && check.windows["PluginSpectrum"].w == 700);
+    CHECK(check.pluginSlots.count(1) && check.pluginSlots[1] == slot);
+
+    // the same for the owner, after the file is there: the change reaches the file at the next good save
+    Settings programBase = program;
+    program.checkUpdates = !program.checkUpdates;
+    program.windows["Main"] = WindowPlace{5, 6, 800, 600, false};
+    const bool updates = program.checkUpdates;
+    CHECK(!program.saveMerged(bad, programBase, Settings::SaveRole::Owner));
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(check.load(file));
+    CHECK(check.checkUpdates == updates && check.windows.count("Main") && check.windows["Main"].w == 800);
+}
+
 } // namespace
 
 int main() {
@@ -741,6 +838,8 @@ int main() {
     presetRules();
     handEdited();
     merged(dir);
+    guestDecks(dir);
+    failedSave(dir);
     unreadable(dir);
     std::error_code ec;
     fs::remove_all(dir, ec);

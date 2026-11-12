@@ -246,7 +246,8 @@ gain   = gain moved towards wanted by at most Speed / control rate
 ```
 
 Range (default 12 dB) is the largest boost or cut; Speed (default 1 dB/s) limits how fast the gain may move, slow
-enough not to follow the phrases of a song.
+enough not to follow the phrases of a song. Inside the Window (default 1 dB around the wanted gain) it moves at a
+tenth of that (4.3).
 
 ### 4.3 Rules
 
@@ -301,6 +302,27 @@ enough not to follow the phrases of a song.
   a loud entry), only down, until it is within 0.5 dB; then the 3 s level starts from the level reached. Because it is
   judged on the 3 s level, a chorus 4 LU above the verse does not trigger it. Measured on a 16 dB entry after a 6 s
   intro: 4-10 s after the entry the output was -6.0 LUFS without fast down and -17.9 LUFS with it (target -18).
+- **Fast down behind the compressor.** The detector sits after the compressor and the MB compressor (4.1), and they
+  hide most of a loud entry from it: with a 2.5:1 compressor an entry 14 dB up reads as 5-6 dB, and as the gain comes
+  down at the normal speed the "3 dB too loud" of fast down is never reached. Measured with Loud's compressor: the
+  output stayed 4 LU over the target for 4 s, with 6-7 dB of compression all that time, where the leveller alone was
+  on the target in 2 s. So "clearly too loud" is also judged at the leveller's own output. While the gain is within
+  1 dB of what the detector asks, the leveller learns the chain's usual gain: the detector's 3 s level over the
+  K-weighted 3 s level of the input (10 s average, 3 s before it counts, learned again after every change of a
+  setting). The level that goes with the target at the leveller's output is then the target minus that gain, and
+  fast down starts when the input's 3 s level with the leveller's gain is more than 3 dB above it while the detector
+  reads too loud as well (a stage that turns a quiet passage down, like the noise reduction, is no loud entry). It
+  then follows the input's 0.4 s level, stops 1 dB before that level's place - the usual gain differs a little from
+  song to song - and the rest goes at the normal speed on the detector's own reading. With the compressor on, the
+  14 dB entry is now within 2 LU of the target after 1.2 s (Loud; before: 7.8 s) and 1.4 s (Medium; before: 4.3 s).
+- **Window.** A song's 3 s level wanders a decibel up and down from phrase to phrase, and a gain that follows all of
+  it never stands still: on the first 150 s of 25 songs it travelled about 30 dB per minute of music. While the gain
+  is within the *Window* (default 1 dB) of what the 3 s level needs, it rests - it only drifts, at a tenth of the
+  Speed, so the level still ends on the target. When the level leaves the window the gain moves at the Speed again,
+  all the way, and rests when it has arrived. Fast up, fast down and the catch-up are not slowed, and for 3 s after
+  them the gain does not rest yet (the 3 s level starts again there). 0 dB switches the window off. Measured on those
+  songs: the travel halves (32.8 -> 16.6 dB per minute in Medium) and the output's short-term spread grows by about
+  0.5 LU (3.5 -> 4.1 LU); a window of 2 dB gains little more (15.0 dB per minute, 4.5 LU).
 
 ### 4.4 Why the detector sits after the dynamics stages
 
@@ -413,8 +435,13 @@ measured +8.9 dB at 30 Hz and +3.9 dB at 16 kHz at 100 %.
 A wide-band, feed-forward compressor with a soft knee, after the design analysis of Giannoulis, Massberg and Reiss
 [6].
 
-1. **Side chain.** The signal after leveller, input gain and EQ, through a 2nd-order high-pass (default 80 Hz,
-   0 = off, up to 200 Hz) so the bass does not trigger the compressor.
+1. **Side chain.** The signal after leveller, input gain and EQ, through a 2nd-order high-pass (default 150 Hz,
+   0 = off, up to 200 Hz) so the bass does not trigger the compressor. A wide-band compressor that follows the kick
+   turns everything else down with every beat - the "pumping" of a compressor. With the filter at 80 Hz (the default
+   until 2026-11-12) a kick at -1 dBFS over a steady pad pulled the pad's highs down 2.0 dB per beat in Medium,
+   3.5 dB in Loud, 6.3 dB in Very Loud and 8.0 dB in FM Station; at 150 Hz that is 0.3, 0.9, 2.2 and 3.3 dB, with the
+   same output loudness (what is left comes from the MB compressor and the clipper, which work per band and on the
+   peaks themselves).
 2. **Level.** The summed square of both channels, smoothed with a 10 ms one-pole, on the loudness scale:
    `x = -0.691 + 10 log10(L^2 + R^2)`. A per-sample peak would compress every transient; a short mean square on the
    loudness scale makes the threshold mean a loudness.

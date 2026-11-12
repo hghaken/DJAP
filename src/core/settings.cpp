@@ -705,29 +705,28 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
     out.colours = now.colours;
     mergeList(out.presets, presets, base.presets);
     mergeList(out.colours, colours, base.colours);
-    // what this writer's decks use stays, even if the other deleted it meanwhile
-    for (const DeckSettings& d : deck) {
+    // what this writer's decks use stays, even if the other deleted it meanwhile; a guest (the plug-in) is one deck:
+    // its other deck entry is only what it read from the file and must not bring back what the program deleted
+    const int protectedDecks = role == SaveRole::Owner ? 2 : 1;
+    for (int i = 0; i < protectedDecks; ++i) {
+        const DeckSettings& d = deck[i];
         if (!named(out.presets, d.preset))
             if (const Preset* p = named(presets, d.preset)) out.presets.push_back(*p);
         if (!named(out.colours, d.colour))
             if (const Preset* c = named(colours, d.colour)) out.colours.push_back(*c);
     }
     out.sortPresets();
+    // everything is worked out in `out` first and taken over into this and `base` only after the file is written (or
+    // when there is nothing to write): a failed save leaves every change pending for the next one
     // the switches both can change (the plug-in's Setup window, client 2026-10-29): three-way like the lists - a
     // change this writer made since `base` is written, else the file's value stays (the other may have changed it)
-    for (int i = 0; i < 3; ++i) { // the scopes likewise: the program changes A and B, the plug-in its own
+    for (int i = 0; i < 3; ++i) // the scopes likewise: the program changes A and B, the plug-in its own
         out.scope[i] = !(scope[i] == base.scope[i]) ? scope[i] : now.scope[i];
-        scope[i] = base.scope[i] = out.scope[i];
-    }
-    for (int i = 0; i < 2; ++i) { // the spectra's averaging likewise: the program's, the plug-in's
+    for (int i = 0; i < 2; ++i) // the spectra's averaging likewise: the program's, the plug-in's
         out.spectrumAverageMs[i] =
             spectrumAverageMs[i] != base.spectrumAverageMs[i] ? spectrumAverageMs[i] : now.spectrumAverageMs[i];
-        spectrumAverageMs[i] = base.spectrumAverageMs[i] = out.spectrumAverageMs[i];
-    }
-    for (bool Settings::*f : {&Settings::showTooltips, &Settings::checkUpdates, &Settings::pluginLink}) {
+    for (bool Settings::*f : {&Settings::showTooltips, &Settings::checkUpdates, &Settings::pluginLink})
         out.*f = this->*f != base.*f ? this->*f : now.*f;
-        this->*f = base.*f = out.*f;
-    }
     // the windows' places, per window (client, 2026-10-29: the plug-in's windows remember theirs too): a window this
     // writer moved since `base` is written, every other one stays as the file has it
     out.windows = now.windows;
@@ -735,17 +734,21 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
         const auto b = base.windows.find(name);
         if (b == base.windows.end() || !(b->second == place)) out.windows[name] = place;
     }
-    windows = base.windows = out.windows;
     // the plug-in's choices, per instance, likewise (client, 2026-10-30)
     out.pluginSlots = now.pluginSlots;
     for (const auto& [n, slot] : pluginSlots) {
         const auto b = base.pluginSlots.find(n);
         if (b == base.pluginSlots.end() || !(b->second == slot)) out.pluginSlots[n] = slot;
     }
-    pluginSlots = base.pluginSlots = out.pluginSlots;
     // nothing new (a guest only reading the other's presets): the file stays untouched
     const bool same = (existed || role == SaveRole::Guest) && out.toText() == now.toText();
     if (!same && !out.save(file)) return false;
+    for (int i = 0; i < 3; ++i) scope[i] = base.scope[i] = out.scope[i];
+    for (int i = 0; i < 2; ++i) spectrumAverageMs[i] = base.spectrumAverageMs[i] = out.spectrumAverageMs[i];
+    for (bool Settings::*f : {&Settings::showTooltips, &Settings::checkUpdates, &Settings::pluginLink})
+        this->*f = base.*f = out.*f;
+    windows = base.windows = out.windows;
+    pluginSlots = base.pluginSlots = out.pluginSlots;
     presets = out.presets;
     colours = out.colours;
     base.presets = presets;

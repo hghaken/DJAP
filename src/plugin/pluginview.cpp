@@ -58,6 +58,7 @@ void openPlaces(const std::filesystem::path& file) {
     g_places = std::make_unique<Settings>();
     std::error_code ec;
     if (std::filesystem::exists(file, ec)) g_places->load(file);
+    for (DeckSettings& d : g_places->deck) d = DeckSettings(); // only the window places are used: no stale preset names
     g_placesBase = std::make_unique<Settings>(*g_places);
     placement::setStore(&g_places->windows, [] {
         if (!g_places) return;

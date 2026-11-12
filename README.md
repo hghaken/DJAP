@@ -44,8 +44,10 @@ Per deck, in this order (`docs/design.md` sections 2-4):
 
 - **Leveller** - slow automatic gain that brings each song to the loudness preset's target loudness (EBU R 128 / BS.1770),
   holds during fades, breakdowns and short pauses, goes to +12 dB (adjustable) after 2 s of silence (a stopped deck) and comes down
-  from there as far as the next song needs.
-- **Compressor** - wide-band, soft knee, threshold relative to the target.
+  from there as far as the next song needs. Inside a window around the target (1 dB, adjustable) the gain rests, so
+  it does not follow every phrase of a song.
+- **Compressor** - wide-band, soft knee, threshold relative to the target; the bass does not drive it (side-chain
+  high-pass at 150 Hz), so a kick does not pull the rest of the mix down with every beat.
 - **MB Compressor** - multiband (1-7 bands, flat sum): each band is compared with its own recent level.
 - **Bass enhancer, exciter, de-esser, stereo width** - optional stages that shape the sound.
 - **Soft clipper** and **look-ahead true-peak limiter** - the output never passes the ceiling (default -1 dBTP).

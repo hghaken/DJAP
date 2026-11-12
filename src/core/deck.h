@@ -93,6 +93,8 @@ struct DeckConfig {
            catchStep = 0.0, quietWait = 3.0;
     bool levSilenceHold = false; // After silence "hold": the gain stays in a long silence
     double levSilenceDb = 12.0;  // ... else the gain it goes to (at most the range)
+    double levWindow = 0.0;      // the gain rests while it is within this many dB of what the 3 s level needs
+    double aBase = 0.0, aBaseFast = 0.0; // the chain's usual gain (chainBase_): 10 s, and 1 s while it is new
     double levDetMax = 1e30; // the most power one control block may add to the leveller detector
     double aFast = 0.0, aMid = 0.0, aSlow = 0.0;
     // noise reduction (control rate): 1 or 4 bands, LR4 splits with phase-aligning all-passes (flat sum)
@@ -278,6 +280,14 @@ private:
     double fastIn_ = 0.0, midIn_ = 0.0; // incoming K-weighted power, 0.4 s and 1.5 s
     double postFast_ = 0.0, postMid_ = 0.0, postSlow_ = 0.0; // the leveller detector: 0.4 s, 1.5 s, 3 s
     double postGated_ = 0.0; // 0.4 s, blocks far under the 1.5 s level left out: the trend (falling, steady)
+    // the same three levels at the leveller's own output (the K-weighted input with the input gain, the leveller's
+    // gain left out as in the detector): what the compressor and the MB compressor have not touched yet
+    double preFast_ = 0.0, preMid_ = 0.0, preSlow_ = 0.0;
+    // the chain's usual gain between those two points (dB, K-weighted, 3 s) while the leveller is on its aim, and
+    // the seconds it has been learned since the last configuration: fast down judges a loud entry with it
+    double chainBase_ = 0.0, baseTime_ = 0.0;
+    bool levRest_ = false; // the gain rests inside the window (DeckConfig::levWindow)
+    double restWait_ = 0.0; // seconds before it may rest again after a fast move or a catch-up
     double quietTime_ = 1e9, silenceTime_ = 1e9, musicTime_ = 0.0;
     double stillTime_ = 0.0; // seconds every control block has been under -60 LUFS (real silence: the start at the top)
     bool quiet_ = true, longSilence_ = true, catchPending_ = false, catching_ = false;

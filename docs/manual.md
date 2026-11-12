@@ -605,8 +605,15 @@ Defaults below are those of Medium (the general defaults of a new own preset).
 | Hold below | LU | 5 .. 20 | 10 | Holds the gain while the music is this far under the target: fades and pauses are not pumped up. A quiet part that stays this low for the Quiet wait without fading (a soft intro or verse, a breakdown) is levelled like the rest. |
 | Quiet wait | s | 0.5 .. 10 | 1 (Gentle, DAB+: 3) | How long such a quiet part waits before it is levelled. Shorter: a soft intro comes up sooner; longer: the start of a breakdown or a fade is surer to be left alone. |
 | After silence | dB | hold, 0 .. 15 | 12 | The gain after at least 2 seconds of silence (a stopped deck), where the next song starts (at most the Range). Higher: a soft intro is on level at once, a loud song is too loud for its first moments; lower: a gentler start, a soft song comes up a little later. "hold" (the slider's left end): the gain stays where the last song left it. |
+| Window | dB | 0 .. 3 | 1 | While the music stays within this many dB of the target the gain rests: it only drifts, at a tenth of Speed. When the level leaves the window the gain moves at Speed again, all the way to the target. 0: the gain follows every small move (more even, but the gain never stands still); wider: a calmer gain that leaves a song's own ups and downs alone. |
 
-Attack and Release never move slower than Speed. After at least 2 seconds of silence (a stopped deck) the gain goes to
+The Window keeps the leveller from working all the time. A song's level wanders a decibel up and down from phrase to
+phrase, and a gain that follows all of it is a hand that never leaves the volume knob. On 25 test songs the gain
+travelled about 30 dB per minute of music without the window, and about half of that with it at 1 dB - what is left are
+the moves that matter, such as a soft intro or a loud chorus.
+
+Attack and Release never move slower than Speed. The Attack also works when the compressor is on: a loud entry that
+the compressor would otherwise hold down for many seconds is turned down by the leveller within about a second. After at least 2 seconds of silence (a stopped deck) the gain goes to
 After silence, +12 dB by default (or the Range, if that is less), whatever it was: a soft intro is on level from its
 first moment, and a louder song comes down from there at once at the Attack speed. A loud song is therefore too loud for
 its first 1 to 2 seconds (with the limiter holding the peaks); a shorter Attack or a lower After silence shortens that. A shorter gap changes nothing. The defaults were
@@ -643,7 +650,7 @@ threshold: it should fill in the pauses, not while the music plays.
 | Knee | dB | 0 .. 12 | 6 | Width of the soft knee: wider starts more gently. |
 | Attack | ms | 1 .. 100 | 10 | Short catches drum hits (less punch); longer lets them through (more punch). |
 | Release | ms | 20 .. 1000 | 200 | Short sounds lively but can pump; long is smooth. |
-| Side-chain high-pass | Hz | off, 5 .. 200 | 80 | Bass below this does not make the compressor work, so a heavy kick does not pull the whole mix down. |
+| Side-chain high-pass | Hz | off, 40 .. 200 | 150 | Bass below this does not make the compressor work, so a heavy kick does not pull the whole mix down with every beat ("pumping"). Lower it only if you want the compressor to follow the bass. |
 | Make-up | dB | auto, 0 .. 12 | auto | Gain after compression. Auto keeps the target level unchanged. |
 
 **MB Compressor** - the multiband stage.
@@ -723,9 +730,13 @@ limiter on.
 - Start with **Medium** and compare one step up or down; judge at the same listening volume.
 - For mixed old and new music, an **EQ** with auto tone (Oldies or Auto) usually does more for the balance than
   changing the loudness preset.
-- If the volume seems to drift within songs, lower the leveller **Speed**; if new songs take too long to settle,
-  raise it (a song after a silence starts from "After silence", +12 dB, and comes down at the Attack speed).
-- If the sound "breathes" or pumps, lengthen the compressor and MB Compressor **Release**, or lower the MB Compressor **Amount**.
+- If the volume seems to drift within songs, widen the leveller's **Window** or lower its **Speed**; if new songs take
+  too long to settle, raise the Speed (a song after a silence starts from "After silence", +12 dB, and comes down at
+  the Attack speed).
+- If the sound "breathes" or pumps with the beat, look at the compressor's **Side-chain high-pass** first: at 150 Hz
+  (the shipped value) the kick does not move the compressor. A loudness preset of your own that was saved before
+  2026-11-12 still has 80 Hz - set it to 150. After that, lengthen the compressor and MB Compressor **Release**, or lower
+  the MB Compressor **Amount**.
 - Watch the stage rows: a limiter that reduces more than a few dB all the time means the stages before it push too
   hard (lower input gain, clipper drive or target).
 
@@ -1194,7 +1205,8 @@ old file stays.
 | **"The settings file could not be read"** at the start | Another program held `DJAP.ini` (a virus scanner, a sync tool) for more than two seconds. DJAP runs with its default settings and saves nothing, so your file stays as it is; close that program and start DJAP again. |
 | **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer MB Compressor bands. With an input on another clock, underruns in the Setup window mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
 | **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window. |
-| **The sound pumps or breathes** | Lower the MB Compressor amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
+| **The sound pumps or breathes** | In a loudness preset of your own, set the compressor's Side-chain high-pass to 150 Hz (the shipped presets have it; at 80 Hz the kick pulls the whole mix down with every beat). Then lower the MB Compressor amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
+| **The volume drifts up and down within a song** | Widen the leveller's Window (Leveller tab): inside it the gain rests. |
 | **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Attack" (Leveller tab) brings it down within about a second. Shorten it if needed - or lengthen Release or Quiet wait, so the soft intro is turned up less. |
 | **A soft intro takes too long to come up** | Shorten "Quiet wait" (it starts sooner) and "Release" (it rises faster). A very soft intro (more than Range under the target) cannot be brought up fully: raise Range. |
 | **Quiet passages come up too much** | A quiet part that stays is levelled after a few seconds. To keep more of the difference, lower the leveller range or its speed. |

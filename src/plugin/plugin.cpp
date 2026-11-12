@@ -270,6 +270,7 @@ void Plugin::loadLists() {
     settings_.decks = 1;
     settings_.linkPresets = false;
     settings_.deck[0] = DeckSettings();
+    settings_.deck[1] = DeckSettings(); // the file's second deck is the program's: never ours to protect
     // this instance's last choices (client, 2026-10-30: the DJ program keeps no plug-in state - after a restart the
     // plug-in was back on Medium and Neutral); a preset or colour no longer in the lists: Medium, Neutral
     // linked: every instance starts with the first one's choices
@@ -450,7 +451,12 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
             } else {
                 const int p = paramIndex(id);
                 if (p < 0) continue;
-                values_[static_cast<size_t>(p)] = plainFromNormalized(p, v);
+                // a host that passes the window's edits on (tellHost) hands back the slider position of a value the
+                // window has just published exactly - 2500 Hz came back as 2520: while the position is the same the
+                // exact value stays
+                const double plain = plainFromNormalized(p, v);
+                if (paramPositionOf(p, plain) == paramPositionOf(p, values_[static_cast<size_t>(p)])) continue;
+                values_[static_cast<size_t>(p)] = plain;
             }
             dirty_ = true;
         }
@@ -514,9 +520,14 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     if (!s.readInt32(version) || version < 1) return kResultFalse;
     // writeStr8's format (length with the NUL, then the bytes), read with its length: the SDK's readStr8 leaves the
     // text without a NUL when a project file is cut off or damaged, and a string made from it read past its end
-    auto readText = [&s]() {
+    // A length that cannot be one (a damaged stream): everything after it would be read out of step - as keys and
+    // values that mean nothing, and still applied. The load is refused instead (`damaged`).
+    bool damaged = false;
+    auto readText = [&s, &damaged]() {
         int32 length = 0;
-        if (!s.readInt32(length) || length <= 0 || length > 262144) return std::string();
+        if (!s.readInt32(length)) return std::string();
+        if (length < 0 || length > 262144) damaged = true;
+        if (length <= 0 || length > 262144) return std::string();
         std::string t(static_cast<size_t>(length), '\0');
         const TSize got = s.readRaw(t.data(), length);
         t.resize(got > 0 ? static_cast<size_t>(got) : 0);
@@ -527,14 +538,15 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     const std::string preset = readText(), colour = readText();
     double look = 1.5;
     int8 bypass = 0;
-    if (!s.readDouble(look) || !s.readInt8(bypass) || !s.readInt32(count)) return kResultFalse;
+    if (damaged || !s.readDouble(look) || !s.readInt8(bypass) || !s.readInt32(count)) return kResultFalse;
+    if (!std::isfinite(look)) look = 1.5; // not a number: snapLook would make it 0 ms - no true-peak limiting
     PresetValues v = currentValues();
     bool haveAttack = false;
     double oldFastDown = -1.0;
     for (int32 i = 0; i < count; ++i) {
         const std::string key = readText();
         double x = 0;
-        if (!s.readDouble(x)) return kResultFalse;
+        if (damaged || !s.readDouble(x)) return kResultFalse;
         for (int p = 0; p < kParamCount; ++p)
             if (key == paramInfo(p).key) v[static_cast<size_t>(p)] = x; // unknown keys (a newer version): skipped
         haveAttack = haveAttack || key == paramInfo(pLevAttack).key;
@@ -563,6 +575,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
         for (int32 i = 0; i < baseCount; ++i) {
             const std::string key = readText();
             double x = 0;
+            if (damaged) return kResultFalse;
             if (!s.readDouble(x)) {
                 haveBase = false;
                 break;
