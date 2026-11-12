@@ -25,6 +25,9 @@ int main() {
             CHECK(volume.valid());
             CHECK(volume.gain() >= 0.0 && volume.gain() <= 1.0);
             CHECK(volume.percent() >= 0.0 && volume.percent() <= 100.0);
+            // the level without the mute: what the music gets again after it
+            CHECK(volume.level() >= volume.gain() && volume.level() <= 1.0);
+            CHECK(volume.muted() ? volume.gain() == 0.0 : volume.gain() == volume.level());
             CHECK(!volume.device().empty());
             // 300 reads, a look-up of the default device among them (the first, and after a second)
             const int reads = 300;

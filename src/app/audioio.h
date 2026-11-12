@@ -60,7 +60,10 @@ public:
     // The configuration of a deck (GUI thread). Published at once when the engine runs, else when it starts.
     void setDeck(int d, const PresetValues& values, const DeckControl& control);
     // A volume after deck d's chain and a factor on its input (DeckProcessor::setVolume); any thread, glides.
-    void setVolume(int d, double output, double input) { engine_.deck(d).setVolume(output, input); }
+    // inputMuted: the deck's input is silent because Windows muted the cable it reads (DeckProcessor::setVolume).
+    void setVolume(int d, double output, double input, bool inputMuted = false) {
+        engine_.deck(d).setVolume(output, input, inputMuted);
+    }
     double sampleRate() const { return engine_.sampleRate(); }
     AudioEngine& engine() { return engine_; }
 

@@ -1067,13 +1067,20 @@ void MainWindow::updateVolume() {
     const SysInputs sysIn = sysInputsFrom(settings_);
     for (int d = 0; d < 2; ++d) {
         double out = 1.0, in = 1.0;
+        bool inputMuted = false;
         if (on) {
             out = winVolume_.gain();
             const std::string& input = settings_.api == "ASIO" ? sysIn.device[d] : settings_.inDevice[d];
-            if (winVolume_.software() && out > 0.0 && !input.empty() && input == winVolume_.device())
-                in = std::min(kMaxInputVolume, 1.0 / out);
+            if (winVolume_.software() && !input.empty() && input == winVolume_.device()) {
+                // the volume the device is set to, also while it is muted: the factor stays what the music needs when
+                // it comes back (it went to 1 for the mute and jumped back after it), and the deck is told that its
+                // input is silent because of the mute - not because the music stopped (DeckProcessor::setVolume)
+                const double level = winVolume_.level();
+                if (level > 0.0) in = std::min(kMaxInputVolume, 1.0 / level);
+                inputMuted = out <= 0.0;
+            }
         }
-        audio_.setVolume(d, out, in);
+        audio_.setVolume(d, out, in, inputMuted);
     }
     // the status bar shows the volume: updated at once when it changes
     const double shown = !winVolume_.valid() ? -2.0 : winVolume_.muted() ? -1.0 : std::round(winVolume_.percent());

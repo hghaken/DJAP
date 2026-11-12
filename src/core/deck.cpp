@@ -902,7 +902,7 @@ void DeckProcessor::controlUpdate() {
     }
     // colour: the auto tone holds while the music is quiet or falling (a breakdown, a fade) and learns fast in the
     // first seconds of a song
-    colour_.control(c.colour, quiet_ || postFast_ < postSlow_ * kFallHold, musicTime_ < 6.0);
+    colour_.control(c.colour, quiet_ || volHold || postFast_ < postSlow_ * kFallHold, musicTime_ < 6.0);
     // the 0.4 s level every 0.25 s for the last second: is the music still rising (fading in)?
     if (++riseBlocks_ >= static_cast<int>(0.25 / dt)) {
         riseBlocks_ = 0;
@@ -1057,6 +1057,9 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         if (volIn > volInAsked_) volHold_ = static_cast<int>(kVolumeHoldS * fs_);
         volInAsked_ = volIn;
     }
+    // the input is muted at its source: the same hold for as long as it lasts, and kVolumeHoldS after it (the music
+    // needs that long to come back through the cable)
+    if (volMuted_.load(std::memory_order_relaxed)) volHold_ = static_cast<int>(kVolumeHoldS * fs_);
     // one-pole glide that lands exactly on the target
     auto glide = [&](double now, double target) {
         const double next = toward(now, target, volGlide_);

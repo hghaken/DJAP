@@ -743,6 +743,11 @@ DJAP follows that volume itself, when the option is on:
   100 % to 25 %. For 100 ms after the factor was raised the compressor, the MB compressor and the de-esser keep the
   gain they have, and the leveller's detectors leave those blocks out. Measured with the factor 40 ms before the
   music: without this the output sagged 4.9 dB after the jump and needed 0.45 s to come back; with it 0.9 dB.
+- Windows' mute on such a cable (or its volume at 0) is silence at the deck's input. It is not a stopped deck: the
+  program tells the deck that its input is muted, and for as long as that lasts the leveller's detectors, the
+  compressor, the MB compressor, the de-esser and the auto tone stay as they are. Until 2026-11-12 the leveller went to
+  *After silence* (+12 dB) after 2 s of it, and the music came back too loud: +6.1 dB in the first second for a song
+  at -9 LUFS after 5 s of mute; now +0.4 dB.
 
 ## 15. Meters and graphs
 

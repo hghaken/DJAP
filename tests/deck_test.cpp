@@ -412,6 +412,61 @@ void volume() {
             CHECK(worst < 1.2); // measured: 0.86 dB down (4.89 dB without the hold), 0.08 dB up
         }
     }
+
+    // Windows' mute on the cable the deck reads (client, 2026-11-12): the input is silent for as long as the mute
+    // lasts - here 5 s, in the middle of a song, at a Windows volume of 50 % - and the music comes back 40 ms after
+    // the mute is lifted. Told that the input is muted (setVolume's inputMuted), the deck keeps its detectors and
+    // gains: the music comes back as it would have played. Not told (as until now), it took the silence for a stopped
+    // deck: after 2 s the leveller went to After silence (+12 dB) and the music came back far too loud. Medium with
+    // the auto tone on, the client's own choice.
+    {
+        PresetValues mv = shippedPresetValues(2);
+        const PresetValues autoTone = shippedColourValues(shippedColourIndex("Auto"));
+        for (int p = kFirstColourParam; p < kParamCount; ++p) mv[static_cast<size_t>(p)] = autoTone[static_cast<size_t>(p)];
+        Buffer ml = music(12, 41, 1.0), mr = music(12, 42, 1.0);
+        tdeck::setLoudness(fs, ml, mr, -9.0); // a loud master, 5 LU over the target: the leveller sits near -5 dB
+        const size_t block = 64, mute = block * (frames(4.0) / block), unmute = block * (frames(9.0) / block),
+                     late = frames(0.040);
+        const double level = 0.5; // the Windows volume, as a gain
+        auto played = [&](bool muted, bool told) {
+            DeckProcessor dk;
+            dk.setVolume(level, 1.0 / level);
+            dk.prepare(fs);
+            DeckControl c2;
+            dk.publish(makeDeckConfig(mv, c2, fs));
+            Buffer xl = ml, xr = mr;
+            for (size_t i = 0; i < xl.size(); ++i) {
+                const float g = static_cast<float>(muted && i >= mute + late && i < unmute + late ? 0.0 : level);
+                xl[i] *= g;
+                xr[i] *= g;
+            }
+            for (size_t pos = 0; pos < xl.size(); pos += block) {
+                // not told: the program's former way - the factor back to 1 for the mute, nothing said
+                if (muted && pos == mute) dk.setVolume(0.0, told ? 1.0 / level : 1.0, told);
+                if (muted && pos == unmute) dk.setVolume(level, 1.0 / level, false);
+                dk.process(xl.data() + pos, xr.data() + pos, static_cast<int>(std::min(block, xl.size() - pos)));
+            }
+            return xl;
+        };
+        const Buffer plain = played(false, false);
+        double worst[2] = {0.0, 0.0}, first[2] = {0.0, 0.0};
+        for (int told = 0; told < 2; ++told) {
+            const Buffer out = played(true, told != 0);
+            double silent = 0.0;
+            for (size_t i = mute + frames(0.3); i < unmute; ++i) silent = std::max(silent, std::fabs(static_cast<double>(out[i])));
+            CHECK(silent < 1e-3); // muted is muted
+            const size_t w = frames(0.1);
+            first[told] = tdeck::rmsDb(out, unmute + late + frames(0.15), frames(0.85)) -
+                          tdeck::rmsDb(plain, unmute + late + frames(0.15), frames(0.85));
+            for (size_t a0 = unmute + late + frames(0.15); a0 + w <= unmute + late + frames(2.5); a0 += w)
+                worst[told] = std::max(worst[told], std::fabs(tdeck::rmsDb(out, a0, w) - tdeck::rmsDb(plain, a0, w)));
+            std::printf("   Windows mute for 5 s, the deck %s: the first second after it %+.2f dB against the same music "
+                        "unmuted, at most %.2f dB off in the 2.5 s after\n", told ? "told    " : "not told", first[told],
+                        worst[told]);
+        }
+        CHECK(first[0] > 3.0);  // the fault: it comes back far too loud
+        CHECK(worst[1] < 1.0);  // told: as if it had played on
+    }
 }
 
 // ---- fade-out before a stream stops (startFadeOut) ----

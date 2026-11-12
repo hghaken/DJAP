@@ -86,14 +86,15 @@ bool WindowsVolume::poll() {
     if (!volume_ || FAILED(volume_->GetMasterVolumeLevel(&db)) || FAILED(volume_->GetMasterVolumeLevelScalar(&scalar)) ||
         FAILED(volume_->GetMute(&mute))) {
         release(); // the device went away: looked up again at the next poll
-        gain_ = scalar_ = 1.0;
+        gain_ = level_ = scalar_ = 1.0;
         muted_ = false;
         return false;
     }
     scalar_ = scalar;
     muted_ = mute != FALSE;
     // the level in dB is what Windows (or the driver) applies; a device whose range goes above 0 dB is not raised
-    gain_ = muted_ || scalar <= 0.0f ? 0.0 : std::fmin(1.0, std::pow(10.0, db / 20.0));
+    level_ = scalar <= 0.0f ? 0.0 : std::fmin(1.0, std::pow(10.0, db / 20.0));
+    gain_ = muted_ ? 0.0 : level_;
     return true;
 }
 

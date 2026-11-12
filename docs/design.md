@@ -679,6 +679,16 @@ de-esser keep their gain and the leveller's detectors and the MB compressor's le
 is 0.9 dB. Not when the factor falls: holding costs something too (the stages do not follow the music meanwhile:
 0.3 dB). Not measured on a real cable (it needs the Windows volume moved while music plays); a route with a much
 longer way than 100 ms (DirectSound, MME) is covered only for its first 100 ms.
+Mute (client, 2026-11-12): Windows' mute on such a cable - or its volume at 0 - is silence at the deck's input, and the
+deck took it for a stopped deck: after 2 s the leveller went to After silence (+12 dB) and the music came back that
+much too loud. Measured (`deck_test`, Medium with the auto tone, a song at -9 LUFS, 5 s of mute): +6.1 dB over the
+same music unmuted in the first second after it, 7.5 dB at most. Now the program tells the deck
+(`setVolume`'s `inputMuted`: the default playback device is the deck's input, Windows applies the volume in
+software, and its gain is 0): for as long as it lasts, and `kVolumeHoldS` after it, the same hold as above - the
+leveller's detectors get their own 1.5 s level, the compressor, the MB compressor and the de-esser keep their
+state, the auto tone does not learn. The music comes back as it would have played: +0.4 dB, 0.5 dB at most. The
+input factor now stays what the volume asks during the mute (it went to 1 and jumped back afterwards;
+`WindowsVolume::level`). A deck whose music stops while it is muted is seen as stopped only after the mute.
 
 Audio APIs (client, 2026-10-25): one API for the whole program (except deck inputs of another API with ASIO
 output, 6.1) - ASIO, WASAPI (shared, or exclusive with a switch),
@@ -835,7 +845,7 @@ preset (`[Preset X]`) and per colour (`[Colour X]`), readable and editable by ha
 | Compressor | static curve; step response | exact; 63 % in ~14 ms |
 | Limiter | single +12 dBFS samples at look 1.5 / 0.2 / 0.1 / 0 ms; +6 dBFS sine; fs/4 square; +9.5 dBFS full-band noise bursts | sample peak <= ceiling; true peak (16x reference) <= ceiling + 0.1 dB |
 | Bypass | master off = input delayed by look-ahead | bit-exact |
-| Windows volume | volume 0.5 from the start; input / 4 with an input factor of 4; mute and unmute while playing; the input factor 40 ms before the music with the new volume (100 % -> 25 % and back) | half of every sample, bit-exact; the original output, bit-exact; no gain step > 0.01, silent after 0.3 s, bit-exact after unmute; the output within 1.2 dB of an unchanged run from 60 ms after the music arrived (measured 0.86 and 0.08 dB; 4.89 without the hold) |
+| Windows volume | volume 0.5 from the start; input / 4 with an input factor of 4; mute and unmute while playing; the input factor 40 ms before the music with the new volume (100 % -> 25 % and back); 5 s of Windows mute in a song at -9 LUFS, the deck told and not told | half of every sample, bit-exact; the original output, bit-exact; no gain step > 0.01, silent after 0.3 s, bit-exact after unmute; the output within 1.2 dB of an unchanged run from 60 ms after the music arrived (measured 0.86 and 0.08 dB; 4.89 without the hold); told: within 1 dB of the same music unmuted for the 2.5 s after the mute (0.54 dB; not told +6.13 dB in the first second) |
 | Neutral | -6 dBFS sine through a neutral chain | unchanged (< 0.01 dB) |
 | Density | band-sum flatness for every band count 1..7; tone two bands away | 0.01 dB; 0.001 dB |
 | Noise reduction (`noise_test`) | band sum while open (depth 0; depth 12 with the bands a tone does not reach closed); one band open; pink noise 19 dB under the threshold, depth 12 / 30, 4 bands and 1, and the meter; a 500 Hz tone at -20 dBFS with hiss; a tone stepping -20 -> -80 -> -20 dBFS; each of its values changed on a 1 kHz tone it turns down part of the way; the split rule, off in every shipped preset | 0.001 dB; 0.05 dB (the tone's leak into a closed band); bit-exact; the depth within 0.3 dB, the meter within 0.1; tone within 0.05 dB, hiss above 8 kHz down > 18 dB with 4 bands, unchanged with 1; open through the detector's fall and the hold, 63 % of the depth one release time later, open again within 10 ms; click ratio < 1.5 (measured 1.00); rising, 1.25x apart |

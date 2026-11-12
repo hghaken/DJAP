@@ -232,9 +232,15 @@ public:
     // ceiling holds) and a factor on the input (0..kMaxInputVolume: undoes a volume Windows already applied to the
     // deck's input, so the processing sees the music's own level). Both glide (kVolumeGlideS); 1 and 1 change nothing,
     // bit for bit. Set before prepare(), they apply from the first sample.
-    void setVolume(double output, double input = 1.0) {
+    // inputMuted: the deck's input is silent because its source is muted (Windows' mute, or its volume at 0, on the
+    // cable the deck reads) - not because the music stopped. While it is, and kVolumeHoldS after it, the deck's
+    // detectors and gain stages stay as they are: the silence is no pause and no stopped deck (after 2 s the leveller
+    // went to After silence, +12 dB, and the music came back that much too loud for its first second - client,
+    // 2026-11-12), the compressors do not let go, the auto tone does not learn from it.
+    void setVolume(double output, double input = 1.0, bool inputMuted = false) {
         volOut_.store(output, std::memory_order_relaxed);
         volIn_.store(input, std::memory_order_relaxed);
+        volMuted_.store(inputMuted, std::memory_order_relaxed);
     }
 
     // Audio thread: processes `frames` stereo frames in place. No allocation, no lock, no I/O.
@@ -384,6 +390,7 @@ private:
     Limiter limiter_;
     // volume after the chain and factor on the input (setVolume), smoothed
     std::atomic<double> volOut_{1.0}, volIn_{1.0};
+    std::atomic<bool> volMuted_{false}; // setVolume's inputMuted
     // fade-out before a stop (startFadeOut): request and result shared with the GUI, the position the audio thread's
     std::atomic<bool> fadeOutReq_{false}, fadedOut_{false};
     std::atomic<uint64_t> processed_{0};
