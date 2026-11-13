@@ -17,6 +17,10 @@
 // give all three the same name in the graph and a reset icon"): each is a dashed line in the curve - the threshold
 // upright, the ratio and the make-up level - that carries its name and is dragged anywhere along it, and the curve's
 // panel has a legend of three lines: name, value, reset icon (the wheel over a line of it: one step).
+// Then the last two (client, 2026-11-13: "remove these two as well and integrate them in the graph; let the side
+// chain graph run to 1 k instead of 10 k"): the knee is the curve's shaded band with a mark at its top and a fourth
+// line in the legend; the side-chain high-pass has its graph, which now carries its name, a reset icon and the
+// wheel. The tab keeps the stage's switch alone.
 // One child window, custom-drawn (GDI+ for the shapes, GDI for the texts), refreshed by its owner's timer.
 // Compiled into the plug-in too (the loudness window is the same there).
 #pragma once
@@ -38,17 +42,18 @@ namespace ap {
 class CompressorGraphs {
 public:
     static constexpr int kPanels = 5;
-    // The values set in the graphs alone (no row on the tab), each with a reset icon: attack and release in the
-    // corner of their own graphs, then the curve's legend - threshold, ratio, make-up.
-    static constexpr int kResets = 5;
-    static constexpr int kLegend = 3;                    // the legend's lines: reset icons kResets - kLegend ..
-    static constexpr int kFirstLegend = kResets - kLegend;
+    // The values set in the graphs alone (no row on the tab), each with a reset icon: attack, release and the
+    // side-chain high-pass in the corner of their own graphs, then the curve's legend - threshold, ratio, knee,
+    // make-up.
+    static constexpr int kResets = 7;
+    static constexpr int kLegend = 4;                    // the legend's lines: reset icons kResets - kLegend ..
+    static constexpr int kFirstLegend = kResets - kLegend; // = the number of graphs with an icon in their corner
     // The strip's tooltip rectangles (they do not overlap):
-    //   0 .. 8    the panels' own: the curve's panel around its legend (above it, beside it, under it), the attack's
-    //             and the release's (left of the icon, under the icon), the level, the side chain;
-    //   9 .. 11   the legend's lines without their icons - the owner's text (what the value does, its range);
-    //   12 .. 16  the reset icons, in resetParam's order - the owner's text (the reset value).
-    static constexpr int kPanelTips = 9;
+    //   0 .. 9    the panels' own: the curve's panel around its legend (above it, beside it, under it); the
+    //             attack's, the release's (left of the icon, under the icon); the level; the side chain's (likewise);
+    //   10 .. 13  the legend's lines without their icons - the owner's text (what the value does, its range);
+    //   14 .. 20  the reset icons, in resetParam's order - the owner's text (the reset value).
+    static constexpr int kPanelTips = 10;
     static constexpr int kFirstNameTip = kPanelTips, kFirstResetTip = kPanelTips + kLegend;
     static constexpr int kTips = kFirstResetTip + kResets;
     // A mark was dragged, the wheel turned or a reset icon clicked: the parameter and its new value (on one of its
@@ -73,13 +78,14 @@ public:
     static const wchar_t* tipText(int i);
     static int resetParam(int k); // the parameter of reset icon k
     // The smallest height the strip is useful at (at this DPI): the curve under its legend.
-    static int minHeight(UINT dpi) { return static_cast<int>(196.0 * dpi / 96.0 + 0.5); }
+    static int minHeight(UINT dpi) { return static_cast<int>(214.0 * dpi / 96.0 + 0.5); }
 
     static void registerClass(HINSTANCE module);
     static void unregisterClass(HINSTANCE module);
 
 private:
-    enum Mark { mNone = -1, mThreshold, mRatio, mMakeup, mAttack, mRelease, mSideHpf, kMarks };
+    enum Mark { mNone = -1, mThreshold, mRatio, mMakeup, mAttack, mRelease, mSideHpf, mKnee, kMarks };
+    static int cornerPanel(int k); // the panel of reset icon k < kFirstLegend (its icon is in that panel's corner)
     // A panel's plot area and its scales (value -> pixel and back).
     struct Plot {
         double l = 0, t = 0, r = 1, b = 1; // pixels

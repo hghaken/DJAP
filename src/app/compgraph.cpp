@@ -35,7 +35,9 @@ const double kMakeupMarkLu = 5.0; // the make-up's mark this far above the left 
 const double kHitDb = 10.0, kHitAtMs = 10.0, kAttackSpanMs = 160.0;
 const double kReleaseFromMs = -100.0, kReleaseToMs = 1100.0, kGainLoDb = -10.0;
 const int kTimePoints = 400; // the level graph: 4 s of 10 ms points
-const double kSpecLoHz = 30.0, kSpecHiHz = 16000.0, kSpecRangeDb = 54.0, kFilterRangeDb = 36.0;
+// the side chain's graph: up to 1 kHz (client, 2026-11-13: "to 1 k instead of 10 k" - the high-pass ends at 200 Hz,
+// so the bass it is about gets the width)
+const double kSpecLoHz = 30.0, kSpecHiHz = 1000.0, kSpecRangeDb = 54.0, kFilterRangeDb = 36.0;
 
 Gdiplus::Color col(COLORREF c, int alpha = 255) {
     return Gdiplus::Color(static_cast<BYTE>(alpha), static_cast<BYTE>(c & 0xFF), static_cast<BYTE>((c >> 8) & 0xFF),
@@ -175,8 +177,14 @@ void CompressorGraphs::refresh() {
 }
 
 int CompressorGraphs::resetParam(int k) {
-    static const int kParam[kResets] = {pCompAttack, pCompRelease, pCompThreshold, pCompRatio, pCompMakeup};
+    static const int kParam[kResets] = {pCompAttack, pCompRelease,  pCompSideHpf, // an icon in the graph's corner
+                                        pCompThreshold, pCompRatio, pCompKnee, pCompMakeup}; // the curve's legend
     return k >= 0 && k < kResets ? kParam[k] : -1;
+}
+
+int CompressorGraphs::cornerPanel(int k) {
+    static const int kCorner[kFirstLegend] = {1, 2, 4}; // attack, release, side chain
+    return kCorner[k];
 }
 
 bool CompressorGraphs::resetLit(int k) const {
@@ -184,10 +192,10 @@ bool CompressorGraphs::resetLit(int k) const {
     return std::fabs(values_[p] - resetValues_[p]) > 1e-9;
 }
 
-// The rectangles do not overlap (the tooltip control keeps the tool the mouse is in): the attack's and the release's
-// panel are two rectangles around the icon in their corner - what is left of it, what is under it; the curve's
-// panel is three around its legend - above it, beside it, under it - and the legend is a rectangle per line plus
-// that line's icon.
+// The rectangles do not overlap (the tooltip control keeps the tool the mouse is in): a panel with an icon in its
+// corner (attack, release, side chain) is two rectangles around the icon - what is left of it, what is under it;
+// the curve's panel is three around its legend - above it, beside it, under it - and the legend is a rectangle
+// per line plus that line's icon.
 RECT CompressorGraphs::tipRect(int i) {
     RECT rc{};
     if (hwnd_) GetClientRect(hwnd_, &rc);
@@ -206,25 +214,19 @@ RECT CompressorGraphs::tipRect(int i) {
         return RECT{legend_.right, c.top, c.right, c.bottom};
     case 2:
         return RECT{c.left, legend_.bottom, legend_.right, c.bottom};
-    case 3:
-    case 5: {
-        const int k = (i - 3) / 2;
-        return RECT{panel_[1 + k].left, panel_[1 + k].top, reset_[k].left, panel_[1 + k].bottom};
-    }
-    case 4:
-    case 6: {
-        const int k = (i - 4) / 2;
-        return RECT{reset_[k].left, reset_[k].bottom, panel_[1 + k].right, panel_[1 + k].bottom};
-    }
     case 7:
         return panel_[3];
-    default:
-        return panel_[4];
+    default: {
+        const int k = i == 3 || i == 4 ? 0 : i == 5 || i == 6 ? 1 : 2; // the icon in this panel's corner
+        const RECT& p = panel_[cornerPanel(k)];
+        if (i == 3 || i == 5 || i == 8) return RECT{p.left, p.top, reset_[k].left, p.bottom}; // left of the icon
+        return RECT{reset_[k].left, reset_[k].bottom, p.right, p.bottom};                     // under it
+    }
     }
 }
 
 const wchar_t* CompressorGraphs::tipText(int i) {
-    static const int kPanelOf[kPanelTips] = {0, 0, 0, 1, 1, 2, 2, 3, 4};
+    static const int kPanelOf[kPanelTips] = {0, 0, 0, 1, 1, 2, 2, 3, 4, 4};
     if (i < 0 || i >= kPanelTips) return nullptr; // a legend line or a reset icon: the owner's text
     i = kPanelOf[i];
     static const wchar_t* const kPanelTexts[kPanels] = {
@@ -233,8 +235,9 @@ const wchar_t* CompressorGraphs::tipText(int i) {
         L"higher ratio, rounder with a wider knee (the shaded band). The grey bars show where the music's level was in "
         L"the last seconds, the white dot where it is now.\n\nThe three dashed lines are set here; drag one anywhere "
         L"along it. Threshold: left / right. Ratio: up / down - the level the loudest music comes out at. Make-up: up / "
-        L"down - the quiet end of the curve, and the whole curve with it; all the way down = auto. The legend names "
-        L"their values; the arrow behind a value sets it back.",
+        L"down - the quiet end of the curve, and the whole curve with it; all the way down = auto. Knee: the shaded "
+        L"band - drag its mark at the top, or an edge of the band. The legend names their values; the arrow behind a "
+        L"value sets it back.",
         L"Attack (1 .. 100 ms): a hit 10 dB over the threshold in its first 150 ms. Dashed: the hit as it comes in; "
         L"the line: what comes out. What is above the line before the mark still gets through - the punch. Shorter "
         L"catches the hit sooner, longer lets it through.\n\nSet it here: drag the mark, or turn the mouse wheel over "
@@ -245,9 +248,11 @@ const wchar_t* CompressorGraphs::tipText(int i) {
         L"over this graph for one step of 10 ms. The arrow in the corner sets it back.",
         L"The last 4 seconds of this deck: the level at the compressor (grey - what its side chain hears), the level it "
         L"lets out (line) and, from the top, how much it turns down (orange). The dashed line is the threshold.",
-        L"The side chain: the music's spectrum (grey) and the part of it the compressor listens to (coloured) - what the "
-        L"high-pass leaves of the bass. A kick the compressor hears pulls the whole mix down with every beat. Drag the "
-        L"mark left or right; all the way left = off.",
+        L"Side-chain high-pass (off, 40 .. 200 Hz): the music's spectrum up to 1 kHz (grey) and the part of it the "
+        L"compressor listens to (coloured) - what the high-pass leaves of the bass. Bass under its frequency does not "
+        L"make the compressor work; a kick the compressor hears pulls the whole mix down with every beat (pumping)."
+        L"\n\nSet it here: drag the mark left or right (all the way left = off), or turn the mouse wheel over this "
+        L"graph for one step of 5 Hz. The arrow in the corner sets it back.",
     };
     return kPanelTexts[i];
 }
@@ -296,10 +301,11 @@ void CompressorGraphs::layoutPanels(int w, int h) {
     } else {
         row(0, kPanels, pad, h - pad);
     }
-    // the reset icons of the attack and the release: in their panels' title line, at the right (above the plot)
+    // the reset icons of the attack, the release and the side chain's high-pass: in their panels' title line, at
+    // the right (above the plot)
     const int iconW = px(22), rowH = px(18);
     for (int k = 0; k < kFirstLegend; ++k) {
-        const RECT& p = panel_[1 + k];
+        const RECT& p = panel_[cornerPanel(k)];
         reset_[k] = {p.right - px(3) - iconW, p.top + px(1), p.right - px(3), p.top + px(1) + rowH};
     }
     // The curve's legend - a line per value: its name, its value, its reset icon - and the room for the square plot:
@@ -334,7 +340,7 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
         labels.push_back({static_cast<int>(x + 0.5), static_cast<int>(y + 0.5), s, c, align});
     };
     static const wchar_t* const kTitle[kPanels] = {L"Curve", L"Attack", L"Release", L"Level and reduction, 4 s",
-                                                   L"Side chain"};
+                                                   L"Side-chain high-pass"};
     const bool on = values_[pCompOn] >= 0.5;
     const double thr = threshold(), mk = makeup(), ratio = values_[pCompRatio], knee = values_[pCompKnee];
     const double attack = values_[pCompAttack], release = values_[pCompRelease];
@@ -390,14 +396,22 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
             // The three values set here are three dashed lines, each through its mark on the curve: the threshold
             // upright, the ratio level through the curve's loud end (where the loudest music comes out), the
             // make-up level through its quiet end (which the make-up lifts, and the whole curve with it).
+            // The knee is the shaded band around the threshold, with thin edges and a mark at the top of its right
+            // edge (on the threshold's line when the knee is 0: there it is still there to take).
             const double xr = kHi - kRatioMarkLu, xm = kLo + kMakeupMarkLu;
             const double xThr = q.X(thr), yRatio = q.Y(out(xr)), yMakeup = q.Y(out(xm));
+            const double xKneeL = q.X(thr - knee / 2), xKneeR = q.X(thr + knee / 2), yKnee = q.t + px(6);
             clipTo(q);
             g.DrawLine(&dots, pt(q.X(0), q.t), pt(q.X(0), q.b));
             g.DrawLine(&dots, pt(q.l, q.Y(0)), pt(q.r, q.Y(0)));
-            if (knee > 0.0)
-                g.FillRectangle(&orangeFill, static_cast<REAL>(q.X(thr - knee / 2)), static_cast<REAL>(q.t),
-                                static_cast<REAL>(q.X(thr + knee / 2) - q.X(thr - knee / 2)), static_cast<REAL>(q.b - q.t));
+            if (knee > 0.0) {
+                g.FillRectangle(&orangeFill, static_cast<REAL>(xKneeL), static_cast<REAL>(q.t),
+                                static_cast<REAL>(xKneeR - xKneeL), static_cast<REAL>(q.b - q.t));
+                Pen kneeEdge(col(kOrange, 150), lw);
+                kneeEdge.SetDashStyle(DashStyleDot);
+                g.DrawLine(&kneeEdge, pt(xKneeL, q.t), pt(xKneeL, q.b));
+                g.DrawLine(&kneeEdge, pt(xKneeR, q.t), pt(xKneeR, q.b));
+            }
             g.DrawLine(&dots, pt(q.X(kLo), q.Y(kLo + mk)), pt(q.X(kHi - mk), q.Y(kHi))); // no compression
             g.DrawLine(&dash, pt(xThr, q.t), pt(xThr, q.b));
             g.DrawLine(&dash, pt(q.l, yRatio), pt(q.r, yRatio));
@@ -412,18 +426,21 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
             drawMark(g, mThreshold, xThr, q.Y(out(thr)));
             drawMark(g, mRatio, q.X(xr), yRatio);
             drawMark(g, mMakeup, q.X(xm), yMakeup);
-            // Each line carries its name, at the end away from its mark: the threshold's at the top of its line, the
-            // ratio's at the left on its line (under it when the top belongs to the threshold's name), the
-            // make-up's at the right on its line.
-            static const wchar_t* const kName[kLegend] = {L"Threshold", L"Ratio", L"Make-up"};
-            const bool thrRight = xThr > q.l + 0.62 * (q.r - q.l);
-            label(xThr + (thrRight ? -px(4) : px(4)), q.t, kName[0], kOrange, thrRight ? TA_RIGHT : TA_LEFT);
+            drawMark(g, mKnee, xKneeR, yKnee);
+            // Each of the four carries its name. The top of the plot: the threshold's name left of its line, the
+            // knee's right of its mark (a line lower, at the plot's right edge, where the panel ends first). The
+            // ratio's at the left on its line (under it when the line is at the top), the make-up's at the right
+            // on its line.
+            static const wchar_t* const kName[kLegend] = {L"Threshold", L"Ratio", L"Knee", L"Make-up"};
+            label(xThr - px(4), q.t, kName[0], kOrange, TA_RIGHT);
+            if (xKneeR + px(8) + nameW_ / 2 <= panel_[0].right - px(3)) label(xKneeR + px(8), q.t, kName[2], kOrange);
+            else label(q.r, q.t + px(13), kName[2], kOrange, TA_RIGHT);
             label(q.l + px(3), yRatio - th - px(1) < q.t + th + px(1) ? yRatio + px(2) : yRatio - th - px(1), kName[1],
                   kOrange);
-            label(q.r - px(3), yMakeup - th - px(1), kName[2], kOrange, TA_RIGHT);
-            // the legend: the same three names, their values, and (drawn with the others, below) their reset icons
+            label(q.r - px(3), yMakeup - th - px(1), kName[3], kOrange, TA_RIGHT);
+            // the legend: the same names, their values, and (drawn with the others, below) their reset icons
             const std::wstring value[kLegend] = {
-                number(thr, 1, L" LU", true), number(ratio, 1, L":1"),
+                number(thr, 1, L" LU", true), number(ratio, 1, L":1"), number(knee, 1, L" dB"),
                 values_[pCompMakeup] < 0.0 ? std::wstring(L"auto") : number(mk, 1, L" dB")};
             for (int j = 0; j < kLegend; ++j) {
                 const RECT& icon = reset_[kFirstLegend + j];
@@ -639,7 +656,7 @@ void CompressorGraphs::paintLive(HDC dc, int th) {
             polygon(heard, heardArea);
             if (heardLine.size() > 1) polyline(heardLine, kTeal, hair);
         }
-        for (double hz : {100.0, 1000.0, 10000.0}) polyline({ipt(qs.X(hz), qs.t), ipt(qs.X(hz), qs.b)}, kGrid, 1, PS_DOT);
+        for (double hz : {50.0, 100.0, 200.0, 500.0}) polyline({ipt(qs.X(hz), qs.t), ipt(qs.X(hz), qs.b)}, kGrid, 1, PS_DOT);
         if (corner > 0.0) polyline({ipt(xCorner, qs.t), ipt(xCorner, qs.b)}, kOrange, 1, PS_DASH);
         RestoreDC(dc, saved);
     }
@@ -702,8 +719,8 @@ void CompressorGraphs::paintLive(HDC dc, int th) {
             }
         }
     }
-    text(qs.X(1000.0) + px(3), qs.b - th - px(2), L"1 k", kDim);
-    text(qs.X(10000.0) + px(3), qs.b - th - px(2), L"10 k", kDim);
+    text(qs.X(100.0) + px(3), qs.b - th - px(2), L"100", kText); // over the spectrum's filled area: the light colour
+    text(qs.r - px(3), qs.b - th - px(2), L"1 k", kText, TA_RIGHT);
     text(xCorner + px(8), filterY(corner > 0.0 ? -3.0 : 0.0) + px(6),
          corner > 0.0 ? number(corner, 0, L" Hz") : std::wstring(L"off"), kOrange);
 }
@@ -758,18 +775,22 @@ int CompressorGraphs::markAt(POINT p) const {
     return best;
 }
 
-// The curve's three dashed lines are taken anywhere along them, not only by their marks: the nearest one within a
-// few pixels (the threshold's upright one first where two cross).
+// The curve's three dashed lines and the edges of the knee's band are taken anywhere along them, not only by their
+// marks: the nearest one within a few pixels (the threshold's upright line first where they cross or lie together -
+// a knee of 0 is taken by its mark).
 int CompressorGraphs::lineAt(POINT p) const {
     const Plot& q = plot_[0];
     if (p.x < q.l - 2 || p.x > q.r + 2 || p.y < q.t - 2 || p.y > q.b + 2) return mNone;
     const long reach = px(5);
-    const long d[3] = {std::labs(p.x - mark_[mThreshold].x), std::labs(p.y - mark_[mRatio].y),
-                       std::labs(p.y - mark_[mMakeup].y)};
-    static const int kLine[3] = {mThreshold, mRatio, mMakeup};
+    const double half = values_[pCompKnee] / 2.0;
+    const long kneeL = std::lround(q.X(threshold() - half)), kneeR = std::lround(q.X(threshold() + half));
+    const long d[4] = {std::labs(p.x - mark_[mThreshold].x), std::labs(p.y - mark_[mRatio].y),
+                       std::labs(p.y - mark_[mMakeup].y),
+                       half > 0.0 ? std::min(std::labs(p.x - kneeL), std::labs(p.x - kneeR)) : reach + 1};
+    static const int kLine[4] = {mThreshold, mRatio, mMakeup, mKnee};
     int best = mNone;
     long bestD = reach + 1;
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         if (d[i] < bestD) {
             bestD = d[i];
             best = kLine[i];
@@ -778,11 +799,11 @@ int CompressorGraphs::lineAt(POINT p) const {
     return best;
 }
 
-// Where the wheel steps a value: anywhere over the attack's or the release's graph, and over a line of the curve's
-// legend (over the curve itself it could be any of three).
+// Where the wheel steps a value: anywhere over the attack's, the release's or the side chain's graph, and over a
+// line of the curve's legend (over the curve itself it could be any of four).
 int CompressorGraphs::wheelParam(POINT p) const {
     for (int k = 0; k < kFirstLegend; ++k)
-        if (PtInRect(&panel_[1 + k], p)) return resetParam(k);
+        if (PtInRect(&panel_[cornerPanel(k)], p)) return resetParam(k);
     for (int j = 0; j < kLegend; ++j) {
         const RECT& icon = reset_[kFirstLegend + j];
         const RECT line{legend_.left, icon.top, legend_.right, icon.bottom};
@@ -834,6 +855,10 @@ void CompressorGraphs::drag(POINT p) {
         v = mk < -0.3 ? -1.0 : std::min(paramInfo(pCompMakeup).max, std::max(0.0, mk)); // under 0: auto
         break;
     }
+    case mKnee: // the band is as wide on both sides of the threshold: either edge (and the mark) sets half of it
+        param = pCompKnee;
+        v = 2.0 * std::fabs(plot_[0].fromX(p.x) - threshold());
+        break;
     case mAttack:
         param = pCompAttack;
         v = plot_[1].fromX(p.x) - kHitAtMs;
@@ -891,7 +916,8 @@ LRESULT CALLBACK CompressorGraphs::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
 }
 
 LRESULT CompressorGraphs::handle(UINT msg, WPARAM wp, LPARAM lp) {
-    static const int kParamOf[kMarks] = {pCompThreshold, pCompRatio, pCompMakeup, pCompAttack, pCompRelease, pCompSideHpf};
+    static const int kParamOf[kMarks] = {pCompThreshold, pCompRatio, pCompMakeup, pCompAttack,
+                                         pCompRelease,   pCompSideHpf, pCompKnee};
     switch (msg) {
     case WM_ERASEBKGND:
         return 1;

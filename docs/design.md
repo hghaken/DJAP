@@ -704,6 +704,18 @@ window's default size (from 2 x 130 px). Tooltips: 17 rectangles that do not ove
 around its legend, a legend line has the text its row had (what the value does, its range), an icon names its
 reset value.
 
+And the last two (client, the same day, with a picture of the Knee and Side-chain high-pass rows: "remove these two
+as well and integrate them in the graph. Let the side chain graph run to 1 k instead of 10 k"). The tab now has the
+stage's switch alone; all seven values are set in the graphs. The knee was the curve's shaded band already: the band
+got thin edges and a mark at the top of its right edge (on the threshold's line when the knee is 0, so it can still
+be taken there), dragged left / right - the knee is twice the distance to the threshold, so either edge of the band
+does the same - and a fourth line in the legend (Threshold, Ratio, Knee, Make-up: the rows' order). At the plot's top
+the threshold's name now stands left of its line and the knee's right of its mark. The side-chain high-pass had its
+graph and its mark: the graph's title became the value's name, it got the reset icon in its corner (like the
+attack's and the release's) and the wheel anywhere over it (one slider position = 5 Hz, the first = off). Its
+frequency axis ends at 1 kHz instead of 16 kHz - the high-pass goes to 200 Hz, so the bass it is about gets the
+width (grid at 50, 100, 200, 500 Hz). The strip is at least 214 px high (four legend lines); 21 tooltip rectangles.
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its

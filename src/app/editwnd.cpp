@@ -100,7 +100,8 @@ bool isStageSwitch(int p) {
 
 // Values without a row on their tab: they are set in the Compressor tab's graphs alone, which carry their reset
 // icons (client, 2026-11-13: "the attack and release slider can go, make a small reset icon in the graph"; then
-// the threshold, the ratio and the make-up: "these three sliders are in the curve graph, they can go too").
+// the threshold, the ratio and the make-up: "these three sliders are in the curve graph, they can go too"; then the
+// knee and the side-chain high-pass: "remove these two as well and integrate them in the graph").
 bool graphOnly(int p) {
     for (int k = 0; k < CompressorGraphs::kResets; ++k)
         if (CompressorGraphs::resetParam(k) == p) return true;
@@ -634,8 +635,11 @@ void EditWindow::createControls() {
             tips_.addRect(graphs_.hwnd(), static_cast<UINT_PTR>(CompressorGraphs::kFirstNameTip + j + 1), tip.c_str());
         }
     }
-    tips_.add(tabs_, L"One tab per stage: every value of the stage as a slider, with its value (type one in and press "
-                     L"Enter), its unit, a reset button and what it does.");
+    tips_.add(tabs_, colour() ? L"One tab per stage: every value of the stage as a slider, with its value (type one "
+                                L"in and press Enter), its unit, a reset button and what it does."
+                              : L"One tab per stage: every value of the stage as a slider, with its value (type one "
+                                L"in and press Enter), its unit, a reset button and what it does. The Compressor "
+                                L"tab has graphs instead: its values are set in them.");
     if (colour()) {
         tips_.add(preset_, L"The EQ preset shown in this window (opened on the deck's own): tone, auto tone, sub "
                            L"bass, loudness. Every change is saved at once and heard on every deck that uses it.");
