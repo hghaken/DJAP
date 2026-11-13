@@ -685,6 +685,25 @@ icon's own, whose text names the reset value and comes from the window (`EditWin
 `Tooltips::addRect` again = a new text). `setValue` now ends in `updateGraphs`: until then the graphs followed a
 typed value, a reset and a dragged mark, but not a dragged slider (0.1.338).
 
+The threshold, the ratio and the make-up followed (client, the same day, with a picture of the three rows: "these
+three sliders are in the curve graph, they can go too; make-up: a horizontal line in the graph; ratio: a horizontal
+line in the graph; give all three the same name in the graph and a reset icon"). The tab keeps three rows: the
+switch, the knee (a band in the curve, not something to take hold of) and the side-chain high-pass. In the curve
+each of the three is a dashed line through its mark: the threshold upright (as it was), the ratio level through the
+curve's loud end (the level an input of +17 LU comes out at: lower = a higher ratio, found by bisection as before),
+the make-up level through the curve's quiet end (-25 LU in, under any knee: the make-up lifts that end and the whole
+curve with it; under 0 = auto, as the slider's first position). A line is taken anywhere along it (`lineAt`, within
+5 px; a mark first, the threshold's line first where two cross) and carries its name at the end away from its mark.
+The curve's panel has a legend of three lines - the same names, the values, a reset icon each - beside the square
+plot or above it (then as wide as the panel, its icons in the panel's right corner like the attack's), whichever
+leaves the larger square (`layoutPanels`, from the small font's measured widths). The wheel over a line of the
+legend is one slider position - one step on these linear scales: 0.5 LU, 0.1, 0.5 dB, the make-up's first being
+auto; over the curve itself the wheel does nothing (it could mean any of three). The strip is at least 196 px high
+now (the curve under its legend) and, with five rows gone, usually tall enough for two rows of panels at the
+window's default size (from 2 x 130 px). Tooltips: 17 rectangles that do not overlap - the curve's panel is three
+around its legend, a legend line has the text its row had (what the value does, its range), an icon names its
+reset value.
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its

@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cwchar>
 #include <string>
 
@@ -133,6 +134,22 @@ void CompressorGraphs::setDpi(UINT dpi) {
     lf.lfHeight = lf.lfHeight * 7 / 5;
     wcscpy_s(lf.lfFaceName, L"Segoe UI Symbol");
     symbol_ = CreateFontIndirectW(&lf);
+    // the legend's columns: the small font's height, its widest name and its widest value
+    if (HDC dc = GetDC(nullptr)) {
+        HGDIOBJ old = SelectObject(dc, font_);
+        TEXTMETRICW tm{};
+        GetTextMetricsW(dc, &tm);
+        auto width = [&](const wchar_t* s) {
+            SIZE z{};
+            GetTextExtentPoint32W(dc, s, lstrlenW(s), &z);
+            return static_cast<int>(z.cx);
+        };
+        textH_ = tm.tmHeight;
+        nameW_ = std::max(width(L"Threshold"), width(L"Make-up"));
+        valueW_ = std::max(width(L"+15.0 LU"), width(L"12.0 dB"));
+        SelectObject(dc, old);
+        ReleaseDC(nullptr, dc);
+    }
     stillDirty_ = true;
     if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -157,39 +174,67 @@ void CompressorGraphs::refresh() {
     if (hwnd_ && IsWindowVisible(hwnd_)) InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
-int CompressorGraphs::resetParam(int k) { return k == 0 ? pCompAttack : pCompRelease; }
+int CompressorGraphs::resetParam(int k) {
+    static const int kParam[kResets] = {pCompAttack, pCompRelease, pCompThreshold, pCompRatio, pCompMakeup};
+    return k >= 0 && k < kResets ? kParam[k] : -1;
+}
 
 bool CompressorGraphs::resetLit(int k) const {
     const size_t p = static_cast<size_t>(resetParam(k));
     return std::fabs(values_[p] - resetValues_[p]) > 1e-9;
 }
 
-// A panel with a reset icon (attack: panel 1, release: panel 2) is two rectangles around the icon's own: what is
-// left of the icon, and what is under it.
+// The rectangles do not overlap (the tooltip control keeps the tool the mouse is in): the attack's and the release's
+// panel are two rectangles around the icon in their corner - what is left of it, what is under it; the curve's
+// panel is three around its legend - above it, beside it, under it - and the legend is a rectangle per line plus
+// that line's icon.
 RECT CompressorGraphs::tipRect(int i) {
     RECT rc{};
     if (hwnd_) GetClientRect(hwnd_, &rc);
     layoutPanels(rc.right, rc.bottom);
     if (i < 0 || i >= kTips) return RECT{};
-    if (i >= kPanels + kResets) return reset_[i - kPanels - kResets];
-    if (i >= kPanels) {
-        const int k = i - kPanels;
+    if (i >= kFirstResetTip) return reset_[i - kFirstResetTip];
+    if (i >= kFirstNameTip) {
+        const RECT& icon = reset_[kFirstLegend + i - kFirstNameTip];
+        return RECT{legend_.left, icon.top, icon.left, icon.bottom};
+    }
+    const RECT& c = panel_[0];
+    switch (i) {
+    case 0:
+        return RECT{c.left, c.top, legend_.right, legend_.top};
+    case 1:
+        return RECT{legend_.right, c.top, c.right, c.bottom};
+    case 2:
+        return RECT{c.left, legend_.bottom, legend_.right, c.bottom};
+    case 3:
+    case 5: {
+        const int k = (i - 3) / 2;
+        return RECT{panel_[1 + k].left, panel_[1 + k].top, reset_[k].left, panel_[1 + k].bottom};
+    }
+    case 4:
+    case 6: {
+        const int k = (i - 4) / 2;
         return RECT{reset_[k].left, reset_[k].bottom, panel_[1 + k].right, panel_[1 + k].bottom};
     }
-    RECT r = panel_[i];
-    if (i >= 1 && i < 1 + kResets) r.right = reset_[i - 1].left;
-    return r;
+    case 7:
+        return panel_[3];
+    default:
+        return panel_[4];
+    }
 }
 
 const wchar_t* CompressorGraphs::tipText(int i) {
-    if (i >= kPanels + kResets) return nullptr;       // a reset icon: the owner's text
-    if (i >= kPanels) i = 1 + (i - kPanels);          // the rest of the attack / release panel
-    static const wchar_t* const kPanelTips[kPanels] = {
+    static const int kPanelOf[kPanelTips] = {0, 0, 0, 1, 1, 2, 2, 3, 4};
+    if (i < 0 || i >= kPanelTips) return nullptr; // a legend line or a reset icon: the owner's text
+    i = kPanelOf[i];
+    static const wchar_t* const kPanelTexts[kPanels] = {
         L"The compressor's curve: the level going in (to the right) against the level coming out (up), in LU to the "
         L"target. Under the threshold nothing happens (the dotted diagonal); above it the line bends - flatter with a "
         L"higher ratio, rounder with a wider knee (the shaded band). The grey bars show where the music's level was in "
-        L"the last seconds, the white dot where it is now. Drag the marks: the threshold (left / right), the ratio (up / "
-        L"down, at the right end) and the make-up (up / down, at the left; all the way down = auto).",
+        L"the last seconds, the white dot where it is now.\n\nThe three dashed lines are set here; drag one anywhere "
+        L"along it. Threshold: left / right. Ratio: up / down - the level the loudest music comes out at. Make-up: up / "
+        L"down - the quiet end of the curve, and the whole curve with it; all the way down = auto. The legend names "
+        L"their values; the arrow behind a value sets it back.",
         L"Attack (1 .. 100 ms): a hit 10 dB over the threshold in its first 150 ms. Dashed: the hit as it comes in; "
         L"the line: what comes out. What is above the line before the mark still gets through - the punch. Shorter "
         L"catches the hit sooner, longer lets it through.\n\nSet it here: drag the mark, or turn the mouse wheel over "
@@ -204,7 +249,7 @@ const wchar_t* CompressorGraphs::tipText(int i) {
         L"high-pass leaves of the bass. A kick the compressor hears pulls the whole mix down with every beat. Drag the "
         L"mark left or right; all the way left = off.",
     };
-    return i >= 0 && i < kPanels ? kPanelTips[i] : L"";
+    return kPanelTexts[i];
 }
 
 double CompressorGraphs::aim() const { return workingLevel(values_); }
@@ -232,7 +277,7 @@ void CompressorGraphs::layoutPanels(int w, int h) {
     static const double kShare[kPanels] = {1.0, 0.8, 1.0, 1.3, 1.2};
     const int gap = px(5), pad = px(5);
     const double oneRow = (w - 2 * pad - (kPanels - 1) * gap) / static_cast<double>(kPanels); // a panel's width in one row
-    const bool twoRows = h - 2 * pad >= 2 * px(110) + gap && h - 2 * pad > 1.9 * oneRow;
+    const bool twoRows = h - 2 * pad >= 2 * px(130) + gap && h - 2 * pad > 1.9 * oneRow;
     auto row = [&](int first, int count, int top, int bottom) {
         double sum = 0.0;
         for (int i = first; i < first + count; ++i) sum += kShare[i];
@@ -251,11 +296,30 @@ void CompressorGraphs::layoutPanels(int w, int h) {
     } else {
         row(0, kPanels, pad, h - pad);
     }
-    // the reset icons: in the title line of the attack and release panels, at the right (above the plot)
-    for (int k = 0; k < kResets; ++k) {
+    // the reset icons of the attack and the release: in their panels' title line, at the right (above the plot)
+    const int iconW = px(22), rowH = px(18);
+    for (int k = 0; k < kFirstLegend; ++k) {
         const RECT& p = panel_[1 + k];
-        reset_[k] = {p.right - px(3) - px(22), p.top + px(1), p.right - px(3), p.top + px(1) + px(18)};
+        reset_[k] = {p.right - px(3) - iconW, p.top + px(1), p.right - px(3), p.top + px(1) + rowH};
     }
+    // The curve's legend - a line per value: its name, its value, its reset icon - and the room for the square plot:
+    // under the legend (which then is as wide as the panel, its icons in the panel's right corner like the others')
+    // or beside it, whichever leaves the larger square.
+    const RECT& c = panel_[0];
+    const int top = static_cast<int>(c.top) + textH_ + px(5), bottom = top + kLegend * rowH;
+    const int narrow = px(6) + nameW_ + px(8) + valueW_ + px(3) + iconW; // the legend at its smallest width
+    const int under = std::min(static_cast<int>(c.right - c.left) - 2 * px(8), static_cast<int>(c.bottom) - px(8) - (bottom + px(4)));
+    const int beside = std::min(static_cast<int>(c.right - c.left) - narrow - 2 * px(8),
+                                static_cast<int>(c.bottom) - px(8) - (static_cast<int>(c.top) + textH_ + px(7)));
+    if (under >= beside) {
+        legend_ = {c.left, top, c.right - px(3), bottom};
+        curveArea_ = {c.left + px(8), bottom + px(4), c.right - px(8), c.bottom - px(8)};
+    } else {
+        legend_ = {c.left, top, c.left + narrow, bottom};
+        curveArea_ = {legend_.right + px(8), c.top + textH_ + px(7), c.right - px(8), c.bottom - px(8)};
+    }
+    for (int j = 0; j < kLegend; ++j)
+        reset_[kFirstLegend + j] = {legend_.right - iconW, top + j * rowH, legend_.right, top + (j + 1) * rowH};
 }
 
 // What does not move with the audio - the panels, the curve, the attack and release graphs, their marks and texts -
@@ -314,11 +378,20 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
             Plot& q = plot_[0];
             q.x0 = q.y0 = kLo;
             q.x1 = q.y1 = kHi;
-            const double side = std::min(q.r - q.l, q.b - q.t); // in and out share a scale: square, centred
+            q.l = curveArea_.left; // under its legend, or beside it (layoutPanels)
+            q.r = curveArea_.right;
+            q.t = curveArea_.top;
+            q.b = curveArea_.bottom;
+            const double side = std::max(1.0, std::min(q.r - q.l, q.b - q.t)); // in and out share a scale: square, centred
             q.l += (q.r - q.l - side) / 2;
             q.r = q.l + side;
             q.t += (q.b - q.t - side) / 2;
             q.b = q.t + side;
+            // The three values set here are three dashed lines, each through its mark on the curve: the threshold
+            // upright, the ratio level through the curve's loud end (where the loudest music comes out), the
+            // make-up level through its quiet end (which the make-up lifts, and the whole curve with it).
+            const double xr = kHi - kRatioMarkLu, xm = kLo + kMakeupMarkLu;
+            const double xThr = q.X(thr), yRatio = q.Y(out(xr)), yMakeup = q.Y(out(xm));
             clipTo(q);
             g.DrawLine(&dots, pt(q.X(0), q.t), pt(q.X(0), q.b));
             g.DrawLine(&dots, pt(q.l, q.Y(0)), pt(q.r, q.Y(0)));
@@ -326,7 +399,9 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
                 g.FillRectangle(&orangeFill, static_cast<REAL>(q.X(thr - knee / 2)), static_cast<REAL>(q.t),
                                 static_cast<REAL>(q.X(thr + knee / 2) - q.X(thr - knee / 2)), static_cast<REAL>(q.b - q.t));
             g.DrawLine(&dots, pt(q.X(kLo), q.Y(kLo + mk)), pt(q.X(kHi - mk), q.Y(kHi))); // no compression
-            g.DrawLine(&dash, pt(q.X(thr), q.t), pt(q.X(thr), q.b));
+            g.DrawLine(&dash, pt(xThr, q.t), pt(xThr, q.b));
+            g.DrawLine(&dash, pt(q.l, yRatio), pt(q.r, yRatio));
+            g.DrawLine(&dash, pt(q.l, yMakeup), pt(q.r, yMakeup));
             std::vector<PointF> line;
             for (int i = 0; i <= 96; ++i) {
                 const double in = kLo + (kHi - kLo) * i / 96.0;
@@ -334,18 +409,28 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
             }
             g.DrawLines(&curve, line.data(), static_cast<INT>(line.size()));
             g.SetClip(&whole);
-            const double xr = kHi - kRatioMarkLu, xm = kLo + kMakeupMarkLu;
-            drawMark(g, mThreshold, q.X(thr), q.Y(out(thr)));
-            drawMark(g, mRatio, q.X(xr), q.Y(out(xr)));
-            drawMark(g, mMakeup, q.X(xm), q.Y(out(xm)));
-            const bool thrRight = q.X(thr) > q.l + 0.62 * (q.r - q.l);
-            // the texts keep off the line: the threshold's at the top of its dashed line, the ratio's above its mark
-            // (the line comes from below there), the make-up's under its mark (the line goes up from it)
-            label(q.X(thr) + (thrRight ? -px(4) : px(4)), q.t, number(thr, 1, L" LU", true), kOrange,
-                  thrRight ? TA_RIGHT : TA_LEFT);
-            label(q.X(xr) + px(2), std::max(q.t, q.Y(out(xr)) - th - px(7)), number(ratio, 1, L":1"), kText, TA_RIGHT);
-            label(q.X(xm) + px(8), std::min(q.b - th, q.Y(out(xm)) + px(2)),
-                  values_[pCompMakeup] < 0.0 ? std::wstring(L"auto") : number(mk, 1, L" dB", true), kText);
+            drawMark(g, mThreshold, xThr, q.Y(out(thr)));
+            drawMark(g, mRatio, q.X(xr), yRatio);
+            drawMark(g, mMakeup, q.X(xm), yMakeup);
+            // Each line carries its name, at the end away from its mark: the threshold's at the top of its line, the
+            // ratio's at the left on its line (under it when the top belongs to the threshold's name), the
+            // make-up's at the right on its line.
+            static const wchar_t* const kName[kLegend] = {L"Threshold", L"Ratio", L"Make-up"};
+            const bool thrRight = xThr > q.l + 0.62 * (q.r - q.l);
+            label(xThr + (thrRight ? -px(4) : px(4)), q.t, kName[0], kOrange, thrRight ? TA_RIGHT : TA_LEFT);
+            label(q.l + px(3), yRatio - th - px(1) < q.t + th + px(1) ? yRatio + px(2) : yRatio - th - px(1), kName[1],
+                  kOrange);
+            label(q.r - px(3), yMakeup - th - px(1), kName[2], kOrange, TA_RIGHT);
+            // the legend: the same three names, their values, and (drawn with the others, below) their reset icons
+            const std::wstring value[kLegend] = {
+                number(thr, 1, L" LU", true), number(ratio, 1, L":1"),
+                values_[pCompMakeup] < 0.0 ? std::wstring(L"auto") : number(mk, 1, L" dB")};
+            for (int j = 0; j < kLegend; ++j) {
+                const RECT& icon = reset_[kFirstLegend + j];
+                const double y = icon.top + (icon.bottom - icon.top - th) / 2.0;
+                label(legend_.left + px(6), y, kName[j], kText);
+                label(icon.left - px(3), y, value[j], kOrange, TA_RIGHT);
+            }
         }
 
         // ---- 2. the attack ----
@@ -673,6 +758,51 @@ int CompressorGraphs::markAt(POINT p) const {
     return best;
 }
 
+// The curve's three dashed lines are taken anywhere along them, not only by their marks: the nearest one within a
+// few pixels (the threshold's upright one first where two cross).
+int CompressorGraphs::lineAt(POINT p) const {
+    const Plot& q = plot_[0];
+    if (p.x < q.l - 2 || p.x > q.r + 2 || p.y < q.t - 2 || p.y > q.b + 2) return mNone;
+    const long reach = px(5);
+    const long d[3] = {std::labs(p.x - mark_[mThreshold].x), std::labs(p.y - mark_[mRatio].y),
+                       std::labs(p.y - mark_[mMakeup].y)};
+    static const int kLine[3] = {mThreshold, mRatio, mMakeup};
+    int best = mNone;
+    long bestD = reach + 1;
+    for (int i = 0; i < 3; ++i) {
+        if (d[i] < bestD) {
+            bestD = d[i];
+            best = kLine[i];
+        }
+    }
+    return best;
+}
+
+// Where the wheel steps a value: anywhere over the attack's or the release's graph, and over a line of the curve's
+// legend (over the curve itself it could be any of three).
+int CompressorGraphs::wheelParam(POINT p) const {
+    for (int k = 0; k < kFirstLegend; ++k)
+        if (PtInRect(&panel_[1 + k], p)) return resetParam(k);
+    for (int j = 0; j < kLegend; ++j) {
+        const RECT& icon = reset_[kFirstLegend + j];
+        const RECT line{legend_.left, icon.top, legend_.right, icon.bottom};
+        if (PtInRect(&line, p)) return resetParam(kFirstLegend + j);
+    }
+    return -1;
+}
+
+// One wheel notch is one step of the value. The attack and the release go by the parameter's own step (1 ms, 10 ms),
+// not by a slider position: on their logarithmic scales one position often is the same value, and at the long end a
+// position skips values. The others are on linear scales, where a position is a step (and the make-up's first
+// position is "auto").
+double CompressorGraphs::stepped(int param, int steps) const {
+    const ParamInfo& in = paramInfo(param);
+    const double now = values_[static_cast<size_t>(param)];
+    if (param == pCompAttack || param == pCompRelease)
+        return std::min(in.max, std::max(in.min, std::round(now / in.step + steps) * in.step));
+    return paramValueAt(param, std::min(paramPositions(param), std::max(0, paramPositionOf(param, now) + steps)));
+}
+
 // The mark being dragged follows the mouse along its own direction; its value goes on one of the slider's positions.
 void CompressorGraphs::drag(POINT p) {
     int param = -1;
@@ -776,6 +906,7 @@ LRESULT CompressorGraphs::handle(UINT msg, WPARAM wp, LPARAM lp) {
         const POINT p{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
         press_ = resetAt(p); // a reset icon acts when the button is let go on it, as a button
         if (press_ < 0) drag_ = markAt(p);
+        if (press_ < 0 && drag_ == mNone) drag_ = lineAt(p);
         if (press_ >= 0 || drag_ != mNone) SetCapture(hwnd_);
         return 0;
     }
@@ -805,24 +936,17 @@ LRESULT CompressorGraphs::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
         press_ = -1;
         return 0;
-    case WM_MOUSEWHEEL: { // over the attack or the release graph: one of the value's steps per notch (no slider)
+    case WM_MOUSEWHEEL: { // one step of a value that has no slider: the fine control the slider's arrow keys were
         POINT p{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
         ScreenToClient(hwnd_, &p);
-        for (int k = 0; k < kResets && drag_ == mNone; ++k) {
-            if (!PtInRect(&panel_[1 + k], p)) continue;
-            wheel_ += GET_WHEEL_DELTA_WPARAM(wp);
-            const int steps = wheel_ / WHEEL_DELTA;
-            wheel_ -= steps * WHEEL_DELTA;
-            // the parameter's own step (1 ms, 10 ms), not a slider position: on these logarithmic scales one
-            // position often is the same value, and at the long end a position skips values
-            const int param = resetParam(k);
-            const ParamInfo& in = paramInfo(param);
-            const double now = values_[static_cast<size_t>(param)];
-            const double v = std::min(in.max, std::max(in.min, std::round(now / in.step + steps) * in.step));
-            if (steps && v != now) change(param, v, true);
-            return 0;
-        }
-        break;
+        const int param = drag_ == mNone ? wheelParam(p) : -1;
+        if (param < 0) break;
+        wheel_ += GET_WHEEL_DELTA_WPARAM(wp);
+        const int steps = wheel_ / WHEEL_DELTA;
+        wheel_ -= steps * WHEEL_DELTA;
+        const double v = stepped(param, steps);
+        if (steps && v != values_[static_cast<size_t>(param)]) change(param, v, true);
+        return 0;
     }
     case WM_SETCURSOR:
         if (LOWORD(lp) == HTCLIENT) {
@@ -833,7 +957,8 @@ LRESULT CompressorGraphs::handle(UINT msg, WPARAM wp, LPARAM lp) {
                 SetCursor(LoadCursorW(nullptr, IDC_HAND));
                 return TRUE;
             }
-            const int m = drag_ != mNone ? drag_ : markAt(p);
+            int m = drag_ != mNone ? drag_ : markAt(p);
+            if (m == mNone) m = lineAt(p);
             if (m != mNone) {
                 SetCursor(LoadCursorW(nullptr, m == mRatio || m == mMakeup ? IDC_SIZENS : IDC_SIZEWE));
                 return TRUE;

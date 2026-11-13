@@ -575,8 +575,8 @@ Below that, a **tab per stage**. A stage that is switched off says "(off)" on it
   as the decimal sign), the unit, a small **reset** button (back to the reset value; only enabled when the value
   differs, and its tooltip names the reset value) and a short explanation. A value in **bold** differs from its reset
   value: the shipped value of a shipped loudness preset, the value an own one was saved with. The row's tooltip has
-  the full explanation and the range. (The compressor's attack and release have no row: they are set in the
-  Compressor tab's graphs, see below.)
+  the full explanation and the range. (The compressor's threshold, ratio, make-up, attack and release have no row:
+  they are set in the Compressor tab's graphs, see below.)
 - Under the rows, what the stage does to the sound and what more or less of its values sounds like.
 
 The window can be made as large as you like; it cannot be made smaller than the size that shows every row of the
@@ -650,29 +650,39 @@ threshold: it should fill in the pauses, not while the music plays.
 | Value | Unit | Range | Default | What it does |
 |---|---|---|---|---|
 | On | | | on | |
-| Threshold | LU | -10 .. +15 | +2 | Relative to the target: material louder than this is compressed. Lower = more compression. |
-| Ratio | :1 | 1 .. 8 | 2.0 | How strongly. Higher is more even and more "in your face"; too much sounds flat and tired. |
+| Threshold | LU | -10 .. +15 | +2 | Relative to the target: material louder than this is compressed. Lower = more compression. Set in the Curve graph (below). |
+| Ratio | :1 | 1 .. 8 | 2.0 | How strongly. Higher is more even and more "in your face"; too much sounds flat and tired. Set in the Curve graph (below). |
 | Knee | dB | 0 .. 12 | 6 | Width of the soft knee: wider starts more gently. |
 | Attack | ms | 1 .. 100 | 10 | Short catches drum hits (less punch); longer lets them through (more punch). Set in its graph (below). |
 | Release | ms | 20 .. 1000 | 200 | Short sounds lively but can pump; long is smooth. Set in its graph (below). |
 | Side-chain high-pass | Hz | off, 40 .. 200 | 150 | Bass below this does not make the compressor work, so a heavy kick does not pull the whole mix down with every beat ("pumping"). Lower it only if you want the compressor to follow the bass. |
-| Make-up | dB | auto, 0 .. 12 | auto | Gain after compression. Auto keeps the target level unchanged. |
+| Make-up | dB | auto, 0 .. 12 | auto | Gain after compression. Auto keeps the target level unchanged. Set in the Curve graph (below). |
 
 ![The Compressor tab: its values and, under them, the five graphs](images/compressor.jpg)
 
 Under the Compressor tab's values, five graphs show what those values do - with the music of the deck the window was
 opened from drawn behind them. The orange round marks can be dragged; the sliders follow, and the other way round.
 
-**Attack** and **Release** have no slider on this tab: they are set in their graphs. Drag the mark, or turn the mouse
-wheel over the graph for one step (1 ms for the attack, 10 ms for the release). The small arrow in the graph's
-corner is its reset button: it is lit when the value differs from its reset value, and a click sets it back (its
-tooltip names that value).
+Five values have no slider on this tab: they are set in the graphs.
+
+- **Threshold**, **Ratio** and **Make-up** are the three dashed lines of the Curve graph, each with its name on it.
+  Drag a line anywhere along it (or its round mark): the Threshold left and right, the Ratio and the Make-up up and
+  down. The graph's legend lists the three with their values; turn the mouse wheel over a line of the legend for
+  one step (0.5 LU, 0.1, 0.5 dB).
+- **Attack** and **Release** are set in their own graphs: drag the mark, or turn the mouse wheel over the graph for
+  one step (1 ms for the attack, 10 ms for the release).
+- Each of the five has a small arrow as its **reset** button - behind its value in the legend, and in the corner of
+  the Attack and the Release graph. It is lit when the value differs from its reset value; a click sets it back
+  (its tooltip names that value).
+
+The graphs:
 
 - **Curve** - the level going in (to the right) against the level coming out (up). Under the threshold the line is
   straight; above it, it bends: flatter with a higher Ratio, rounder with a wider Knee (the shaded band). The grey
   bars show where the music's level was in the last seconds and the white dot where it is now, with an orange stroke
-  for how much it is turned down at this moment. Marks: the Threshold (left and right), the Ratio (up and down, at
-  the right end) and the Make-up (up and down, at the left; all the way down is auto).
+  for how much it is turned down at this moment. The upright dashed line is the Threshold. The Ratio's line lies
+  where the loudest music comes out: lower is a higher ratio. The Make-up's line lies at the quiet end of the
+  curve, which the make-up lifts, and the whole curve with it; all the way down is auto.
 - **Attack** - a hit 10 dB over the threshold in its first 150 ms: dashed as it comes in, the line as it comes out.
   What is above the line before the mark still gets through - the punch.
 - **Release** - the gain on the rest of the music after that hit: still down when the hit ends, back after the
@@ -685,8 +695,9 @@ tooltip names that value).
   Side-chain high-pass leaves of the bass. Drag the mark to the left and the kick turns coloured - the compressor
   then follows it, and the Level graph shows the reduction with every beat.
 
-The graphs take the room the window has under the values and grow with it; in a narrow window they stand in two
-rows. Without audio on the deck the two live graphs say so and the others still show the values.
+The graphs take the room the window has under the values and grow with it. They stand in two rows, or in one row
+in a wide window; the Curve's legend stands beside the curve or above it, whichever leaves the curve larger. Without
+audio on the deck the two live graphs say so and the others still show the values.
 
 **MB Compressor** - the multiband stage.
 

@@ -12,6 +12,11 @@
 // follow. The attack and the release have no slider on the tab (client, 2026-11-13: "the attack and release slider
 // can go, make a small reset icon in the graph"): their graphs are where they are set - the mark, the mouse wheel
 // for one step - and a small reset icon in the graph's corner takes the place of the row's reset button.
+// The threshold, the ratio and the make-up went the same way (client, 2026-11-13: "these three sliders are in the
+// curve graph, they can go too; make-up: a horizontal line in the graph; ratio: a horizontal line in the graph;
+// give all three the same name in the graph and a reset icon"): each is a dashed line in the curve - the threshold
+// upright, the ratio and the make-up level - that carries its name and is dragged anywhere along it, and the curve's
+// panel has a legend of three lines: name, value, reset icon (the wheel over a line of it: one step).
 // One child window, custom-drawn (GDI+ for the shapes, GDI for the texts), refreshed by its owner's timer.
 // Compiled into the plug-in too (the loudness window is the same there).
 #pragma once
@@ -33,11 +38,19 @@ namespace ap {
 class CompressorGraphs {
 public:
     static constexpr int kPanels = 5;
-    static constexpr int kResets = 2; // the graphs with a reset icon: attack, release (they have no row on the tab)
-    // The strip's tooltip rectangles: the panels (0 .. kPanels - 1; of a panel with a reset icon the part left of
-    // the icon), the rest of such a panel under its icon (kPanels + k), and the reset icons (kPanels + kResets + k).
-    // They do not overlap.
-    static constexpr int kTips = kPanels + 2 * kResets;
+    // The values set in the graphs alone (no row on the tab), each with a reset icon: attack and release in the
+    // corner of their own graphs, then the curve's legend - threshold, ratio, make-up.
+    static constexpr int kResets = 5;
+    static constexpr int kLegend = 3;                    // the legend's lines: reset icons kResets - kLegend ..
+    static constexpr int kFirstLegend = kResets - kLegend;
+    // The strip's tooltip rectangles (they do not overlap):
+    //   0 .. 8    the panels' own: the curve's panel around its legend (above it, beside it, under it), the attack's
+    //             and the release's (left of the icon, under the icon), the level, the side chain;
+    //   9 .. 11   the legend's lines without their icons - the owner's text (what the value does, its range);
+    //   12 .. 16  the reset icons, in resetParam's order - the owner's text (the reset value).
+    static constexpr int kPanelTips = 9;
+    static constexpr int kFirstNameTip = kPanelTips, kFirstResetTip = kPanelTips + kLegend;
+    static constexpr int kTips = kFirstResetTip + kResets;
     // A mark was dragged, the wheel turned or a reset icon clicked: the parameter and its new value (on one of its
     // slider positions); save = false while the mouse button is down on a mark.
     using Edit = std::function<void(int param, double value, bool save)>;
@@ -54,13 +67,13 @@ public:
     void onEdit(Edit f) { edit_ = std::move(f); }
     // From the owner's timer: draws again when it is visible.
     void refresh();
-    // Tooltip rectangle i in the window's client coordinates (as its size is now), and its text - null for a reset
-    // icon: the owner's, which knows the reset value's text.
+    // Tooltip rectangle i in the window's client coordinates (as its size is now), and its text - null where the
+    // text is the owner's (a legend line, a reset icon).
     RECT tipRect(int i);
     static const wchar_t* tipText(int i);
     static int resetParam(int k); // the parameter of reset icon k
-    // The smallest height the strip is useful at (at this DPI).
-    static int minHeight(UINT dpi) { return static_cast<int>(132.0 * dpi / 96.0 + 0.5); }
+    // The smallest height the strip is useful at (at this DPI): the curve under its legend.
+    static int minHeight(UINT dpi) { return static_cast<int>(196.0 * dpi / 96.0 + 0.5); }
 
     static void registerClass(HINSTANCE module);
     static void unregisterClass(HINSTANCE module);
@@ -92,8 +105,11 @@ private:
     void drawMark(Gdiplus::Graphics& g, int id, double x, double y);
     void layoutPanels(int w, int h);
     int markAt(POINT pt) const;
+    int lineAt(POINT pt) const;  // the curve's dashed line under the point (its mark's id), or mNone
     int resetAt(POINT pt) const; // the reset icon under the point that has something to reset, or -1
     bool resetLit(int k) const;  // its value differs from the reset value
+    int wheelParam(POINT pt) const;             // the parameter the wheel steps at this point, or -1
+    double stepped(int param, int steps) const; // its value `steps` steps on
     void change(int param, double value, bool save); // a new value from the graph: shown, then told to the owner
     void drag(POINT pt);
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
@@ -109,6 +125,9 @@ private:
     UINT dpi_ = 96;
     PresetValues values_ = defaultValues(), resetValues_ = defaultValues();
     RECT reset_[kResets] = {}; // the reset icons (layoutPanels)
+    RECT legend_ = {};         // the curve's legend: its lines one under the other, their icons at its right edge
+    RECT curveArea_ = {};      // where the curve's square plot goes: under the legend, or beside it
+    int textH_ = 13, nameW_ = 56, valueW_ = 50; // the small font's height, the widest name and value of the legend
     int press_ = -1;           // the reset icon the mouse button went down on
     int wheel_ = 0;            // wheel movement not yet a whole step
     const AnalysisSource* source_ = nullptr;
