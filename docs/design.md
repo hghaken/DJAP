@@ -743,6 +743,38 @@ premultiplied DIB that GDI+ draws when a value, the size or the DPI changes (`re
 lays over the level at every refresh: 5 % (the whole test instance, default size), as before the merge. 20 tooltip
 rectangles.
 
+The MB Compressor tab went the same way (client, the same day, with a picture of its sixteen rows: "can a similar
+graph be made for the MB Compressor? No sliders, everything in the graph. Give examples"; two sketches; "yes, build
+it"). What the two tabs share became a base, `graphstrip.*` (`GraphStrip`): the window, the fonts, the still bitmap
+and the layer with transparency, the marks, the reset icons, the steppers, the legends, the layout of four panels,
+the attack and release graphs, the mouse and the wheel; a strip says what its panels are, draws them and says what
+a dragged mark means (`compgraph.*`: `CompressorGraphs`, `mbgraph.*`: `MbGraphs`). The edit window holds both
+(`strips()`), shows the one of the tab in front, leaves out the rows of the parameters a strip owns and gives the
+tooltips their texts (a strip's own for a panel; for a parameter what its row said, for a reset icon the value it
+goes back to). A reset icon goes through the window's `resetParam`, so the number of bands of an own preset comes
+back with the splits it was saved with, as the row's button did.
+The MB strip's four panels: **Bands** - the deck's input spectrum behind (its own scale), a frequency axis 20 Hz ..
+20 kHz and a gain axis -18 .. +18 dB; the splits are upright dashed lines with a mark at the top (left / right; the
+window's rule keeps them in order and 1.25x apart and the strip takes the pushed neighbours back while dragging -
+`setValues` no longer waits for the drag to end), each band's fixed gain an orange line with a mark (up / down), and
+the band's gain at this moment a thick line with the stretch between the two filled (the stage's dynamic part from
+the meters: turned down orange, lifted teal). The number of bands: "Bands 5 - +" in the panel's header (steppers;
+the wheel over it). The still lines lie over the moving spectrum: the layer again. **Curve per band** - the stage's
+rule drawn as level in against level out, both to the band's own recent level (-26 .. +14 dB): the zone in which
+nothing happens shaded between "lift below" and "down above" (upright dashed lines, left / right), the largest lift
+as a dotted line parallel to the diagonal (its mark near the left end, up / down), the amount as the slope outside
+the zone (a mark at the curve's right end, up / down: the ratio that brings the end there, 1:1 .. 4:1 = 0 .. 100 %).
+A dot per band where it is now: the stage reports a band's gain, not its level, so the dot stands where on the
+curve that gain belongs (a band left alone: small, in the middle of the zone) - no change to the audio path for it.
+Its legend stands over the graph or in a column beside it, whichever leaves the square larger. **Attack**,
+**Release** - the Compressor's graphs with the MB values (a hit 10 dB over "down above"; 300 ms and 2 s wide).
+Reset icons: fixed ones for the number of bands, the curve's four and the attack and release; a split or a band
+gain - up to thirteen - gets one beside its value in the graph when it differs from its reset value (no legend
+could hold them; these have no tooltip of their own, they lie in the graph). The wheel: the gain of the band under
+the pointer or the split the pointer is on; a split steps to the next value its slider has (one position of its
+logarithmic scale often is the same value). 21 tooltip rectangles. Not built: a value typed in (as on the Compressor
+tab).
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its

@@ -575,8 +575,8 @@ Below that, a **tab per stage**. A stage that is switched off says "(off)" on it
   as the decimal sign), the unit, a small **reset** button (back to the reset value; only enabled when the value
   differs, and its tooltip names the reset value) and a short explanation. A value in **bold** differs from its reset
   value: the shipped value of a shipped loudness preset, the value an own one was saved with. The row's tooltip has
-  the full explanation and the range. (The compressor's values have no rows: all seven are set in the Compressor
-  tab's graphs, see below.)
+  the full explanation and the range. (The Compressor and MB Compressor tabs have no rows but their switch: their values are
+  set in graphs, see below.)
 - Under the rows, what the stage does to the sound and what more or less of its values sounds like.
 
 The window can be made as large as you like; it cannot be made smaller than the size that shows every row of the
@@ -715,11 +715,38 @@ deck the two graphs with music say so and still show the values.
 | Maximum lift | dB | 0 .. 12 | 6 | The largest lift of a band. |
 | Attack | ms | 1 .. 200 | 20 | Time to turn a band down. |
 | Release | ms | 20 .. 2000 | 300 | Time to turn a band back up. |
-| Split 1 .. 6 | Hz | 20 .. 16000 | per band count | The frequencies between the bands. Only the splits of the band count in use are shown; they always rise, at least 1.25x apart (moving one past its neighbour moves the neighbour). A new band count loads its default splits. |
+| Split 1 .. 6 | Hz | 20 .. 16000 | per band count | The frequencies between the bands. Only the splits of the band count in use exist; they always rise, at least 1.25x apart (moving one past its neighbour moves the neighbour). A new band count loads its default splits. |
 | Band 1 .. 7 gain | dB | -12 .. +12 | 0 | A fixed gain per band: a multiband tone control. |
 
 Default splits per band count: 2 bands 200 Hz; 3: 200 / 2500; 4: 120 / 600 / 4000; 5: 60 / 200 / 2500 / 6000; 6: 60
 / 200 / 800 / 2500 / 6000; 7: 60 / 150 / 400 / 1000 / 2500 / 6000 Hz.
+
+![The MB Compressor tab: the stage's switch and, under it, the four graphs](images/mbcompressor.jpg)
+
+Like the Compressor tab, the MB Compressor tab has no sliders: only the stage's switch, and under it four graphs
+in which every value is set, with the music of the deck in them.
+
+- **Bands** - the bands over the music's spectrum (grey).
+  - The number of bands: **-** and **+** in the graph's top line (or the mouse wheel over the number).
+  - The **splits** are the upright dashed lines, each with its frequency: drag a line left or right. The splits keep
+    their order and their distance: one that is moved past its neighbour pushes it along.
+  - A band's fixed **gain** is the orange line in the band: drag it up or down (or its round mark).
+  - The thick line is the band's gain at this moment - its fixed gain plus what the stage does: under the orange
+    line the band is turned down, above it lifted.
+  - The mouse wheel steps the gain of the band under the pointer, or the split the pointer is on.
+- **Curve per band** - what the stage does to one band: the band's level against its own recent level (to the
+  right) and what comes out (up). In the grey zone in the middle nothing happens.
+  - **Down above** and **Lift below** are the two upright lines at the zone's edges: drag them left or right.
+  - **Maximum lift** is the dotted line: a band is not lifted further than that. Drag its mark up or down.
+  - **Amount** is the mark at the curve's right end: drag it down for a flatter line (4:1 at 100 %), up to the
+    diagonal for none (0 %).
+  - The white dots are the bands at this moment, each with its number.
+  - The legend lists the four values; the mouse wheel over one of them is one step.
+- **Attack** and **Release** - as on the Compressor tab: how fast a band is turned down by a hit, and how fast it
+  comes back. Drag the mark, or turn the mouse wheel over the graph (1 ms, 10 ms).
+
+Reset: Attack, Release, the number of bands and the curve's four values each have a small arrow, lit when the value
+differs from its reset value. A split or a band gain that was changed gets that arrow beside its value in the graph.
 
 **Bass enhancer**
 

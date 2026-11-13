@@ -7,6 +7,7 @@
 #pragma once
 
 #include "compgraph.h"
+#include "mbgraph.h"
 #include "settings.h"
 #include "stages.h"
 #include "theme.h"
@@ -34,11 +35,11 @@ public:
     void show(HWND owner, const std::string& preset, int deck, const std::string& tab = {});
     // Values or presets changed elsewhere (the main window's bass sliders).
     void refresh();
-    // The Compressor tab's graphs (compgraph.h) draw the audio of the deck the window was opened from behind their
+    // The graphs of the Compressor and MB Compressor tabs (compgraph.h, mbgraph.h) draw the audio of the deck the window was opened from behind their
     // curves: where it comes from (the analysis window's source; null: no live audio), and the owner's timer.
     void setLive(const AnalysisSource* source) {
         live_ = source;
-        graphs_.setLive(source, deck_);
+        for (GraphStrip* s : strips()) s->setLive(source, deck_);
     }
     void tick();
     HWND hwnd() const { return hwnd_; }
@@ -75,7 +76,8 @@ private:
     void showRows();       // the current tab's rows (the band count decides which density rows exist), laid out
     void updateRows();
     void updateRow(size_t r, bool moveSlider = true);
-    void updateGraphs(); // the Compressor tab's graphs: values, reset values, the reset icons' tooltips
+    void updateGraphs(); // the graph strips: values, reset values, the tooltips that name them
+    void resetParam(int param); // a value back to its reset value (a row's reset button, a strip's reset icon)
     void updateButtons();
     void updateAbout(); // the description under the choice
     int textHeight(HWND h, const std::wstring& text, int width) const; // wrapped, in the window's font
@@ -119,7 +121,12 @@ private:
     std::string tab_;                    // the stage shown
     std::vector<Row> rows_;
     bool filling_ = false;
-    CompressorGraphs graphs_; // on the Compressor tab, between its rows and the text under them
+    // The tabs whose values are set in graphs: a strip between the tab's rows and the text under them.
+    CompressorGraphs compGraphs_;
+    MbGraphs mbGraphs_;
+    std::vector<GraphStrip*> strips() { return {&compGraphs_, &mbGraphs_}; }
+    GraphStrip* stripOn(const std::string& stage); // the strip of that tab (created), or null
+    bool inGraphs(int param) const;                // set in a strip alone: no row on its tab
     const AnalysisSource* live_ = nullptr;
 };
 

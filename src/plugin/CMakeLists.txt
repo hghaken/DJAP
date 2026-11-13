@@ -25,6 +25,8 @@ smtg_add_vst3plugin(DJAPPlugin PACKAGE_NAME "DJAP" SOURCES_LIST
     ${CMAKE_SOURCE_DIR}/src/app/tooltips.cpp
     ${CMAKE_SOURCE_DIR}/src/app/editwnd.cpp
     ${CMAKE_SOURCE_DIR}/src/app/compgraph.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/graphstrip.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/mbgraph.cpp
     ${CMAKE_SOURCE_DIR}/src/app/placement.cpp
     ${CMAKE_SOURCE_DIR}/src/app/appstate.cpp
     # the About window with the update check (client, 2026-10-28: a plug-in installed on its own got no update notice)
