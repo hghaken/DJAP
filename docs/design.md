@@ -762,8 +762,16 @@ the meters: turned down orange, lifted teal). The number of bands: "Bands 5 - +"
 the wheel over it). The still lines lie over the moving spectrum: the layer again. **Curve per band** - the stage's
 rule drawn as level in against level out, both to the band's own recent level (-26 .. +14 dB): the zone in which
 nothing happens shaded between "lift below" and "down above" (upright dashed lines, left / right), the largest lift
-as a dotted line parallel to the diagonal (its mark near the left end, up / down), the amount as the slope outside
-the zone (a mark at the curve's right end, up / down: the ratio that brings the end there, 1:1 .. 4:1 = 0 .. 100 %).
+as a level line through its mark near the curve's left end (up / down; where the curve begins when the lift is at
+its largest there), the amount as the slope outside the zone - a level line through its mark at the curve's right
+end (up / down: the ratio that brings the end there, 1:1 .. 4:1 = 0 .. 100 %). The names in the graph (client,
+2026-11-13, after seeing it: "'down above' at the bottom, left of its line; 'amount' a level line, its text at the
+far left; 'max lift' a level line, its text at the far right" - until 0.1.353 the largest lift was a dotted line
+parallel to the diagonal and the amount a mark only): "down above" and "lift below" in the bottom row left of their
+lines ("lift below" a row higher where the zone is narrower than the other name, right of its line where it would
+reach the edge or the largest lift's mark), "Amount" under its line at the far left, "Maximum lift" over its line at
+the far right; an orange line gives way to a name it would run through (drawn in stretches around the names'
+rectangles).
 A dot per band where it is now: the stage reports a band's gain, not its level, so the dot stands where on the
 curve that gain belongs (a band left alone: small, in the middle of the zone) - no change to the audio path for it.
 Its legend stands over the graph or in a column beside it, whichever leaves the square larger. **Attack**,

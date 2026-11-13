@@ -6,8 +6,9 @@
 //     fixed gain as a line with a mark (up / down) and its gain at this moment as a thick line; the number of bands
 //     with - and + in the panel's header;
 //   the curve per band: a band's level against its own recent level in, what comes out up - the zone in which
-//     nothing happens between "lift below" and "down above" (upright lines), the largest lift (a dotted line), the
-//     amount (the slope outside the zone), and a dot per band where it is now;
+//     nothing happens between "lift below" and "down above" (upright lines), the largest lift and the amount (the
+//     slope outside the zone) as level lines at the heights where the curve begins and ends, and a dot per band
+//     where it is now;
 //   the attack and the release, as on the Compressor tab.
 // The tab keeps the stage's switch alone. The four values of the curve have a legend in its panel's header and the
 // attack and the release an icon in their corner; the splits and the band gains - up to thirteen - get a small

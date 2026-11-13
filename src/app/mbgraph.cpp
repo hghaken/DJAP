@@ -3,9 +3,11 @@
 
 #include "graphgdi.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cwchar>
+#include <utility>
 
 namespace ap {
 
@@ -131,10 +133,11 @@ void MbGraphs::fillTips(std::vector<Tip>& out) {
     static const wchar_t* const kCurve =
         L"What the stage does to one band: the band's level against its own recent level (to the right) and what "
         L"comes out (up). In the grey zone in the middle nothing happens. A band that rises further than Down above "
-        L"is turned down; one that falls further than Lift below is lifted, at most by Maximum lift (the dotted "
-        L"line). Amount is how strongly: the slope outside the zone, 1:1 at 0 % to 4:1 at 100 %. The white dots are "
-        L"the bands now.\n\nDrag the two upright lines left or right, the dotted line and the Amount's mark up or "
-        L"down. The legend names the values; the arrow behind a value sets it back.";
+        L"is turned down; one that falls further than Lift below is lifted, at most by Maximum lift. Amount is how "
+        L"strongly: the slope outside the zone, 1:1 at 0 % to 4:1 at 100 %. The white dots are the bands now.\n\n"
+        L"Drag the two upright lines left or right and the two level lines up or down: Amount's lies where the "
+        L"curve ends on the right (lower is stronger), Maximum lift's where it begins on the left (higher lifts "
+        L"more). The legend names the values; the arrow behind a value sets it back.";
     static const wchar_t* const kCorner[2] = {
         L"Attack (1 .. 200 ms): how fast a band is turned down - a hit 10 dB over Down above in its first 300 ms. "
         L"Dashed: the hit as it comes in; the line: what comes out. Shorter catches the hit sooner, longer lets it "
@@ -211,45 +214,82 @@ void MbGraphs::renderStill(HDC dc, int w, int h) {
             q.t += (q.b - q.t - side) / 2;
             q.b = q.t + side;
             const float lw = static_cast<float>(std::max(1.0, dpi_ / 96.0));
-            Pen dots(col(kGrid), lw), dash(col(kOrange), lw), cap(col(kOrange), lw), curve(col(kTeal), 2.5f * lw);
+            Pen dots(col(kGrid), lw), dash(col(kOrange), lw), curve(col(kTeal), 2.5f * lw);
             dots.SetDashStyle(DashStyleDot);
             dash.SetDashStyle(DashStyleDash);
-            cap.SetDashStyle(DashStyleDot);
             curve.SetLineJoin(LineJoinRound);
             SolidBrush zone(col(kInput, 26));
             const double xDown = q.X(down), xLift = q.X(-lift);
             const double capIn = kCurveLo + kMaxLiftMarkDb, amountIn = kCurveHi - kAmountMarkDb;
+            const double yDown = q.Y(down), yLift = q.Y(-lift), yCap = q.Y(capIn + maxLift);
+            const double xAmount = q.X(amountIn), yAmount = q.Y(amountIn + gainAt(amountIn));
+            // The names (client, 2026-11-13: "down above" at the bottom, left of its line; the amount a level line
+            // with its name at the far left; the largest lift a level line with its name at the far right), off the
+            // curve and the bands' dots and off each other: "down above" and "lift below" in the bottom row, each
+            // left of its own line (right of it where the graph ends, and "lift below" also where it would reach
+            // the largest lift's mark) - "lift below" a row higher where the zone is narrower than the other name;
+            // the amount's under its line - which lies in the top of the graph, at the height where the curve ends;
+            // the largest lift's over its line - which lies low, at the height where the curve begins - and over
+            // the bottom row where that name is in its way.
+            enum { nAmount, nDown, nLift, nCap, kNames };
+            static const wchar_t* const kName[kNames] = {L"Amount", L"Down above", L"Lift below", L"Maximum lift"};
+            const int bottomRow = static_cast<int>(q.b) - th - px(2);
+            const bool downRight = xDown - px(5) - legend_.nameW[nDown] < q.l - px(4);
+            const bool liftRight = xLift - px(5) - legend_.nameW[nLift] < q.X(capIn) + px(8);
+            RECT name[kNames];
+            auto place = [&](int j, double x, int y, bool leftAligned) {
+                const int at = static_cast<int>(x);
+                name[j] = leftAligned ? RECT{at, y, at + legend_.nameW[j], y + th} : RECT{at - legend_.nameW[j], y, at, y + th};
+            };
+            place(nAmount, q.l + px(4), static_cast<int>(yAmount) + px(3), true);
+            place(nDown, xDown + (downRight ? px(5) : -px(5)), bottomRow, downRight);
+            place(nLift, xLift + (liftRight ? px(5) : -px(5)), bottomRow, liftRight);
+            place(nCap, q.r - px(4), static_cast<int>(yCap) - th - px(3), false);
+            if (name[nLift].right + px(6) > name[nDown].left && name[nLift].left < name[nDown].right + px(6))
+                OffsetRect(&name[nLift], 0, -th);
+            RECT both;
+            if (IntersectRect(&both, &name[nCap], &name[nDown])) OffsetRect(&name[nCap], 0, name[nDown].top - name[nCap].bottom);
+            // An orange line gives way to a name it would run through (the letters, not the empty top and bottom of
+            // the text's row), and leaves no stub beside one.
+            auto dashed = [&](bool upright, double at) {
+                std::vector<std::pair<double, double>> cut;
+                for (const RECT& r : name) {
+                    const double l = r.left - px(3), t = r.top, rr = r.right + px(3), b = r.bottom;
+                    if (upright ? at >= l && at <= rr : at >= t + px(3) && at <= b - px(2))
+                        cut.push_back(upright ? std::make_pair(t, b) : std::make_pair(l, rr));
+                }
+                std::sort(cut.begin(), cut.end());
+                const double end = upright ? q.b : q.r;
+                double from = upright ? q.t : q.l;
+                auto stretch = [&](double a, double b) {
+                    if (b - a < px(4)) return;
+                    g.DrawLine(&dash, upright ? pt(at, a) : pt(a, at), upright ? pt(at, b) : pt(b, at));
+                };
+                for (const auto& c : cut) {
+                    stretch(from, std::min(c.first, end));
+                    from = std::max(from, c.second);
+                }
+                stretch(from, end);
+            };
             g.SetClip(RectF(static_cast<REAL>(q.l - 1), static_cast<REAL>(q.t - 1), static_cast<REAL>(q.r - q.l + 2),
                             static_cast<REAL>(q.b - q.t + 2)));
             g.FillRectangle(&zone, static_cast<REAL>(xLift), static_cast<REAL>(q.t), static_cast<REAL>(xDown - xLift),
                             static_cast<REAL>(q.b - q.t)); // nothing happens here
-            g.DrawLine(&dots, pt(q.l, q.b), pt(q.r, q.t));                                                  // 1:1
-            g.DrawLine(&cap, pt(q.X(kCurveLo), q.Y(kCurveLo + maxLift)), pt(q.X(kCurveHi - maxLift), q.Y(kCurveHi)));
-            g.DrawLine(&dash, pt(xDown, q.t), pt(xDown, q.b));
-            g.DrawLine(&dash, pt(xLift, q.t), pt(xLift, q.b));
+            g.DrawLine(&dots, pt(q.l, q.b), pt(q.r, q.t)); // 1:1
+            dashed(true, xDown);
+            dashed(true, xLift);
+            dashed(false, std::floor(yAmount) + 0.5);
+            dashed(false, std::floor(yCap) + 0.5);
             std::vector<PointF> line;
             for (double x = kCurveLo; x <= kCurveHi + 0.01; x += 0.25) line.push_back(pt(q.X(x), q.Y(x + gainAt(x))));
             g.DrawLines(&curve, line.data(), static_cast<INT>(line.size()));
             g.ResetClip();
-            const double yDown = q.Y(down), yLift = q.Y(-lift), yCap = q.Y(capIn + maxLift);
-            const double xAmount = q.X(amountIn), yAmount = q.Y(amountIn + gainAt(amountIn));
             drawMark(g, mDown, xDown, yDown);
             drawMark(g, mLift, xLift, yLift);
             drawMark(g, mMaxLift, q.X(capIn), yCap);
             drawMark(g, mAmount, xAmount, yAmount);
-            // The names, off the place where the bands' dots are and off each other: "down above" at the top
-            // of its line and "lift below" at the bottom of its line, both left of the line (the second right of
-            // it where the graph ends); the amount's left of its mark over the curve (under it when the curve
-            // ends at the top, where the first name is); the largest lift's right of its mark under the dotted line.
-            const int liftW = legend_.nameW[2];
-            const bool liftRight = xLift - px(5) - liftW < q.l - px(4);
-            all.push_back({static_cast<int>(xDown) - px(5), static_cast<int>(q.t) + px(1), L"Down above", kOrange, TA_RIGHT});
-            all.push_back({static_cast<int>(xLift) + (liftRight ? px(5) : -px(5)), static_cast<int>(q.b) - th - px(2), L"Lift below",
-                           kOrange, static_cast<UINT>(liftRight ? TA_LEFT : TA_RIGHT)});
-            all.push_back({static_cast<int>(xAmount) - px(8),
-                           static_cast<int>(yAmount - th - px(4) < q.t + th + px(3) ? yAmount + px(8) : yAmount - th - px(4)),
-                           L"Amount", kOrange, TA_RIGHT});
-            all.push_back({static_cast<int>(q.X(capIn)) + px(8), static_cast<int>(yCap) + px(3), L"Maximum lift", kOrange, TA_LEFT});
+            for (int j = 0; j < kNames; ++j)
+                all.push_back({static_cast<int>(name[j].left), static_cast<int>(name[j].top), kName[j], kOrange, TA_LEFT});
         }
         const std::wstring value[4] = {number(values_[pDensAmount], 0, L" %"), number(down, 1, L" dB"),
                                        number(lift, 1, L" dB"), number(maxLift, 1, L" dB")};
@@ -420,7 +460,7 @@ void MbGraphs::paintLive(HDC dc) {
 
 // The lines are taken anywhere along them, not only by their marks: in the bands graph a split (the nearest within a
 // few pixels) and else the fixed gain's line of the band under the point; in the curve the two upright lines and
-// the dotted one.
+// the two level lines.
 int MbGraphs::lineAt(POINT p) const {
     const long reach = px(5);
     const Plot& q = plot_[0];
@@ -446,7 +486,9 @@ int MbGraphs::lineAt(POINT p) const {
     if (p.x >= c.l - 2 && p.x <= c.r + 2 && p.y >= c.t - 2 && p.y <= c.b + 2) {
         if (std::labs(p.x - std::lround(c.X(values_[pDensDownAbove]))) <= reach) return mDown;
         if (std::labs(p.x - std::lround(c.X(-values_[pDensLiftBelow]))) <= reach) return mLift;
-        if (std::labs(p.y - std::lround(c.Y(c.fromX(p.x) + values_[pDensMaxLift]))) <= reach) return mMaxLift;
+        const double amountIn = kCurveHi - kAmountMarkDb;
+        if (std::labs(p.y - std::lround(c.Y(kCurveLo + kMaxLiftMarkDb + values_[pDensMaxLift]))) <= reach) return mMaxLift;
+        if (std::labs(p.y - std::lround(c.Y(amountIn + gainAt(amountIn)))) <= reach) return mAmount;
     }
     return -1;
 }
@@ -468,7 +510,8 @@ bool MbGraphs::dragValue(int mark, POINT p, double& v) const {
     case mLift:
         v = -c.fromX(p.x);
         return true;
-    case mMaxLift: // the dotted line lies this far over the 1:1 line: the mark's height over its place on it
+    case mMaxLift: // its level line lies this far over the 1:1 line at the mark: where the curve begins when the
+                   // lift is at its largest there
         v = c.fromY(p.y) - (kCurveLo + kMaxLiftMarkDb);
         return true;
     case mAmount: { // the ratio that brings the curve's right end to the mouse (1:1 at 0 %, 4:1 at 100 %)
