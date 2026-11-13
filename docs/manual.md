@@ -575,7 +575,8 @@ Below that, a **tab per stage**. A stage that is switched off says "(off)" on it
   as the decimal sign), the unit, a small **reset** button (back to the reset value; only enabled when the value
   differs, and its tooltip names the reset value) and a short explanation. A value in **bold** differs from its reset
   value: the shipped value of a shipped loudness preset, the value an own one was saved with. The row's tooltip has
-  the full explanation and the range.
+  the full explanation and the range. (The compressor's attack and release have no row: they are set in the
+  Compressor tab's graphs, see below.)
 - Under the rows, what the stage does to the sound and what more or less of its values sounds like.
 
 The window can be made as large as you like; it cannot be made smaller than the size that shows every row of the
@@ -652,8 +653,8 @@ threshold: it should fill in the pauses, not while the music plays.
 | Threshold | LU | -10 .. +15 | +2 | Relative to the target: material louder than this is compressed. Lower = more compression. |
 | Ratio | :1 | 1 .. 8 | 2.0 | How strongly. Higher is more even and more "in your face"; too much sounds flat and tired. |
 | Knee | dB | 0 .. 12 | 6 | Width of the soft knee: wider starts more gently. |
-| Attack | ms | 1 .. 100 | 10 | Short catches drum hits (less punch); longer lets them through (more punch). |
-| Release | ms | 20 .. 1000 | 200 | Short sounds lively but can pump; long is smooth. |
+| Attack | ms | 1 .. 100 | 10 | Short catches drum hits (less punch); longer lets them through (more punch). Set in its graph (below). |
+| Release | ms | 20 .. 1000 | 200 | Short sounds lively but can pump; long is smooth. Set in its graph (below). |
 | Side-chain high-pass | Hz | off, 40 .. 200 | 150 | Bass below this does not make the compressor work, so a heavy kick does not pull the whole mix down with every beat ("pumping"). Lower it only if you want the compressor to follow the bass. |
 | Make-up | dB | auto, 0 .. 12 | auto | Gain after compression. Auto keeps the target level unchanged. |
 
@@ -661,6 +662,11 @@ threshold: it should fill in the pauses, not while the music plays.
 
 Under the Compressor tab's values, five graphs show what those values do - with the music of the deck the window was
 opened from drawn behind them. The orange round marks can be dragged; the sliders follow, and the other way round.
+
+**Attack** and **Release** have no slider on this tab: they are set in their graphs. Drag the mark, or turn the mouse
+wheel over the graph for one step (1 ms for the attack, 10 ms for the release). The small arrow in the graph's
+corner is its reset button: it is lit when the value differs from its reset value, and a click sets it back (its
+tooltip names that value).
 
 - **Curve** - the level going in (to the right) against the level coming out (up). Under the threshold the line is
   straight; above it, it bends: flatter with a higher Ratio, rounder with a wider Knee (the shaded band). The grey

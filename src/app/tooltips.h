@@ -6,6 +6,7 @@
 
 #include <windows.h>
 
+#include <utility>
 #include <vector>
 
 namespace ap {
@@ -16,7 +17,8 @@ public:
     void create(HWND owner);
     // The whole control (a static control needs SS_NOTIFY to see the mouse). Again: replaces the text.
     void add(HWND control, const wchar_t* text);
-    // A rectangle `id` of `window` (client coordinates); move it with setRect when the layout changes.
+    // A rectangle `id` of `window` (client coordinates); move it with setRect when the layout changes. Again:
+    // replaces the text. Rectangles of one window must not overlap (the control keeps the tool the mouse is in).
     void addRect(HWND window, UINT_PTR id, const wchar_t* text);
     void setRect(HWND window, UINT_PTR id, const RECT& r);
     // Line width for the window's DPI.
@@ -29,6 +31,7 @@ public:
 private:
     HWND tip_ = nullptr, owner_ = nullptr;
     std::vector<HWND> added_; // controls with a tool: a new text for one updates it in place
+    std::vector<std::pair<HWND, UINT_PTR>> rects_; // rectangles with a tool, likewise
 };
 
 } // namespace ap

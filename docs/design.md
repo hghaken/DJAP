@@ -670,6 +670,21 @@ core (27.8 % against 3.8 % with another tab in front, measured on a test instanc
 measurement (6.6 % against 6.9 %). No tempo is known, so the release graph has no "next beat" line (the sketch had
 one). A tooltip per panel says what it shows.
 
+The attack and the release have no row on the tab (client, 2026-11-13, with a picture of the two rows: "the attack
+and release slider can go, make a small reset icon in the graph"): `EditWindow::shownOn` leaves out the parameters
+of `CompressorGraphs::resetParam`, and their graphs carry what the rows had. Setting: the mark (on the slider's
+positions, as before) and the mouse wheel over the graph - one notch is the parameter's own step, 1 ms and 10 ms,
+not a slider position: on these logarithmic scales a position often is the same value (200 ms + 1 position is still
+200 ms), and at the long end a position skips values. That wheel is the fine control the slider's arrow keys were;
+a typed value is no longer possible for these two (the wheel reaches every value). Reset: the rows' arrow, small, in
+the title line's right corner of each of the two panels - lit when the value differs from its reset value
+(`setValues` gets the reset values: the shipped ones, or what an own preset was saved with), a click (button down
+and up on it) sets it back and saves; the hand cursor over a lit one. Tooltips: the strip's rectangles do not
+overlap (the tooltip control keeps the tool the mouse is in), so a panel with an icon is two rectangles around the
+icon's own, whose text names the reset value and comes from the window (`EditWindow::updateGraphs`,
+`Tooltips::addRect` again = a new text). `setValue` now ends in `updateGraphs`: until then the graphs followed a
+typed value, a reset and a dragged mark, but not a dragged slider (0.1.338).
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its

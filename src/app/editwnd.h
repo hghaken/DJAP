@@ -75,6 +75,7 @@ private:
     void showRows();       // the current tab's rows (the band count decides which density rows exist), laid out
     void updateRows();
     void updateRow(size_t r, bool moveSlider = true);
+    void updateGraphs(); // the Compressor tab's graphs: values, reset values, the reset icons' tooltips
     void updateButtons();
     void updateAbout(); // the description under the choice
     int textHeight(HWND h, const std::wstring& text, int width) const; // wrapped, in the window's font

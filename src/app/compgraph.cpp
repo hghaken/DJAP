@@ -91,6 +91,7 @@ double CompressorGraphs::Plot::fromY(double py) const {
 
 CompressorGraphs::~CompressorGraphs() {
     if (font_) DeleteObject(font_);
+    if (symbol_) DeleteObject(symbol_);
     if (still_) DeleteObject(still_);
     if (frame_) DeleteObject(frame_);
 }
@@ -127,16 +128,22 @@ void CompressorGraphs::setDpi(UINT dpi) {
     LOGFONTW lf = ncm.lfMessageFont;
     lf.lfHeight = lf.lfHeight * 85 / 100; // the analysis window's small font
     font_ = CreateFontIndirectW(&lf);
+    if (symbol_) DeleteObject(symbol_);
+    lf = ncm.lfMessageFont; // the arrow of the rows' reset buttons, smaller
+    lf.lfHeight = lf.lfHeight * 7 / 5;
+    wcscpy_s(lf.lfFaceName, L"Segoe UI Symbol");
+    symbol_ = CreateFontIndirectW(&lf);
     stillDirty_ = true;
     if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
-void CompressorGraphs::setValues(const PresetValues& values) {
+void CompressorGraphs::setValues(const PresetValues& values, const PresetValues& reset) {
     if (drag_ != mNone) return; // the mark being dragged is ahead of the settings by one message
     PresetValues v = values;
     normaliseValues(v);
-    if (v == values_) return;
+    if (v == values_ && reset == resetValues_) return;
     values_ = v;
+    resetValues_ = reset;
     stillDirty_ = true;
     if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE);
 }
@@ -150,33 +157,54 @@ void CompressorGraphs::refresh() {
     if (hwnd_ && IsWindowVisible(hwnd_)) InvalidateRect(hwnd_, nullptr, FALSE);
 }
 
-RECT CompressorGraphs::panelRect(int i) {
+int CompressorGraphs::resetParam(int k) { return k == 0 ? pCompAttack : pCompRelease; }
+
+bool CompressorGraphs::resetLit(int k) const {
+    const size_t p = static_cast<size_t>(resetParam(k));
+    return std::fabs(values_[p] - resetValues_[p]) > 1e-9;
+}
+
+// A panel with a reset icon (attack: panel 1, release: panel 2) is two rectangles around the icon's own: what is
+// left of the icon, and what is under it.
+RECT CompressorGraphs::tipRect(int i) {
     RECT rc{};
     if (hwnd_) GetClientRect(hwnd_, &rc);
     layoutPanels(rc.right, rc.bottom);
-    return i >= 0 && i < kPanels ? panel_[i] : RECT{};
+    if (i < 0 || i >= kTips) return RECT{};
+    if (i >= kPanels + kResets) return reset_[i - kPanels - kResets];
+    if (i >= kPanels) {
+        const int k = i - kPanels;
+        return RECT{reset_[k].left, reset_[k].bottom, panel_[1 + k].right, panel_[1 + k].bottom};
+    }
+    RECT r = panel_[i];
+    if (i >= 1 && i < 1 + kResets) r.right = reset_[i - 1].left;
+    return r;
 }
 
-const wchar_t* CompressorGraphs::panelTip(int i) {
-    static const wchar_t* const kTips[kPanels] = {
+const wchar_t* CompressorGraphs::tipText(int i) {
+    if (i >= kPanels + kResets) return nullptr;       // a reset icon: the owner's text
+    if (i >= kPanels) i = 1 + (i - kPanels);          // the rest of the attack / release panel
+    static const wchar_t* const kPanelTips[kPanels] = {
         L"The compressor's curve: the level going in (to the right) against the level coming out (up), in LU to the "
         L"target. Under the threshold nothing happens (the dotted diagonal); above it the line bends - flatter with a "
         L"higher ratio, rounder with a wider knee (the shaded band). The grey bars show where the music's level was in "
         L"the last seconds, the white dot where it is now. Drag the marks: the threshold (left / right), the ratio (up / "
         L"down, at the right end) and the make-up (up / down, at the left; all the way down = auto).",
-        L"Attack: a hit 10 dB over the threshold in its first 150 ms. Dashed: the hit as it comes in; the line: what "
-        L"comes out. What is above the line before the mark still gets through - the punch. Drag the mark: shorter "
-        L"catches the hit sooner, longer lets it through.",
-        L"Release: the gain on the rest of the music after that hit. It is still down when the hit ends and comes back "
-        L"in the release time. Short: back before the next beat - lively, but the music goes up and down with every "
-        L"beat (pumping). Long: smooth. Drag the mark.",
+        L"Attack (1 .. 100 ms): a hit 10 dB over the threshold in its first 150 ms. Dashed: the hit as it comes in; "
+        L"the line: what comes out. What is above the line before the mark still gets through - the punch. Shorter "
+        L"catches the hit sooner, longer lets it through.\n\nSet it here: drag the mark, or turn the mouse wheel over "
+        L"this graph for one step of 1 ms. The arrow in the corner sets it back.",
+        L"Release (20 .. 1000 ms): the gain on the rest of the music after that hit. It is still down when the hit "
+        L"ends and comes back in the release time. Short: back before the next beat - lively, but the music goes up "
+        L"and down with every beat (pumping). Long: smooth.\n\nSet it here: drag the mark, or turn the mouse wheel "
+        L"over this graph for one step of 10 ms. The arrow in the corner sets it back.",
         L"The last 4 seconds of this deck: the level at the compressor (grey - what its side chain hears), the level it "
         L"lets out (line) and, from the top, how much it turns down (orange). The dashed line is the threshold.",
         L"The side chain: the music's spectrum (grey) and the part of it the compressor listens to (coloured) - what the "
         L"high-pass leaves of the bass. A kick the compressor hears pulls the whole mix down with every beat. Drag the "
         L"mark left or right; all the way left = off.",
     };
-    return i >= 0 && i < kPanels ? kTips[i] : L"";
+    return i >= 0 && i < kPanels ? kPanelTips[i] : L"";
 }
 
 double CompressorGraphs::aim() const { return workingLevel(values_); }
@@ -222,6 +250,11 @@ void CompressorGraphs::layoutPanels(int w, int h) {
         row(3, 2, mid + gap, h - pad);
     } else {
         row(0, kPanels, pad, h - pad);
+    }
+    // the reset icons: in the title line of the attack and release panels, at the right (above the plot)
+    for (int k = 0; k < kResets; ++k) {
+        const RECT& p = panel_[1 + k];
+        reset_[k] = {p.right - px(3) - px(22), p.top + px(1), p.right - px(3), p.top + px(1) + px(18)};
     }
 }
 
@@ -397,6 +430,15 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
         SetTextAlign(dc, l.align | TA_TOP);
         TextOutW(dc, l.x, l.y, l.text.c_str(), static_cast<int>(l.text.size()));
     }
+    // the reset icons: lit when the value differs from its reset value, as the rows' reset buttons
+    SetTextAlign(dc, TA_LEFT | TA_TOP);
+    HGDIOBJ oldFont = SelectObject(dc, symbol_);
+    for (int k = 0; k < kResets; ++k) {
+        SetTextColor(dc, resetLit(k) ? kText : kGrid);
+        RECT r = reset_[k];
+        DrawTextW(dc, L"\x21BA", 1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX);
+    }
+    SelectObject(dc, oldFont);
 }
 
 // A round mark that can be dragged, and where it is (markAt).
@@ -683,11 +725,21 @@ void CompressorGraphs::drag(POINT p) {
     if (param != pCompMakeup && param != pCompSideHpf) v = std::max(in.min, v);
     v = std::min(in.max, v);
     const double snapped = paramValueAt(param, paramPositionOf(param, v));
-    if (snapped == values_[static_cast<size_t>(param)]) return;
-    values_[static_cast<size_t>(param)] = snapped;
+    if (snapped != values_[static_cast<size_t>(param)]) change(param, snapped, false);
+}
+
+// A value set in the graph: the picture first, then the owner (heard at once; saved when `save`).
+void CompressorGraphs::change(int param, double value, bool save) {
+    values_[static_cast<size_t>(param)] = value;
     stillDirty_ = true;
-    if (edit_) edit_(param, snapped, false);
-    InvalidateRect(hwnd_, nullptr, FALSE);
+    if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE);
+    if (edit_) edit_(param, value, save);
+}
+
+int CompressorGraphs::resetAt(POINT p) const {
+    for (int k = 0; k < kResets; ++k)
+        if (PtInRect(&reset_[k], p) && resetLit(k)) return k;
+    return -1;
 }
 
 LRESULT CALLBACK CompressorGraphs::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
@@ -701,6 +753,7 @@ LRESULT CALLBACK CompressorGraphs::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM l
     if (msg == WM_NCDESTROY) { // the window goes (with its parent): the object lives on without it
         self->hwnd_ = nullptr;
         self->drag_ = mNone;
+        self->press_ = -1;
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
         return DefWindowProcW(hwnd, msg, wp, lp);
     }
@@ -721,15 +774,23 @@ LRESULT CompressorGraphs::handle(UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_LBUTTONDOWN: {
         const POINT p{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
-        drag_ = markAt(p);
-        if (drag_ != mNone) SetCapture(hwnd_);
+        press_ = resetAt(p); // a reset icon acts when the button is let go on it, as a button
+        if (press_ < 0) drag_ = markAt(p);
+        if (press_ >= 0 || drag_ != mNone) SetCapture(hwnd_);
         return 0;
     }
     case WM_MOUSEMOVE:
         if (drag_ != mNone) drag(POINT{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))});
         return 0;
     case WM_LBUTTONUP:
-        if (drag_ != mNone) {
+        if (press_ >= 0) {
+            const int k = press_;
+            press_ = -1;
+            ReleaseCapture();
+            const int param = resetParam(k);
+            if (resetAt(POINT{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))}) == k)
+                change(param, resetValues_[static_cast<size_t>(param)], true);
+        } else if (drag_ != mNone) {
             const int param = kParamOf[drag_];
             drag_ = mNone;
             ReleaseCapture();
@@ -737,13 +798,41 @@ LRESULT CompressorGraphs::handle(UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     case WM_CAPTURECHANGED:
-        drag_ = mNone;
+        if (drag_ != mNone) { // taken away in the middle of a drag: what is heard is saved
+            const int param = kParamOf[drag_];
+            drag_ = mNone;
+            if (edit_) edit_(param, values_[static_cast<size_t>(param)], true);
+        }
+        press_ = -1;
         return 0;
+    case WM_MOUSEWHEEL: { // over the attack or the release graph: one of the value's steps per notch (no slider)
+        POINT p{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+        ScreenToClient(hwnd_, &p);
+        for (int k = 0; k < kResets && drag_ == mNone; ++k) {
+            if (!PtInRect(&panel_[1 + k], p)) continue;
+            wheel_ += GET_WHEEL_DELTA_WPARAM(wp);
+            const int steps = wheel_ / WHEEL_DELTA;
+            wheel_ -= steps * WHEEL_DELTA;
+            // the parameter's own step (1 ms, 10 ms), not a slider position: on these logarithmic scales one
+            // position often is the same value, and at the long end a position skips values
+            const int param = resetParam(k);
+            const ParamInfo& in = paramInfo(param);
+            const double now = values_[static_cast<size_t>(param)];
+            const double v = std::min(in.max, std::max(in.min, std::round(now / in.step + steps) * in.step));
+            if (steps && v != now) change(param, v, true);
+            return 0;
+        }
+        break;
+    }
     case WM_SETCURSOR:
         if (LOWORD(lp) == HTCLIENT) {
             POINT p;
             GetCursorPos(&p);
             ScreenToClient(hwnd_, &p);
+            if (press_ >= 0 || (drag_ == mNone && resetAt(p) >= 0)) {
+                SetCursor(LoadCursorW(nullptr, IDC_HAND));
+                return TRUE;
+            }
             const int m = drag_ != mNone ? drag_ : markAt(p);
             if (m != mNone) {
                 SetCursor(LoadCursorW(nullptr, m == mRatio || m == mMakeup ? IDC_SIZENS : IDC_SIZEWE));

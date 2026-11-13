@@ -4,6 +4,7 @@
 #include <commctrl.h>
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 namespace ap {
@@ -24,6 +25,7 @@ bool Tooltips::enabled() { return g_enabled; }
 void Tooltips::create(HWND owner) {
     owner_ = owner;
     added_.clear(); // a new tooltip control: no tools yet
+    rects_.clear();
     tip_ = CreateWindowExW(WS_EX_TOPMOST, TOOLTIPS_CLASSW, nullptr, WS_POPUP | TTS_ALWAYSTIP | TTS_NOPREFIX,
                            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, owner, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
@@ -79,7 +81,23 @@ void Tooltips::addRect(HWND window, UINT_PTR id, const wchar_t* text) {
     ti.hwnd = window;
     ti.uId = id;
     ti.lpszText = const_cast<wchar_t*>(text);
-    SendMessageW(tip_, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti));
+    rects_.erase(std::remove_if(rects_.begin(), rects_.end(),
+                                [this](const std::pair<HWND, UINT_PTR>& r) { // windows gone first, with their tools
+                                    if (IsWindow(r.first)) return false;
+                                    TTTOOLINFOW gone{};
+                                    gone.cbSize = sizeof gone;
+                                    gone.hwnd = r.first;
+                                    gone.uId = r.second;
+                                    SendMessageW(tip_, TTM_DELTOOLW, 0, reinterpret_cast<LPARAM>(&gone));
+                                    return true;
+                                }),
+                 rects_.end());
+    // again for the same rectangle: its text updated in place, as for a control
+    if (std::find(rects_.begin(), rects_.end(), std::make_pair(window, id)) != rects_.end()) {
+        SendMessageW(tip_, TTM_UPDATETIPTEXTW, 0, reinterpret_cast<LPARAM>(&ti));
+        return;
+    }
+    if (SendMessageW(tip_, TTM_ADDTOOLW, 0, reinterpret_cast<LPARAM>(&ti))) rects_.emplace_back(window, id);
 }
 
 void Tooltips::setRect(HWND window, UINT_PTR id, const RECT& r) {

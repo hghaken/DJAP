@@ -98,6 +98,22 @@ bool isStageSwitch(int p) {
     return false;
 }
 
+// Values without a row on their tab: they are set in the Compressor tab's graphs alone, which carry their reset
+// icons (client, 2026-11-13: "the attack and release slider can go, make a small reset icon in the graph").
+bool graphOnly(int p) {
+    for (int k = 0; k < CompressorGraphs::kResets; ++k)
+        if (CompressorGraphs::resetParam(k) == p) return true;
+    return false;
+}
+
+// A reset button's tooltip: the value it goes back to.
+std::wstring resetTip(int p, double value, double ref) {
+    const ParamInfo& in = paramInfo(p);
+    return L"Back to its reset value: " + fromUtf8(valueText(p, ref)) +
+           (in.unit[0] && !in.isSwitch ? L" " + fromUtf8(in.unit) : L"") +
+           (std::fabs(value - ref) > 1e-9 ? L"" : L" (it has that value now)");
+}
+
 // What "reset" goes back to: the shipped values, or for an own preset the values it was saved with
 // (Settings::resetValues), with the default splits of the preset's band count when that differs (the same rule as the
 // settings file).
@@ -602,8 +618,10 @@ void EditWindow::createControls() {
         graphs_.onEdit([this](int param, double value, bool save) {
             if (setValue(param, value, save)) updateRows();
         });
-        for (int i = 0; i < CompressorGraphs::kPanels; ++i)
-            tips_.addRect(graphs_.hwnd(), static_cast<UINT_PTR>(i + 1), CompressorGraphs::panelTip(i));
+        for (int i = 0; i < CompressorGraphs::kTips; ++i) { // the reset icons' texts come with the values (updateGraphs)
+            const wchar_t* text = CompressorGraphs::tipText(i);
+            tips_.addRect(graphs_.hwnd(), static_cast<UINT_PTR>(i + 1), text ? text : L"");
+        }
     }
     tips_.add(tabs_, L"One tab per stage: every value of the stage as a slider, with its value (type one in and press "
                      L"Enter), its unit, a reset button and what it does.");
@@ -809,8 +827,8 @@ int EditWindow::place(int cw, int ch, const std::string& stage, bool move) {
         const int gh = move ? std::max(CompressorGraphs::minHeight(dpi_), room) : CompressorGraphs::minHeight(dpi_);
         if (move) {
             MoveWindow(graphs_.hwnd(), m, y, W, gh, FALSE);
-            for (int i = 0; i < CompressorGraphs::kPanels; ++i)
-                tips_.setRect(graphs_.hwnd(), static_cast<UINT_PTR>(i + 1), graphs_.panelRect(i));
+            for (int i = 0; i < CompressorGraphs::kTips; ++i)
+                tips_.setRect(graphs_.hwnd(), static_cast<UINT_PTR>(i + 1), graphs_.tipRect(i));
         }
         y += gh + px(10);
     }
@@ -889,6 +907,7 @@ bool EditWindow::shown(size_t r) const { return shownOn(r, tab_); }
 bool EditWindow::shownOn(size_t r, const std::string& stage) const {
     const Preset* p = const_cast<Settings&>(settings_).find(current_, kind_);
     const int i = rows_[r].param;
+    if (graphs_.hwnd() && graphOnly(i)) return false; // set in the graphs
     return p && paramInfo(i).stage == stage && visible(i, p->values, kind_);
 }
 
@@ -928,8 +947,23 @@ void EditWindow::select(const std::string& preset) {
 
 void EditWindow::updateRows() {
     for (size_t r = 0; r < rows_.size(); ++r) updateRow(r);
-    if (!colour())
-        if (const Preset* p = settings_.find(current_, kind_)) graphs_.setValues(p->values);
+    updateGraphs();
+}
+
+// The Compressor tab's graphs: the values they draw, what their reset icons go back to, and those icons' tooltips.
+void EditWindow::updateGraphs() {
+    const Preset* p = settings_.find(current_, kind_);
+    if (!p || !graphs_.hwnd()) return;
+    const PresetValues ref = referenceValues(settings_, current_, p->values, kind_);
+    graphs_.setValues(p->values, ref);
+    for (int k = 0; k < CompressorGraphs::kResets; ++k) {
+        const int i = CompressorGraphs::resetParam(k);
+        std::wstring back = resetTip(i, p->values[static_cast<size_t>(i)], ref[static_cast<size_t>(i)]);
+        back[0] = static_cast<wchar_t>(towlower(back[0])); // "Attack: back to its reset value: 10 ms"
+        const std::wstring tip = fromUtf8(paramInfo(i).name) + L": " + back;
+        tips_.addRect(graphs_.hwnd(), static_cast<UINT_PTR>(CompressorGraphs::kPanels + CompressorGraphs::kResets + k + 1),
+                      tip.c_str());
+    }
 }
 
 // Slider, value, bold when it differs from its reset value, the reset button only then.
@@ -952,11 +986,7 @@ void EditWindow::updateRow(size_t r, bool moveSlider) {
     }
     if (row.check) SendMessageW(row.check, WM_SETFONT, reinterpret_cast<WPARAM>(changed ? bold_ : font_), TRUE);
     EnableWindow(row.reset, changed);
-    const ParamInfo& in = paramInfo(i);
-    const std::wstring tip = L"Back to its reset value: " + fromUtf8(valueText(i, ref)) +
-                             (in.unit[0] && !in.isSwitch ? L" " + fromUtf8(in.unit) : L"") +
-                             (changed ? L"" : L" (it has that value now)");
-    tips_.add(row.reset, tip.c_str());
+    tips_.add(row.reset, resetTip(i, v, ref).c_str());
 }
 
 int EditWindow::textHeight(HWND h, const std::wstring& text, int width) const {
@@ -1022,6 +1052,7 @@ bool EditWindow::setValue(int param, double value, bool save) {
     updateAbout(); // "some values are changed"
     if (param == pDensBands || param == pNoiseBands) showRows(); // split and band-gain rows appear or go
     if (isStageSwitch(param)) fillTabs();
+    updateGraphs(); // a slider moved: the Compressor tab's graphs follow it
     return true;
 }
 
