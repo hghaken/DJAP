@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A strip of graphs on a tab of the loudness window in which the tab's values are set - by dragging marks and
 // lines, with the mouse wheel, by small reset icons - with the deck's audio drawn in them. The base of the
-// Compressor tab's graphs (compgraph.h) and the MB Compressor tab's (mbgraph.h): the window, the fonts, the bitmaps
+// Leveller tab's graphs (levgraph.h), the Compressor tab's (compgraph.h) and the MB Compressor tab's (mbgraph.h):
+// the window, the fonts, the bitmaps
 // (what does not move with the audio is drawn once; a layer with transparency for still things that lie over
 // moving ones), the marks, the reset icons, the steppers, the mouse and the wheel. A strip draws its panels and
 // says what a dragged mark means.
@@ -20,7 +21,8 @@
 
 namespace Gdiplus {
 class Graphics;
-}
+class Pen;
+} // namespace Gdiplus
 
 namespace ap {
 
@@ -105,10 +107,11 @@ protected:
         int steps;
         const wchar_t* sign;
     };
-    // Up to four values in a panel's header: name, value, reset icon - on the title's line where that fits, else in
-    // columns under the title (as many as fit; two by two rather than three and one).
+    // A few values in a panel's header: name, value, reset icon - on the title's line where that fits, else in
+    // columns under the title (as many as fit; two by two rather than three and one, three and two rather than four
+    // and one).
     struct Legend {
-        static constexpr int kMax = 4;
+        static constexpr int kMax = 6;
         int count = 0;
         int param[kMax] = {};
         const wchar_t* name[kMax] = {};
@@ -165,6 +168,11 @@ protected:
                     double spanMs, double tickMs, const wchar_t* spanText, std::vector<Label>& labels);
     void drawRelease(Gdiplus::Graphics& g, Plot& q, int mark, double reduce, double releaseMs, double fromMs,
                      double toMs, double tickMs, double endMs, const wchar_t* endText, std::vector<Label>& labels);
+    // A line from `from` to `to` - upright at x = `at`, else level at y = `at` - that gives way to the names it
+    // would run through (their rectangles; of a level line the letters, not the empty top and bottom of the text's
+    // row): drawn in stretches around them, with no stub left beside one.
+    void lineAround(Gdiplus::Graphics& g, const Gdiplus::Pen& pen, bool upright, double at, double from, double to,
+                    const std::vector<RECT>& names) const;
     void blendLayer(HDC dc, const RECT& r); // the layer's part `r` over what is there
     bool lit(int param) const;              // its value differs from the reset value
     bool live() const;                      // the deck plays

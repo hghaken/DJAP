@@ -7,7 +7,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <cwchar>
-#include <utility>
 
 namespace ap {
 
@@ -237,7 +236,7 @@ void MbGraphs::renderStill(HDC dc, int w, int h) {
             const int bottomRow = static_cast<int>(q.b) - th - px(2);
             const bool downRight = xDown - px(5) - legend_.nameW[nDown] < q.l - px(4);
             const bool liftRight = xLift - px(5) - legend_.nameW[nLift] < q.X(capIn) + px(8);
-            RECT name[kNames];
+            std::vector<RECT> name(kNames);
             auto place = [&](int j, double x, int y, bool leftAligned) {
                 const int at = static_cast<int>(x);
                 name[j] = leftAligned ? RECT{at, y, at + legend_.nameW[j], y + th} : RECT{at - legend_.nameW[j], y, at, y + th};
@@ -249,27 +248,9 @@ void MbGraphs::renderStill(HDC dc, int w, int h) {
             RECT both;
             if (IntersectRect(&both, &name[nAmount], &name[nDown])) OffsetRect(&name[nAmount], 0, name[nDown].bottom - name[nAmount].top);
             if (IntersectRect(&both, &name[nCap], &name[nLift])) OffsetRect(&name[nCap], 0, name[nLift].top - name[nCap].bottom);
-            // An orange line gives way to a name it would run through (the letters, not the empty top and bottom of
-            // the text's row), and leaves no stub beside one.
+            // an orange line gives way to a name it would run through (lineAround)
             auto dashed = [&](bool upright, double at) {
-                std::vector<std::pair<double, double>> cut;
-                for (const RECT& r : name) {
-                    const double l = r.left - px(3), t = r.top, rr = r.right + px(3), b = r.bottom;
-                    if (upright ? at >= l && at <= rr : at >= t + px(3) && at <= b - px(2))
-                        cut.push_back(upright ? std::make_pair(t, b) : std::make_pair(l, rr));
-                }
-                std::sort(cut.begin(), cut.end());
-                const double end = upright ? q.b : q.r;
-                double from = upright ? q.t : q.l;
-                auto stretch = [&](double a, double b) {
-                    if (b - a < px(4)) return;
-                    g.DrawLine(&dash, upright ? pt(at, a) : pt(a, at), upright ? pt(at, b) : pt(b, at));
-                };
-                for (const auto& c : cut) {
-                    stretch(from, std::min(c.first, end));
-                    from = std::max(from, c.second);
-                }
-                stretch(from, end);
+                lineAround(g, dash, upright, at, upright ? q.t : q.l, upright ? q.b : q.r, name);
             };
             g.SetClip(RectF(static_cast<REAL>(q.l - 1), static_cast<REAL>(q.t - 1), static_cast<REAL>(q.r - q.l + 2),
                             static_cast<REAL>(q.b - q.t + 2)));

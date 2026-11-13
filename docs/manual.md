@@ -575,8 +575,8 @@ Below that, a **tab per stage**. A stage that is switched off says "(off)" on it
   as the decimal sign), the unit, a small **reset** button (back to the reset value; only enabled when the value
   differs, and its tooltip names the reset value) and a short explanation. A value in **bold** differs from its reset
   value: the shipped value of a shipped loudness preset, the value an own one was saved with. The row's tooltip has
-  the full explanation and the range. (The Compressor and MB Compressor tabs have no rows but their switch: their values are
-  set in graphs, see below.)
+  the full explanation and the range. (The Leveller, Compressor and MB Compressor tabs have no rows but their
+  switch: their values are set in graphs, see below.)
 - Under the rows, what the stage does to the sound and what more or less of its values sounds like.
 
 The window can be made as large as you like; it cannot be made smaller than the size that shows every row of the
@@ -609,7 +609,7 @@ Defaults below are those of Medium.
 | Release | s per 10 dB | 0.2 .. 20 | 1.5 (Gentle, DAB+: 5) | How fast the gain goes up when the music is clearly too soft (a soft intro, a quiet song after a loud one). Shorter: on level sooner, but the rise is easier to hear; longer: a gentler turn of the knob. |
 | Hold below | LU | 5 .. 20 | 10 | Holds the gain while the music is this far under the target: fades and pauses are not pumped up. A quiet part that stays this low for the Quiet wait without fading (a soft intro or verse, a breakdown) is levelled like the rest. |
 | Quiet wait | s | 0.5 .. 10 | 1 (Gentle, DAB+: 3) | How long such a quiet part waits before it is levelled. Shorter: a soft intro comes up sooner; longer: the start of a breakdown or a fade is surer to be left alone. |
-| After silence | dB | hold, 0 .. 15 | 12 | The gain after at least 2 seconds of silence (a stopped deck), where the next song starts (at most the Range). Higher: a soft intro is on level at once, a loud song is too loud for its first moments; lower: a gentler start, a soft song comes up a little later. "hold" (the slider's left end): the gain stays where the last song left it. |
+| After silence | dB | hold, 0 .. 15 | 12 | The gain after at least 2 seconds of silence (a stopped deck), where the next song starts (at most the Range). Higher: a soft intro is on level at once, a loud song is too loud for its first moments; lower: a gentler start, a soft song comes up a little later. "hold" (its line dragged under the target's line): the gain stays where the last song left it. |
 | Window | dB | 0 .. 3 | 1 | While the music stays within this many dB of the target the gain rests: it only drifts, at a tenth of Speed. When the level leaves the window the gain moves at Speed again, all the way to the target. 0: the gain follows every small move (more even, but the gain never stands still); wider: a calmer gain that leaves a song's own ups and downs alone. |
 
 The Window keeps the leveller from working all the time. A song's level wanders a decibel up and down from phrase to
@@ -624,6 +624,34 @@ first moment, and a louder song comes down from there at once at the Attack spee
 its first 1 to 2 seconds (with the limiter holding the peaks); a shorter Attack or a lower After silence shortens that. A shorter gap changes nothing. The defaults were
 chosen on 18 songs with soft intros: they bring such an intro to the target about a quarter sooner than before,
 without a song coming in louder at its loud part.
+
+![The Leveller tab: the stage's switch and, under it, the four graphs](images/leveller.jpg)
+
+The Leveller tab has no sliders: only the stage's switch, and under it four graphs in which every value is set, with
+the music of the deck in them. Every value is a level line (drag it up or down) or an upright line (drag it left or
+right); a line is taken anywhere along it, or by its round mark.
+
+- **Level and gain** - the last 30 seconds of the deck, in dB to the target (the dotted line). Grey: the music as it
+  would come out without the leveller. Orange: the leveller's gain - above the target's line it turns the music up,
+  under it down. The line: the level that comes out, averaged over 3 seconds - what the gain brings to the target.
+  The number at the top right is the gain at this moment; "quiet" before it means the music is under Hold below.
+  - **Range** - the two outer level lines: the gain stays between them.
+  - **Window** - the band around the target: drag one of its edges, or its mark.
+  - **Hold below** - the level line under the target: music under it is left alone.
+  - **Quiet wait** - the upright line near the right edge, that long before "now"; the thick stretch on the Hold
+    below line shows the same time.
+  - **After silence** - the level line the gain goes to after a silence. By default it lies on the Range's upper
+    line: there the line whose name is nearer is taken (After silence left of the middle, the Range right of it).
+    Dragged under the target's line it is "hold".
+  - The legend over the graph lists the five values; the mouse wheel over one of them is one step.
+- **Attack**, **Release** and **Speed** - an example and how it comes out over time: music that is 10 dB too loud,
+  10 dB too soft, and 3 dB too loud (a small difference, which the gain closes at Speed). Dashed: the music as it
+  comes in; the line: as it comes out; the upright line: the time it takes. Drag the upright line, or turn the mouse
+  wheel over the graph (0.1 s, 0.1 dB/s). The time axis is logarithmic, so 0.2 s and 20 s both have their room; with
+  Speed, further left is faster.
+
+Reset: every value has a small arrow - behind its value in the legend, or in the corner of its graph -, lit when the
+value differs from its reset value.
 
 **Noise** - the noise reduction: takes hiss, hum and rumble away where the music does not cover them. Off in every
 shipped loudness preset; switch it on for old or noisy recordings (tape hiss, vinyl transfers, a hum).

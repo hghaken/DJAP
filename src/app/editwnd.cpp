@@ -622,8 +622,9 @@ void EditWindow::createControls() {
     tips_.add(tabs_, colour() ? L"One tab per stage: every value of the stage as a slider, with its value (type one "
                                 L"in and press Enter), its unit, a reset button and what it does."
                               : L"One tab per stage: every value of the stage as a slider, with its value (type one "
-                                L"in and press Enter), its unit, a reset button and what it does. The Compressor "
-                                L"tab has graphs instead: its values are set in them.");
+                                L"in and press Enter), its unit, a reset button and what it does. The Leveller, "
+                                L"Compressor and MB Compressor tabs have graphs instead: their values are set in "
+                                L"them.");
     if (colour()) {
         tips_.add(preset_, L"The EQ preset shown in this window (opened on the deck's own): tone, auto tone, sub "
                            L"bass, loudness. Every change is saved at once and heard on every deck that uses it.");
@@ -952,7 +953,8 @@ void EditWindow::updateRows() {
     updateGraphs();
 }
 
-// The strip of a tab whose values are set in graphs (the Compressor, the MB Compressor), when it exists.
+// The strip of a tab whose values are set in graphs (the Leveller, the Compressor, the MB Compressor), when it
+// exists.
 GraphStrip* EditWindow::stripOn(const std::string& stage) {
     for (GraphStrip* strip : strips())
         if (strip->hwnd() && stage == strip->stage()) return strip;
@@ -961,9 +963,11 @@ GraphStrip* EditWindow::stripOn(const std::string& stage) {
 
 // Values without a row on their tab: they are set in the tab's graphs alone, which carry their reset icons (client,
 // 2026-11-13: "the attack and release slider can go, make a small reset icon in the graph", and so on until the
-// Compressor tab had no slider left; then the MB Compressor: "no sliders, everything in the graph").
+// Compressor tab had no slider left; then the MB Compressor: "no sliders, everything in the graph"; then "make the
+// same for the leveller").
 bool EditWindow::inGraphs(int param) const {
-    return (compGraphs_.hwnd() && compGraphs_.owns(param)) || (mbGraphs_.hwnd() && mbGraphs_.owns(param));
+    return (levGraphs_.hwnd() && levGraphs_.owns(param)) || (compGraphs_.hwnd() && compGraphs_.owns(param)) ||
+           (mbGraphs_.hwnd() && mbGraphs_.owns(param));
 }
 
 // The graph strips: the values they draw, what their reset icons go back to, and the tooltips that name a value -

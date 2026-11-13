@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <cwchar>
+#include <utility>
 
 namespace ap {
 
@@ -222,7 +223,7 @@ void GraphStrip::layoutLegend(Legend& lg, const RECT& c, int titleW, int rightW)
     }
     const int item = nameW + px(8) + valueW + px(2), cell = item + iconW;
     int perLine = std::min(lg.count, std::max(1, (static_cast<int>(c.right) - cLeft - 2 * px(6) + between) / (cell + between)));
-    if (perLine == 3 && lg.count == 4) perLine = 2;
+    if (perLine == lg.count - 1 && lg.count >= 4) perLine = (lg.count + 1) / 2;
     const int top = cTop + textH_ + px(5), lines = (lg.count + perLine - 1) / perLine;
     for (int j = 0; j < lg.count; ++j) {
         const int x = cLeft + px(6) + (j % perLine) * (cell + between), y = top + (j / perLine) * rowH;
@@ -383,6 +384,26 @@ void GraphStrip::drawMark(Gdiplus::Graphics& g, int id, double x, double y) {
                   static_cast<REAL>(2 * mr));
     if (id >= 0 && id < static_cast<int>(mark_.size()))
         mark_[static_cast<size_t>(id)] = {static_cast<LONG>(x + 0.5), static_cast<LONG>(y + 0.5)};
+}
+
+void GraphStrip::lineAround(Gdiplus::Graphics& g, const Gdiplus::Pen& pen, bool upright, double at, double from,
+                            double to, const std::vector<RECT>& names) const {
+    std::vector<std::pair<double, double>> cut;
+    for (const RECT& r : names) {
+        const double l = r.left - px(3), t = r.top, rr = r.right + px(3), b = r.bottom;
+        if (upright ? at >= l && at <= rr : at >= t + px(3) && at <= b - px(2))
+            cut.push_back(upright ? std::make_pair(t, b) : std::make_pair(l, rr));
+    }
+    std::sort(cut.begin(), cut.end());
+    auto stretch = [&](double a, double b) {
+        if (b - a < px(4)) return;
+        g.DrawLine(&pen, upright ? pt(at, a) : pt(a, at), upright ? pt(at, b) : pt(b, at));
+    };
+    for (const auto& c : cut) {
+        stretch(from, std::min(c.first, to));
+        from = std::max(from, c.second);
+    }
+    stretch(from, to);
 }
 
 // GdiAlphaBlend: gdi32's own.

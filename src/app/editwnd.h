@@ -7,6 +7,7 @@
 #pragma once
 
 #include "compgraph.h"
+#include "levgraph.h"
 #include "mbgraph.h"
 #include "settings.h"
 #include "stages.h"
@@ -35,8 +36,8 @@ public:
     void show(HWND owner, const std::string& preset, int deck, const std::string& tab = {});
     // Values or presets changed elsewhere (the main window's bass sliders).
     void refresh();
-    // The graphs of the Compressor and MB Compressor tabs (compgraph.h, mbgraph.h) draw the audio of the deck the window was opened from behind their
-    // curves: where it comes from (the analysis window's source; null: no live audio), and the owner's timer.
+    // The graphs of the Leveller, Compressor and MB Compressor tabs (levgraph.h, compgraph.h, mbgraph.h) draw the
+    // audio of the deck the window was opened from behind their curves: where it comes from (the analysis window's source; null: no live audio), and the owner's timer.
     void setLive(const AnalysisSource* source) {
         live_ = source;
         for (GraphStrip* s : strips()) s->setLive(source, deck_);
@@ -122,9 +123,10 @@ private:
     std::vector<Row> rows_;
     bool filling_ = false;
     // The tabs whose values are set in graphs: a strip between the tab's rows and the text under them.
+    LevellerGraphs levGraphs_;
     CompressorGraphs compGraphs_;
     MbGraphs mbGraphs_;
-    std::vector<GraphStrip*> strips() { return {&compGraphs_, &mbGraphs_}; }
+    std::vector<GraphStrip*> strips() { return {&levGraphs_, &compGraphs_, &mbGraphs_}; }
     GraphStrip* stripOn(const std::string& stage); // the strip of that tab (created), or null
     bool inGraphs(int param) const;                // set in a strip alone: no row on its tab
     const AnalysisSource* live_ = nullptr;

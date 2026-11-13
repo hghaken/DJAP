@@ -784,6 +784,31 @@ the pointer or the split the pointer is on; a split steps to the next value its 
 logarithmic scale often is the same value). 21 tooltip rectangles. Not built: a value typed in (as on the Compressor
 tab).
 
+The Leveller tab followed (client, the same day: "make the same for the leveller"; and while it was being built: "use
+horizontal and vertical lines here too"): `levgraph.*` (`LevellerGraphs`), the tab keeps its switch alone. **Level and
+gain** - the last 30 s of the deck from the 0.1 s history (`DeckAnalysis::history`), all in dB to the level the chain
+brings the output to (target + input gain + output gain): grey the output's momentary loudness with the leveller's
+gain taken out (the music as it would come out without the leveller - what the leveller's detector measures), orange
+the gain itself around the target's line (so grey + orange = what comes out, and the gain mirrors the music), a line
+for the 3 s average of what comes out, and the gain now as a number ("quiet" before it: `mfQuiet`). Five values are
+lines in it: the range's two level lines (either sets it), the window's band around the target (either edge, or its
+mark), the hold line under the target (shaded under it), "after silence" as a level line on the gain's scale (dragged
+under the target's line: hold - its mark then stands 2 dB under the target, without a line), and the quiet wait as an
+upright line that long before "now" (the time axis is the history's), with a thick stretch on the hold line. The
+hold line is compared with the output here, the stage compares its own output's level: close, not the same.
+"After silence" is 12 dB by default and so is the range: the two lines lie on each other, and the one whose mark and
+name are nearer is taken (left / right of the middle between the marks). Names at the lines, lines give way to names
+(`GraphStrip::lineAround`, moved there from the MB strip); a legend of five in the header (`Legend::kMax` 6; five
+that do not fit on one line go three and two). **Attack**, **Release**, **Speed** - the leveller's gain moves at a
+steady number of dB per second, so the graphs are ramps, not the compressor's exponentials: an example difference
+(10 dB too loud, 10 dB too soft; for the speed 3 dB too loud - not yet "clearly" too loud, which is more than 3 dB)
+closing at max(10 / attack, speed) dB/s, at max(10 / release, speed) and at the speed, on one logarithmic time axis
+0.15 .. 40 s (the times span 0.2 .. 20 s; the straight ramp is bent by it); the upright line at the time is the
+value (the speed: 3 dB / time), taken anywhere along it. Left out of the ramps: the last 0.5 / 1 dB of a fast move
+go at the speed. The wheel: over a small graph its value, over a legend item that value; the three times step by
+the parameter's step (their sliders are logarithmic). 22 tooltip rectangles. Processor use of the test instance on
+this tab: 3 - 6 % of a core.
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its
