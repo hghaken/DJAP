@@ -657,6 +657,31 @@ threshold: it should fill in the pauses, not while the music plays.
 | Side-chain high-pass | Hz | off, 40 .. 200 | 150 | Bass below this does not make the compressor work, so a heavy kick does not pull the whole mix down with every beat ("pumping"). Lower it only if you want the compressor to follow the bass. |
 | Make-up | dB | auto, 0 .. 12 | auto | Gain after compression. Auto keeps the target level unchanged. |
 
+![The Compressor tab: its values and, under them, the five graphs](images/compressor.jpg)
+
+Under the Compressor tab's values, five graphs show what those values do - with the music of the deck the window was
+opened from drawn behind them. The orange round marks can be dragged; the sliders follow, and the other way round.
+
+- **Curve** - the level going in (to the right) against the level coming out (up). Under the threshold the line is
+  straight; above it, it bends: flatter with a higher Ratio, rounder with a wider Knee (the shaded band). The grey
+  bars show where the music's level was in the last seconds and the white dot where it is now, with an orange stroke
+  for how much it is turned down at this moment. Marks: the Threshold (left and right), the Ratio (up and down, at
+  the right end) and the Make-up (up and down, at the left; all the way down is auto).
+- **Attack** - a hit 10 dB over the threshold in its first 150 ms: dashed as it comes in, the line as it comes out.
+  What is above the line before the mark still gets through - the punch.
+- **Release** - the gain on the rest of the music after that hit: still down when the hit ends, back after the
+  release time. If it is back before the next beat, the music goes up and down with every beat (pumping); with a
+  long release it stays down and is smooth.
+- **Level and reduction** - the last 4 seconds: the level at the compressor (grey), what it lets out (the line) and,
+  from the top, how much it turns down (orange, with the largest reduction as a number). The dashed line is the
+  threshold.
+- **Side chain** - the music's spectrum (grey) and the part of it the compressor listens to (coloured): what the
+  Side-chain high-pass leaves of the bass. Drag the mark to the left and the kick turns coloured - the compressor
+  then follows it, and the Level graph shows the reduction with every beat.
+
+The graphs take the room the window has under the values and grow with it; in a narrow window they stand in two
+rows. Without audio on the deck the two live graphs say so and the others still show the values.
+
 **MB Compressor** - the multiband stage.
 
 | Value | Unit | Range | Default | What it does |

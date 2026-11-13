@@ -18,6 +18,7 @@ namespace ap {
 namespace {
 
 const wchar_t* const kClass = L"APEditWindow";
+const char* const kGraphStage = "Compressor"; // the tab with the graphs (compgraph.h)
 
 // The module the window classes belong to: the program, or the plug-in DLL (EditWindow::setModule).
 HINSTANCE g_module = nullptr;
@@ -414,6 +415,7 @@ bool askName(HWND owner, const std::wstring& title, const std::wstring& prompt, 
 void EditWindow::setModule(HINSTANCE instance) { g_module = instance; }
 
 void EditWindow::unregisterClasses() {
+    CompressorGraphs::unregisterClass(moduleInstance());
     if (g_editRegistered) UnregisterClassW(kClass, moduleInstance());
     if (g_askRegistered) UnregisterClassW(L"APAskName", moduleInstance());
     g_editRegistered = g_askRegistered = false;
@@ -429,6 +431,7 @@ EditWindow::~EditWindow() {
 void EditWindow::show(HWND owner, const std::string& preset, int deck, const std::string& tab) {
     deck_ = deck;
     owner_ = owner;
+    graphs_.setLive(live_, deck_);
     if (!hwnd_) {
         HINSTANCE inst = moduleInstance();
         if (!g_editRegistered) {
@@ -454,6 +457,11 @@ void EditWindow::show(HWND owner, const std::string& preset, int deck, const std
     if (!tab.empty() && std::find(tabStages_.begin(), tabStages_.end(), tab) != tabStages_.end()) selectTab(tab);
     ShowWindow(hwnd_, placement::showCommand(hwnd_));
     SetForegroundWindow(hwnd_);
+}
+
+// The Compressor tab's graphs follow the audio (the owner's timer, 20 times a second).
+void EditWindow::tick() {
+    if (hwnd_ && !colour() && tab_ == kGraphStage && IsWindowVisible(hwnd_)) graphs_.refresh();
 }
 
 void EditWindow::refresh() {
@@ -588,6 +596,15 @@ void EditWindow::createControls() {
     metal_.makeTabs(tabs_);
     theme::makeCombo(preset_);
     tips_.create(hwnd_);
+    if (!colour()) { // the Compressor tab's graphs: a dragged mark is a changed value
+        graphs_.create(hwnd_, inst, dpi_);
+        graphs_.setLive(live_, deck_);
+        graphs_.onEdit([this](int param, double value, bool save) {
+            if (setValue(param, value, save)) updateRows();
+        });
+        for (int i = 0; i < CompressorGraphs::kPanels; ++i)
+            tips_.addRect(graphs_.hwnd(), static_cast<UINT_PTR>(i + 1), CompressorGraphs::panelTip(i));
+    }
     tips_.add(tabs_, L"One tab per stage: every value of the stage as a slider, with its value (type one in and press "
                      L"Enter), its unit, a reset button and what it does.");
     if (colour()) {
@@ -662,6 +679,7 @@ void EditWindow::createRows() {
 }
 
 void EditWindow::setFonts() {
+    graphs_.setDpi(dpi_);
     for (HFONT f : {font_, bold_, symbol_})
         if (f) DeleteObject(f);
     NONCLIENTMETRICSW ncm{};
@@ -755,8 +773,13 @@ int EditWindow::place(int cw, int ch, const std::string& stage, bool move) {
         minH[r] = std::max(px(24), std::max(nameH[r], textH[r]) + px(8));
         extra += minH[r] - px(24);
     }
-    const int avail = ch - y - m - below - extra;
-    const int rowH = !move ? px(24) : n ? std::min(px(36), std::max(px(24), avail / static_cast<int>(n))) : px(36);
+    // the Compressor tab's graphs sit between the rows and that text: at least their smallest height, and whatever
+    // the window has left - so the rows stay close together there
+    const bool graphs = graphs_.hwnd() && stage == kGraphStage;
+    const int graphMin = graphs ? CompressorGraphs::minHeight(dpi_) + px(10) : 0;
+    const int avail = ch - y - m - below - extra - graphMin;
+    const int rowMax = graphs ? px(26) : px(36);
+    const int rowH = !move ? px(24) : n ? std::min(rowMax, std::max(px(24), avail / static_cast<int>(n))) : rowMax;
     const int ctl = std::min(rowH - px(4), px(26));
     for (size_t r = 0; r < rows_.size(); ++r) {
         if (!shownOn(r, stage)) continue;
@@ -781,6 +804,17 @@ int EditWindow::place(int cw, int ch, const std::string& stage, bool move) {
         y += rh;
     }
     y += px(10);
+    if (graphs) {
+        const int room = ch - (y + below - px(10) + m) - px(10); // what is left under the rows and the text
+        const int gh = move ? std::max(CompressorGraphs::minHeight(dpi_), room) : CompressorGraphs::minHeight(dpi_);
+        if (move) {
+            MoveWindow(graphs_.hwnd(), m, y, W, gh, FALSE);
+            for (int i = 0; i < CompressorGraphs::kPanels; ++i)
+                tips_.setRect(graphs_.hwnd(), static_cast<UINT_PTR>(i + 1), graphs_.panelRect(i));
+        }
+        y += gh + px(10);
+    }
+    if (move && graphs_.hwnd()) ShowWindow(graphs_.hwnd(), graphs ? SW_SHOWNA : SW_HIDE);
     if (move) {
         soundLine_ = {m, y, m + W, y + px(2)}; // drawn in WM_PAINT
         MoveWindow(soundTitle_, m, y + px(10), W, soundTitleH, FALSE);
@@ -894,6 +928,8 @@ void EditWindow::select(const std::string& preset) {
 
 void EditWindow::updateRows() {
     for (size_t r = 0; r < rows_.size(); ++r) updateRow(r);
+    if (!colour())
+        if (const Preset* p = settings_.find(current_, kind_)) graphs_.setValues(p->values);
 }
 
 // Slider, value, bold when it differs from its reset value, the reset button only then.

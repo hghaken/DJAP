@@ -791,6 +791,7 @@ void Plugin::openEditor(bool colour, HWND owner, const std::string& tab) {
         e->setDeckName(L"this plug-in");
         const std::wstring deck = L"DJAP Deck " + std::to_wstring(slot_); // the deck, not the preset (client, 2026-10-30)
         e->setWindowTitle((colour ? L"Settings EQ: " : L"Settings Loudness: ") + deck);
+        if (!colour) e->setLive(editorLive_);
     }
     const std::string& chosen = colour ? settings_.deck[0].colour : settings_.deck[0].preset;
     e->show(owner, chosen.empty() ? std::string(colour ? "Neutral" : "Medium") : chosen, 0, tab);

@@ -93,6 +93,15 @@ public:
     // window is open (closeEditors when it closes).
     void openEditor(bool colour, HWND owner, const std::string& tab = {});
     void closeEditors();
+    // The loudness window's Compressor graphs: whose audio they draw (the plug-in's window, while it is open) and
+    // that window's timer.
+    void setEditorLive(const AnalysisSource* source) {
+        editorLive_ = source;
+        if (editor_) editor_->setLive(source);
+    }
+    void tickEditors() {
+        if (editor_) editor_->tick();
+    }
     void viewClosed(PluginView* view);
     static ParamValue normalizedOf(int p, double plain);
     int slot() const { return slot_; } // this instance's number in the process (1 = the first one open)
@@ -136,6 +145,7 @@ private:
     PresetValues applied_{}; // chosenValues() when last taken over: edited() takes only what changed since
     std::filesystem::path ini_;
     std::unique_ptr<EditWindow> editor_, colourEditor_;
+    const AnalysisSource* editorLive_ = nullptr;
 
     // audio side
     DeckProcessor deck_;

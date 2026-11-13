@@ -6,6 +6,7 @@
 // window, owned by the main window; the same window edits colour presets (tabs Tone, Auto tone, Sub bass, Contour).
 #pragma once
 
+#include "compgraph.h"
 #include "settings.h"
 #include "stages.h"
 #include "theme.h"
@@ -33,6 +34,13 @@ public:
     void show(HWND owner, const std::string& preset, int deck, const std::string& tab = {});
     // Values or presets changed elsewhere (the main window's bass sliders).
     void refresh();
+    // The Compressor tab's graphs (compgraph.h) draw the audio of the deck the window was opened from behind their
+    // curves: where it comes from (the analysis window's source; null: no live audio), and the owner's timer.
+    void setLive(const AnalysisSource* source) {
+        live_ = source;
+        graphs_.setLive(source, deck_);
+    }
+    void tick();
     HWND hwnd() const { return hwnd_; }
     // What the window calls deck A (the plug-in: "this plug-in").
     void setDeckName(const std::wstring& name) { deckA_ = name; }
@@ -110,6 +118,8 @@ private:
     std::string tab_;                    // the stage shown
     std::vector<Row> rows_;
     bool filling_ = false;
+    CompressorGraphs graphs_; // on the Compressor tab, between its rows and the text under them
+    const AnalysisSource* live_ = nullptr;
 };
 
 // Asks for a preset name in a small modal window. Returns false when cancelled.

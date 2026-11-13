@@ -205,7 +205,10 @@ void PluginView::detach() {
 }
 
 void PluginView::teardown() {
-    if (plugin_) plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
+    if (plugin_) {
+        plugin_->closeEditors(); // they belong to this window (and their classes go with the last one)
+        plugin_->setEditorLive(nullptr);
+    }
     aboutWnd_.close();                    // likewise (its owner is the host's window, not this one)
     graphsWnd_.close();                   // likewise
     spectrumWnd_.close();
@@ -289,6 +292,7 @@ tresult PLUGIN_API PluginView::attached(void* parent, FIDString type) {
     // About: the plug-in's (not modal; Download opens the release's page - the plug-in runs inside the DJ software
     // and the setup needs an administrator: it is not started from here)
     // Graphs: a click on a step of the chain opens its tab, as in the program
+    plugin_->setEditorLive(&graphsSource_); // the loudness window's Compressor graphs draw this deck's audio
     graphsWnd_.onOpenStage([this](int, const std::string& stage, bool colour) {
         if (plugin_ && hwnd_) plugin_->openEditor(colour, GetAncestor(hwnd_, GA_ROOT), stage);
     });
@@ -355,6 +359,7 @@ LRESULT PluginView::handle(UINT msg, WPARAM wp, LPARAM lp) {
         meters();
         graphsWnd_.refresh(); // after meters(): it read the deck's rings
         spectrumWnd_.refresh();
+        if (plugin_) plugin_->tickEditors(); // the loudness window's Compressor graphs
         setupWnd_.refresh();
         if (++ticks_ % 20 == 0) { // once a second: the update line (another window may have started the check)
             aboutWnd_.refresh();

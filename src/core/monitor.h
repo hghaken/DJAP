@@ -86,6 +86,17 @@ struct DeckAnalysis {
     WaveScope scopeIn, scopeOut;
     // the history oldest first
     const Point& at(int i) const { return history[static_cast<size_t>((historyPos + i) % kHistory)]; }
+    // The compressor of the last 5 s, a point per meter record (10 ms): its detector's level (the scale of its
+    // threshold) and its reduction - what the loudness window's Compressor tab draws behind its graphs (client,
+    // 2026-11-13: "maybe show the live audio in the background"). The 0.1 s history above is too coarse for that.
+    static constexpr int kComp = 512;
+    struct CompPoint {
+        float in = static_cast<float>(kFloorDb), reduction = 0.0f; // LUFS scale; dB >= 0
+    };
+    std::vector<CompPoint> comp = std::vector<CompPoint>(kComp); // ring
+    int compPos = 0;
+    long long compCount = 0; // points written so far
+    const CompPoint& compAt(int i) const { return comp[static_cast<size_t>((compPos + i) % kComp)]; } // oldest first
 };
 
 class DeckMonitor {

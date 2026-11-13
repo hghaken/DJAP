@@ -3,6 +3,7 @@
 // on changes, deck independence and latency through renderOffline, CPU, and the shipped presets (handbook 11, 16).
 #include "check.h"
 #include "deckrun.h"
+#include "monitor.h"
 #include "render.h"
 
 #include <atomic>
@@ -467,6 +468,44 @@ void volume() {
         CHECK(first[0] > 3.0);  // the fault: it comes back far too loud
         CHECK(worst[1] < 1.0);  // told: as if it had played on
     }
+}
+
+// ---- the monitor's history of the compressor (the loudness window's Compressor graphs) ----
+
+// A point per meter record (10 ms): the detector's level on the threshold's scale and the reduction. A 1 kHz tone at
+// -4 dBFS is -4.69 on that scale, 9.31 over a threshold of -14: at 4:1 it is turned down 6.98 dB.
+void monitorCompressor() {
+    std::printf("-- monitor: the compressor's level and reduction per meter record\n");
+    PresetValues v = allOff();
+    v[pCompOn] = 1;
+    v[pTarget] = -14;
+    v[pCompThreshold] = 0;
+    v[pCompRatio] = 4;
+    v[pCompKnee] = 0;
+    v[pCompSideHpf] = 0;
+    v[pCompMakeup] = 0;
+    DeckProcessor d;
+    d.prepare(fs);
+    DeckControl ctl;
+    d.publish(makeDeckConfig(v, ctl, fs));
+    DeckMonitor monitor;
+    CHECK(monitor.analysis().compCount == 0);
+    Buffer l = sig::sine(fs, 1000, -4, 2.0), r = l;
+    const size_t block = 480;
+    for (size_t pos = 0; pos + block <= l.size(); pos += block) {
+        d.process(l.data() + pos, r.data() + pos, static_cast<int>(block));
+        monitor.poll(d, fs, 0.01);
+    }
+    const DeckAnalysis& a = monitor.analysis();
+    const DeckAnalysis::CompPoint& last = a.compAt(DeckAnalysis::kComp - 1);
+    std::printf("   %lld points in 2 s; the newest: level %.2f, reduction %.2f dB\n", a.compCount, last.in, last.reduction);
+    CHECK(a.compCount >= 198 && a.compCount <= 200);
+    CHECK_NEAR(last.in, -4.69, 0.1);
+    CHECK_NEAR(last.reduction, 6.98, 0.1);
+    // oldest first: the point before the newest is the one of 10 ms earlier, the same settled values
+    CHECK_NEAR(a.compAt(DeckAnalysis::kComp - 2).reduction, 6.98, 0.1);
+    // a slot not written yet reads as silence
+    CHECK(a.compAt(0).in <= -100.0 && a.compAt(0).reduction == 0.0f);
 }
 
 // ---- fade-out before a stream stops (startFadeOut) ----
@@ -1245,6 +1284,7 @@ int main(int argc, char** argv) {
         bypassExact();
         neutralExact();
         volume();
+        monitorCompressor();
         fadeOut();
         badInput();
         mxcsrRestored();

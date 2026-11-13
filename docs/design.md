@@ -645,6 +645,31 @@ the deck the window was opened from to the new preset; deleting a preset moves i
 window (`editwnd` with the colour kind, "Edit..." beside the colour choice) is the same window for colours: no stage switches, and
 deleting a colour moves its decks to Neutral.
 
+The Compressor tab's graphs (`compgraph.*`; client, 2026-11-13: "turn these sliders into a graphical view, so it is
+clearer what they do to the audio - maybe the live audio in the background", then "build them all, as compact as
+possible so they fit in the compressor screen, sizable", "the make-up too"): one custom-drawn child window between
+the tab's rows and the text under them, five panels - the curve (in against out, LU to the level the threshold is
+relative to, -30 .. +18: the threshold goes to +15; the knee as a band, the make-up in the curve's height, a histogram
+of the last 5 s of the compressor's level, a trail of the last 0.5 s and the working point with its reduction), the
+attack (a hit 10 dB over the threshold, its first 150 ms, in against out), the release (the gain after that hit,
+1.1 s), the level and the reduction of the last 4 s, and the side chain (the deck's input spectrum and that spectrum
+through the side chain's high-pass, the filter's curve over it). Six round marks are dragged with the mouse:
+threshold, ratio (the ratio that brings the curve's right end to the mouse, found by bisection) and make-up (under 0:
+auto) on the curve, attack, release, and the high-pass's corner (left of 34 Hz: off); a mark's value goes on one of
+its slider's positions and through the window's own `setValue` (heard at once, saved when the button is let go). The
+live data: `DeckAnalysis::comp`, a ring of the compressor's detector level and reduction per meter record (10 ms,
+5 s; the 0.1 s history was too coarse), and the spectrum the meter panel uses, through the analysis window's
+`AnalysisSource` - so the plug-in's loudness window has them too (its view hands the source to the plug-in's
+editors). Size: at least 132 px high (it never makes the window taller: the MB Compressor tab is the tallest), and
+whatever the window has left under the rows, which stay at 26 px there; a strip more than 1.9 times as tall as a
+panel is wide (a narrow window) gets two rows - curve, attack, release above, the two live ones below. Drawing: what
+does not move with the audio is drawn once (GDI+, anti-aliased) into a bitmap and again only when a value, the size
+or the DPI changes; each refresh (the owner's timer, 20 Hz) copies it and draws the live parts - the large areas as
+plain GDI polygons in colours blended beforehand. Drawn whole at every refresh the strip took 24 % of a processor
+core (27.8 % against 3.8 % with another tab in front, measured on a test instance); now it is within the noise of that
+measurement (6.6 % against 6.9 %). No tempo is known, so the release graph has no "next beat" line (the sketch had
+one). A tooltip per panel says what it shows.
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its

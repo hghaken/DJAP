@@ -110,6 +110,7 @@ add_executable(DJAP WIN32
     src/app/main.cpp
     src/app/mainwnd.cpp
     src/app/editwnd.cpp
+    src/app/compgraph.cpp
     src/app/audiodlg.cpp
     src/app/meterview.cpp
     src/app/bassctl.cpp

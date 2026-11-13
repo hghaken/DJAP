@@ -27,6 +27,9 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
             pin[0] = std::max(pin[0], r.peakIn[0]);
             pin[1] = std::max(pin[1], r.peakIn[1]);
             comp = std::max(comp, static_cast<double>(r.compressorDb));
+            a_.comp[static_cast<size_t>(a_.compPos)] = {r.compressorIn, r.compressorDb};
+            a_.compPos = (a_.compPos + 1) % DeckAnalysis::kComp;
+            ++a_.compCount;
             dess = std::max(dess, static_cast<double>(r.deEsserDb));
             clip = std::max(clip, static_cast<double>(r.clipperDb));
             lim = std::max(lim, static_cast<double>(r.limiterDb));
