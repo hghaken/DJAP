@@ -623,8 +623,8 @@ void EditWindow::createControls() {
                                 L"in and press Enter), its unit, a reset button and what it does."
                               : L"One tab per stage: every value of the stage as a slider, with its value (type one "
                                 L"in and press Enter), its unit, a reset button and what it does. The Leveller, "
-                                L"Compressor and MB Compressor tabs have graphs instead: their values are set in "
-                                L"them.");
+                                L"Noise, Compressor and MB Compressor tabs have graphs instead: their values are set "
+                                L"in them.");
     if (colour()) {
         tips_.add(preset_, L"The EQ preset shown in this window (opened on the deck's own): tone, auto tone, sub "
                            L"bass, loudness. Every change is saved at once and heard on every deck that uses it.");
@@ -966,8 +966,8 @@ GraphStrip* EditWindow::stripOn(const std::string& stage) {
 // Compressor tab had no slider left; then the MB Compressor: "no sliders, everything in the graph"; then "make the
 // same for the leveller").
 bool EditWindow::inGraphs(int param) const {
-    return (levGraphs_.hwnd() && levGraphs_.owns(param)) || (compGraphs_.hwnd() && compGraphs_.owns(param)) ||
-           (mbGraphs_.hwnd() && mbGraphs_.owns(param));
+    return (levGraphs_.hwnd() && levGraphs_.owns(param)) || (noiseGraphs_.hwnd() && noiseGraphs_.owns(param)) ||
+           (compGraphs_.hwnd() && compGraphs_.owns(param)) || (mbGraphs_.hwnd() && mbGraphs_.owns(param));
 }
 
 // The graph strips: the values they draw, what their reset icons go back to, and the tooltips that name a value -

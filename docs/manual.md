@@ -575,7 +575,7 @@ Below that, a **tab per stage**. A stage that is switched off says "(off)" on it
   as the decimal sign), the unit, a small **reset** button (back to the reset value; only enabled when the value
   differs, and its tooltip names the reset value) and a short explanation. A value in **bold** differs from its reset
   value: the shipped value of a shipped loudness preset, the value an own one was saved with. The row's tooltip has
-  the full explanation and the range. (The Leveller, Compressor and MB Compressor tabs have no rows but their
+  the full explanation and the range. (The Leveller, Noise, Compressor and MB Compressor tabs have no rows but their
   switch: their values are set in graphs, see below.)
 - Under the rows, what the stage does to the sound and what more or less of its values sounds like.
 
@@ -671,8 +671,43 @@ shipped loudness preset; switch it on for old or noisy recordings (tape hiss, vi
 
 It adds no delay. It sits right after the leveller, so the threshold means the same for a quiet and a loud song.
 Within about an octave of a split, loud music in one band also keeps the next band open - the hiss band closes under
-quiet music and in pauses, not under a full mix. Watch the **Noise** row in the meter panel (4.3) while setting the
-threshold: it should fill in the pauses, not while the music plays.
+quiet music and in pauses, not under a full mix. Watch the bands graph (below) or the **Noise** row in the meter
+panel (4.3) while setting the threshold: the bands should fall under it in the pauses, not while the music plays.
+
+![The Noise tab: the stage's switch and, under it, the four graphs](images/noise.jpg)
+
+The Noise tab has no sliders: only the stage's switch, and under it four graphs in which every value is set, with
+the music of the deck in them. Every value is a level line (drag it up or down) or an upright line (drag it left or
+right), taken anywhere along it or by its round mark; every line's name carries its value.
+
+- **Bands** - the noise reduction's bands over the music's spectrum (grey).
+  - The number of bands: **-** and **+** in the graph's top line - 4, or 1 for the whole sound.
+  - The **splits** are the upright dashed lines, each with its frequency: drag a line left or right. As on the MB
+    Compressor tab they keep their order and their distance, and a split that was changed gets a small arrow beside
+    its value that sets it back.
+  - The **Threshold** is the dashed level line, in LU to the target (the dotted line): drag it up or down.
+  - The thick line in each band is the band's level at this moment, on the threshold's scale. A band under the
+    threshold is turned down: orange shows how far, with the number. In a pause the bands fall to the bottom. With
+    the stage off there are no levels: the detector only runs when the stage is on.
+  - The legend in the top line lists Threshold, Depth and Ratio; the mouse wheel over one of them is one step, over
+    the graph it steps the split the pointer is on, else the threshold.
+- **Curve per band** - the gain a band gets (up) against its level (to the right, in LU to the target). Above the
+  threshold nothing happens; under it the band goes down, by Depth at most.
+  - **Threshold** is the upright line where the curve bends: drag it left or right.
+  - **Depth** is the level line of the floor: drag it up or down.
+  - **Ratio** is the level line through the slope 5 LU under the threshold: lower is steeper (1:10 nearly a gate).
+    When the depth cuts the slope off before that, the slope goes on dotted to the ratio's mark. Where the two level
+    lines lie on each other, the one whose mark is nearer is taken.
+  - The white dots are the bands at this moment, each with its number: its level, and the gain it has now - which
+    follows the level with the attack, the hold and the release.
+- **Attack** - a band that was turned down by Depth, when the music comes back (dashed): how fast it opens. Drag the
+  upright line, or turn the mouse wheel over the graph (0.5 ms). The time axis is logarithmic, 0.2 to 100 ms.
+- **Hold and release** - the music stops at the left edge: the band stays open for the Hold, then goes down by Depth
+  in the Release time. Drag either upright line; the mouse wheel over the graph steps the line nearer the pointer
+  (10 ms). The legend in the top line lists both. The time axis is logarithmic, up to 5 s.
+
+Reset: every value has a small arrow - behind its value in a legend, in the corner of the Attack graph, beside a
+changed split -, lit when the value differs from its reset value.
 
 **Compressor** - evens out the loud parts within a song.
 

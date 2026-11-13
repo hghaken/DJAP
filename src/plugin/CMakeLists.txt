@@ -27,6 +27,7 @@ smtg_add_vst3plugin(DJAPPlugin PACKAGE_NAME "DJAP" SOURCES_LIST
     ${CMAKE_SOURCE_DIR}/src/app/compgraph.cpp
     ${CMAKE_SOURCE_DIR}/src/app/graphstrip.cpp
     ${CMAKE_SOURCE_DIR}/src/app/levgraph.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/noisegraph.cpp
     ${CMAKE_SOURCE_DIR}/src/app/mbgraph.cpp
     ${CMAKE_SOURCE_DIR}/src/app/placement.cpp
     ${CMAKE_SOURCE_DIR}/src/app/appstate.cpp

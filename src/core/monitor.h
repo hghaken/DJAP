@@ -26,6 +26,9 @@ struct DeckMeters {
     double levellerDb = 0, compressorDb = 0, deEsserDb = 0, clipperDb = 0, limiterDb = 0;
     double noiseDb[kNoiseBands] = {};     // the noise reduction per band (band 1 alone when wide-band)
     double noiseMaxDb() const { return std::max(std::max(noiseDb[0], noiseDb[1]), std::max(noiseDb[2], noiseDb[3])); }
+    // each band's level at the noise reduction (the scale of its threshold), the power mean of the records since the
+    // last poll; kFloorDb while the stage does not run
+    double noiseIn[kNoiseBands] = {kFloorDb, kFloorDb, kFloorDb, kFloorDb};
     double densityDb[kMaxBands] = {};
     int bands = 0;
     double autoToneDb[4] = {};            // the auto tone's corrections now (bass, low-mid, presence, treble)

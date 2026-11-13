@@ -113,6 +113,7 @@ add_executable(DJAP WIN32
     src/app/compgraph.cpp
     src/app/graphstrip.cpp
     src/app/levgraph.cpp
+    src/app/noisegraph.cpp
     src/app/mbgraph.cpp
     src/app/audiodlg.cpp
     src/app/meterview.cpp

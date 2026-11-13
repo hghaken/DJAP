@@ -99,6 +99,17 @@ double compressorCurveDb(double x, double t, double ratio, double knee) {
     return t + over / ratio;                              // above
 }
 
+// dB under the threshold -> reduction: (ratio - 1) dB per dB, a quadratic knee around the threshold, at most depth.
+double noiseReductionDb(double under, double slope, double depth) {
+    constexpr double kKneeDb = 6.0;
+    double target = 0.0;
+    if (under >= 0.5 * kKneeDb)
+        target = slope * under;
+    else if (under > -0.5 * kKneeDb)
+        target = slope * (under + 0.5 * kKneeDb) * (under + 0.5 * kKneeDb) / (2.0 * kKneeDb);
+    return std::min(target, depth);
+}
+
 double softClip(double u) {
     const double knee = 0.5, m = std::fabs(u);
     if (m <= knee) return u;
@@ -387,7 +398,6 @@ struct DeckProcessor::DensityBank {
 // through the all-passes of the splits above them (a flat sum, as the density bank); 1 band: the gain on the signal.
 
 struct DeckProcessor::NoiseBank {
-    static constexpr double kKneeDb = 6.0;
     int bands = kNoiseBands;
     StereoBiquad2 lp[kNoiseSplits], hp[kNoiseSplits];
     StereoBiquad ap[kNoiseSplits]; // band 1: split 2, split 3; band 2: split 3
@@ -489,14 +499,7 @@ struct DeckProcessor::NoiseBank {
             const double ms = acc[b] / kControlBlock;
             acc[b] = 0.0;
             det[b] = toward(det[b], ms, c.noiseDet[bands == 1 ? 0 : b]);
-            // dB under the threshold -> reduction: (ratio - 1) dB per dB, a quadratic knee around the threshold
-            const double under = c.noiseThr - fastPowerToLufs(det[b]);
-            double target = 0.0;
-            if (under >= 0.5 * kKneeDb)
-                target = c.noiseSlope * under;
-            else if (under > -0.5 * kKneeDb)
-                target = c.noiseSlope * (under + 0.5 * kKneeDb) * (under + 0.5 * kKneeDb) / (2.0 * kKneeDb);
-            target = std::min(target, c.noiseDepth);
+            const double target = noiseReductionDb(c.noiseThr - fastPowerToLufs(det[b]), c.noiseSlope, c.noiseDepth);
             if (target <= red[b]) { // open (at the attack speed) or stay: the hold starts again
                 red[b] = toward(red[b], target, c.noiseAtt);
                 hold[b] = c.noiseHold;
@@ -1417,6 +1420,7 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             NoiseBank& nb = *noise_[noiseActive_];
             for (int b = 0; b < kNoiseBands; ++b) {
                 rec_.noiseDb[b] = running_[sNoise] && b < nb.bands ? static_cast<float>(nb.maxRed[b] * mix_[sNoise]) : 0.0f;
+                rec_.noiseIn[b] = running_[sNoise] && b < nb.bands ? static_cast<float>(fastPowerToLufs(nb.det[b])) : -120.0f;
                 nb.maxRed[b] = 0.0;
             }
             const DensityBank& bank = *banks_[activeBank_];

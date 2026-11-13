@@ -819,6 +819,30 @@ would meet another name, and in a small curve-per-band graph a name whose text w
 its line stands alone (the legend beside that graph has the value). The legends stay: they carry the reset icons
 and the wheel.
 
+The Noise tab followed (client, the same evening: "make a graphical view of the noise tab too"): `noisegraph.*`
+(`NoiseGraphs`), the tab keeps its switch alone. **Bands** - the deck's input spectrum behind (its own scale, as the
+MB strip), a frequency axis 20 Hz .. 20 kHz and a level axis -90 .. +6 LU to the working level (the threshold's
+scale; the dotted 0 line is called "target", as the threshold's row always said). The three splits are upright dashed
+lines with a mark at the top (left / right; the window's `enforceNoiseSplits` keeps them in order and apart), the
+threshold a level line with its mark at the left, shaded under it. Each band's level at this moment is a thick line
+across the band and what the stage takes off it an orange block under it with the number. Those levels are new in
+the meter record: `MeterRecord::noiseIn` - each band's detector level at the record's end (`fastPowerToLufs` of the
+bank's `det`, the value the stage compares with its threshold), -120 when the stage does not run - and
+`DeckMeters::noiseIn`, the power mean of the records since the last poll. Nothing in the audio path changed for it;
+the stage's rule moved into `noiseReductionDb` (deck.h) so that the graph draws the same curve (the same arithmetic
+in the same order: the deck stays bit-exact). The number of bands (1 or 4) with - and + in the header, and the legend
+of threshold, depth and ratio on that line (in columns under it where it does not fit) - the small curve panel keeps
+its height for the curve. **Curve per band** - the gain (up, -48 .. +6 dB) against a band's level (to the right,
+-90 .. +6 LU): the threshold an upright line through the bend, the depth the floor's level line, the ratio a level line
+through its mark on the slope 5 LU under the threshold (1:1.5 .. 1:10 = -2.5 .. -45 dB; dotted on under the floor
+where the depth cuts the slope off first). Where the depth's and the ratio's lines lie on each other the one whose
+mark is nearer is taken. A white dot per band: its level and its gain now (the gain lags the level by the attack,
+hold and release - shown, not hidden). **Attack** - the band, turned down by the depth, opening when the music comes
+back: a one-pole to 0 dB on a logarithmic axis 0.2 .. 100 ms. **Hold and release** - the music stops at the left: flat
+for the hold, then a one-pole down by the depth; the axis logarithmic in (ms + 20) up to 5 s, so a hold of 0 sits at
+the edge. Both upright lines are taken anywhere; the wheel steps the one nearer the pointer; a legend of the two in
+the header. Names carry their values throughout. 22 tooltip rectangles.
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its

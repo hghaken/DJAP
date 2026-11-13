@@ -148,6 +148,9 @@ DeckConfig makeDeckConfig(const PresetValues& values, const DeckControl& control
 
 // The soft-knee static curve of the compressor (Giannoulis, Massberg & Reiss 2012), in dB.
 double compressorCurveDb(double x, double threshold, double ratio, double knee);
+// The noise reduction's rule: how far (dB, >= 0) a band `under` dB under its threshold is turned down - `slope`
+// (ratio - 1) dB per dB with a 6 dB soft knee, at most `depth`. The deck and the Noise tab's graphs use it.
+double noiseReductionDb(double under, double slope, double depth);
 // Soft clipper curve, input scaled to the ceiling (1 = ceiling): straight to 0.5, then tanh towards 1.
 double softClip(double u);
 
@@ -183,6 +186,8 @@ struct MeterRecord {
     float compressorDb = 0;            // largest compressor reduction (dB, >= 0)
     float compressorIn = -120;         // compressor detector level at the record's end (same scale as compThr)
     float noiseDb[kNoiseBands] = {};   // largest noise reduction per band (band 0 only when wide-band)
+    float noiseIn[kNoiseBands] = {-120, -120, -120, -120}; // each band's detector level at the record's end (the
+                                                           // scale of the noise threshold; -120: not running)
     float densityDb[kMaxBands] = {};   // density band gains (dynamic part)
     float autoToneDb[4] = {};          // the auto tone's corrections now: bass, low-mid, presence, treble
     float deEsserDb = 0;               // largest de-esser reduction
