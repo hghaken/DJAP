@@ -421,6 +421,8 @@ bool askName(HWND owner, const std::wstring& title, const std::wstring& prompt, 
 
 void EditWindow::setModule(HINSTANCE instance) { g_module = instance; }
 
+std::wstring describePreset(const Preset& p, PresetKind kind) { return describe(p, kind); }
+
 void EditWindow::unregisterClasses() {
     GraphStrip::unregisterClass(moduleInstance());
     if (g_editRegistered) UnregisterClassW(kClass, moduleInstance());
@@ -1230,8 +1232,10 @@ void EditWindow::command(int id, int code) {
             placement::messageBox(hwnd_, fromUtf8(err).c_str(), colour() ? L"Save EQ as" : L"Save loudness preset as", MB_OK | MB_ICONWARNING);
             return;
         }
-        if (used(deck_) == current_) used(deck_) = name;
-        if (settings_.linkPresets && settings_.decks == 2) used(1 - deck_) = used(deck_); // both decks
+        // the deck that used it takes the new one - its sound with it (and every deck playing that sound)
+        if (used(deck_) == current_) settings_.setDeckPart(deck_, kind_, name);
+        if (settings_.linkPresets && settings_.decks == 2 && !settings_.chooseSound(1 - deck_, settings_.deck[deck_].sound))
+            used(1 - deck_) = used(deck_); // both decks
         current_ = name;
         onChange_(true, true);
         select(current_);

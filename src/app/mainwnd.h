@@ -16,6 +16,7 @@
 #include "audioio.h"
 #include "editwnd.h"
 #include "settings.h"
+#include "soundwnd.h"
 #include "spectrumwnd.h"
 #include "theme.h"
 #include "tooltips.h"
@@ -52,10 +53,12 @@ public:
     static UINT showMessage();
 
 private:
+    // A deck's strip: its sound list with Edit (the Sound window) took the place of the Loudness and EQ lists (client,
+    // 2026-11-13: "the current Loudness and EQ drop-downs in the main window go").
     struct Strip {
-        HWND title = nullptr, route = nullptr, presetLabel = nullptr, preset = nullptr, processing = nullptr, // bypass
-             edit = nullptr, meter = nullptr, graphs = nullptr; // graphs: opens the analysis window
-        HWND colourLabel = nullptr, colour = nullptr, editColour = nullptr;          // the deck's colour preset
+        HWND title = nullptr, route = nullptr, soundLabel = nullptr, sound = nullptr, processing = nullptr, // bypass
+             edit = nullptr, meter = nullptr, graphs = nullptr; // edit: the Sound window; graphs: the analysis window
+        HWND parts = nullptr;    // the sound's loudness preset and EQ, as text
         HWND routeOut = nullptr; // route = where the audio comes from, routeOut = where it goes (two lines)
     };
 
@@ -65,7 +68,8 @@ private:
     void setFonts();
     void layout();
     void command(int id, int code);
-    void fillPresets(int d); // and colours
+    void fillSounds(int d); // the deck's sound list (and an entry for parts no sound holds)
+    void chooseSound(int d, const std::string& sound); // a sound chosen for deck d (both decks when linked)
     void presetsChanged(bool listChanged, bool saveNow); // from a preset or colour window
     void applyDeck(int d);
     void refreshStrip(int d);
@@ -102,6 +106,7 @@ private:
     Tooltips tips_;
     theme::Metal metal_;
     EditWindow editor_, colourEditor_;
+    SoundWindow soundWindow_; // a deck's Edit button: its sound's loudness preset and EQ
     AudioWindow audioWindow_;
     HealthHistory healthHistory_; // a point per second, also while the Health window is closed
     HealthWindow healthWindow_;

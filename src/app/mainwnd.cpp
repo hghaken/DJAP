@@ -35,7 +35,7 @@ const UINT kVolumeMs = 15;
 const UINT kStartRetryMs = 5000;
 
 // control ids: deck d uses 1000 + 100 d + item
-enum Item { iPreset = 1, iProcessing, iEdit = 5, iColour, iEditColour, iGraphs, iMeter = 30 };
+enum Item { iSound = 1, iProcessing, iEdit = 5, iGraphs = 8, iMeter = 30 };
 int idOf(int d, int item) { return 1000 + 100 * d + item; }
 
 // commands of the right-click and notification-area menus (also sent by GUI tests: 100 setup, 102 exit, 103
@@ -97,6 +97,11 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
       editor_(settings, [this](bool listChanged, bool save) { presetsChanged(listChanged, save); }),
       colourEditor_(settings, [this](bool listChanged, bool save) { presetsChanged(listChanged, save); },
                     PresetKind::Colour),
+      soundWindow_(settings, [this](bool listChanged) { presetsChanged(listChanged, true); },
+                   [this](PresetKind kind, const std::string& preset, int d) {
+                       if (kind == PresetKind::Colour) colourEditor_.show(hwnd_, preset, d);
+                       else editor_.show(hwnd_, preset, d);
+                   }),
       audioWindow_(settings, audio, [this] {
           // the user changed the audio (a device, Start, Stop): the message of the start at program start no longer
           // holds - it stayed on after the device had been chosen again (client, 2026-10-27); a retry still under way
@@ -126,6 +131,7 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
                           refreshStrip(1);
                           editor_.refresh();
                           colourEditor_.refresh();
+                          soundWindow_.refresh();
                       }),
       spectrumWindow_(spectrumSource_) {
     editor_.setLive(&graphs_); // the Compressor tab's graphs draw the deck's audio
@@ -142,17 +148,31 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
 }
 
 std::wstring MainWindow::Graphs::title(int d) const {
+    const DeckSettings& k = settings_.deck[d];
     return (settings_.decks == 1 ? L"Channel" : d == 0 ? L"Deck A" : L"Deck B") + std::wstring(L"   ") +
-           fromUtf8(settings_.deck[d].preset);
+           (k.sound.empty() ? L"" : fromUtf8(k.sound) + L": ") + fromUtf8(k.preset) + L", " + fromUtf8(k.colour);
 }
 
+// After a change in a preset, EQ or sound window: saved (not while a slider is dragged), the lists filled again when
+// names changed, the decks applied - a sound's new part is heard at once.
 void MainWindow::presetsChanged(bool listChanged, bool saveNow) {
-    if (saveNow) save(); // not while a slider is dragged
+    if (saveNow) save();
     if (listChanged) {
-        fillPresets(0);
-        fillPresets(1);
+        fillSounds(0);
+        fillSounds(1);
     }
     applyAll();
+    soundWindow_.refresh();
+}
+
+void MainWindow::chooseSound(int d, const std::string& sound) {
+    if (!settings_.chooseSound(d, sound)) return;
+    if (linked()) settings_.chooseSound(1 - d, sound); // both decks
+    save();
+    applyAll(); // the other strip too
+    editor_.refresh();
+    colourEditor_.refresh();
+    soundWindow_.refresh();
 }
 
 bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
@@ -518,16 +538,14 @@ void MainWindow::createControls() {
         s.processing = make(L"BUTTON", L"Bypass Off",BS_OWNERDRAW | WS_TABSTOP, idOf(d, iProcessing));
         // "Analysis", the window's name (client, 2026-10-30; was "Graphs")
         s.graphs = make(L"BUTTON", L"Analysis", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iGraphs));
-        s.presetLabel = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
-        s.preset = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iPreset));
+        s.soundLabel = make(L"STATIC", L"Sound", SS_LEFT | SS_CENTERIMAGE, 0);
+        s.sound = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iSound));
         s.edit = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iEdit));
-        s.colourLabel = make(L"STATIC", L"EQ", SS_LEFT | SS_CENTERIMAGE, 0);
-        s.colour = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idOf(d, iColour));
-        s.editColour = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idOf(d, iEditColour));
-        for (HWND b : {s.processing, s.graphs, s.edit, s.editColour}) theme::makeButton(b);
-        for (HWND c : {s.preset, s.colour}) theme::makeCombo(c);
+        s.parts = make(L"STATIC", L"", SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS | SS_NOPREFIX | SS_NOTIFY, 0);
+        for (HWND b : {s.processing, s.graphs, s.edit}) theme::makeButton(b);
+        theme::makeCombo(s.sound);
         s.meter = createMeterView(hwnd_, idOf(d, iMeter));
-        fillPresets(d);
+        fillSounds(d);
     }
     // (its own tooltip shows the whole line when it does not fit - tenth outside review: a message at its end was cut)
     status_ = CreateWindowExW(0, STATUSCLASSNAMEW, L"", WS_CHILD | WS_VISIBLE | SBARS_SIZEGRIP | SBARS_TOOLTIPS, 0, 0,
@@ -539,11 +557,14 @@ void MainWindow::createControls() {
         for (HWND h : {s.route, s.routeOut})
             tips_.add(h, L"Where this deck's audio comes from (In) and where it goes (Out). Change it in Setup (right-click "
                          L"the window). With linked presets (Setup) deck A's controls count for both decks.");
-        tips_.add(s.preset,
-                  L"The loudness preset this deck uses: the target loudness and every stage's values. Shipped: Gentle -18, "
-                  L"Light -16, Medium -14, Loud -12, Very Loud -10 LUFS; FM Station -13 (dense, the sound of FM radio), DAB+ "
-                  L"-23 (EBU R 128, wide dynamics), Web Stream -16 (-2 dBTP for MP3 / AAC); your own follow. A new choice is "
-                  L"heard at once, without a click. With linked presets (Setup) both decks change.");
+        tips_.add(s.sound,
+                  L"The sound this deck plays: a loudness preset (the target loudness and every stage's values) with an "
+                  L"EQ, under one name. Shipped, from quiet to loud: Leeuwarden (DAB+, Neutral), Den Haag (Gentle, "
+                  L"Warm), Middelburg (Gentle, Quiet), Haarlem (Light, Vocal), Maastricht (Light, Oldies), Assen (Web "
+                  L"Stream, Less mid), Utrecht (Medium, Auto), Lelystad (Medium, Neutral), Arnhem (FM Station, Bright), "
+                  L"Zwolle (Loud, Bass+), 's-Hertogenbosch (Loud, Warm), Groningen (Very Loud, Bass+); your own follow. A "
+                  L"new choice is heard at once, without a click. With linked presets (Setup) both decks change.");
+        tips_.add(s.parts, L"The sound's loudness preset and EQ. Edit... sets them apart, and opens their windows.");
         tips_.add(s.processing,
                   L"Bypass Off (green): the deck runs through its chain.\nBypass On (red): the input goes out "
                   L"unchanged (bit-exact), delayed by the same limiter look-ahead, so switching never shifts the sound "
@@ -552,16 +573,9 @@ void MainWindow::createControls() {
                   L"Opens the analysis window: for each deck the signal chain step "
                   L"by step, the compressor's curve, loudness and gains of the last 60 s, the goniometer with "
                   L"correlation and stereo width.");
-        tips_.add(s.colour,
-                  L"The EQ this deck uses, on top of its loudness preset: tone (bass, low-mid, presence, treble), auto "
-                  L"tone (each song's balance pulled towards a modern reference), sub bass and a contour (more bass and highs for quiet listening). "
-                  L"Neutral changes nothing; Warm, Bass+, Less mid, Bright, Vocal: a fixed tone; Oldies: auto tone "
-                  L"and a little sub bass for thin old recordings; Auto: only the auto tone; Quiet: the contour "
-                  L"for quiet listening. Your own EQs follow.");
-        tips_.add(s.editColour, L"Opens the EQ window: every value of this deck's EQ; Save as, Rename, Delete "
-                                L"and Reset.");
-        tips_.add(s.edit, L"Opens the loudness window: the nine stage switches and every value of this deck's loudness preset "
-                          L"with its unit, range and meaning; Save as, Rename, Delete and Reset.");
+        tips_.add(s.edit, L"Opens the Sound window: this deck's sound with its loudness preset and EQ, each with its "
+                          L"list and an Edit button (the loudness window: the stage switches and every value; the EQ "
+                          L"window); Save as, Rename, Delete and Reset of the sound.");
     }
 }
 
@@ -581,9 +595,7 @@ void MainWindow::setFonts() {
     };
     for (Strip& s : strips_) {
         set(s.title, bold_);
-        for (HWND h : {s.route, s.routeOut, s.presetLabel, s.preset, s.colourLabel, s.colour, s.processing, s.graphs, s.edit,
-                       s.editColour})
-            set(h, font_);
+        for (HWND h : {s.route, s.routeOut, s.soundLabel, s.sound, s.parts, s.processing, s.graphs, s.edit}) set(h, font_);
     }
     set(status_, font_);
 }
@@ -619,22 +631,17 @@ void MainWindow::layout() {
         MoveWindow(s.graphs, x0 + stripW - bypassW - gap - graphsW, y, graphsW, rowH, TRUE);
         MoveWindow(s.processing, x0 + stripW - bypassW, y, bypassW, rowH, TRUE);
         y += rowH + gap;
-        // Preset [....] [Edit...]  Colour [....] [Edit...]
-        const int labelW = px(48), colourLabelW = px(26), editW = px(70); // "EQ" (was "Colour", 50 px)
-        const int combos = stripW - labelW - colourLabelW - 2 * editW - 5 * gap - px(10);
-        const int presetW = combos / 2, colourW = combos - presetW;
+        // Sound [....] [Edit...]  Loudness preset, EQ
+        const int labelW = px(48), editW = px(70);
+        const int soundW = std::max(px(140), (stripW - labelW - editW - 3 * gap) * 11 / 20);
         int x = x0;
-        MoveWindow(s.presetLabel, x, y, labelW, rowH, TRUE);
+        MoveWindow(s.soundLabel, x, y, labelW, rowH, TRUE);
         x += labelW + gap;
-        MoveWindow(s.preset, x, y, presetW, px(300), TRUE);
-        x += presetW + gap;
+        MoveWindow(s.sound, x, y, soundW, px(400), TRUE);
+        x += soundW + gap;
         MoveWindow(s.edit, x, y, editW, rowH, TRUE);
-        x += editW + gap + px(10);
-        MoveWindow(s.colourLabel, x, y, colourLabelW, rowH, TRUE);
-        x += colourLabelW + gap;
-        MoveWindow(s.colour, x, y, colourW, px(300), TRUE);
-        x += colourW + gap;
-        MoveWindow(s.editColour, x, y, editW, rowH, TRUE);
+        x += editW + gap + px(4);
+        MoveWindow(s.parts, x, y, std::max(0, x0 + stripW - x), rowH, TRUE);
         y += rowH + gap; // = meterTop()
         MoveWindow(s.meter, x0, y, stripW, rc.bottom - statusH - m - y, TRUE);
     }
@@ -645,13 +652,17 @@ void MainWindow::layout() {
     RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
 }
 
-void MainWindow::fillPresets(int d) {
-    HWND c = strips_[d].preset;
+// The sounds, and - for a deck whose two parts no sound holds - one more entry with those two, chosen.
+void MainWindow::fillSounds(int d) {
+    HWND c = strips_[d].sound;
+    if (!c) return;
     SendMessageW(c, CB_RESETCONTENT, 0, 0);
-    for (const Preset& p : settings_.presets) SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(fromUtf8(p.name).c_str()));
-    c = strips_[d].colour;
-    SendMessageW(c, CB_RESETCONTENT, 0, 0);
-    for (const Preset& p : settings_.colours) SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(fromUtf8(p.name).c_str()));
+    for (const Sound& s : settings_.sounds) SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(fromUtf8(s.name).c_str()));
+    const DeckSettings& k = settings_.deck[d];
+    if (!settings_.findSound(k.sound)) {
+        const std::wstring none = L"(" + fromUtf8(k.preset) + L", " + fromUtf8(k.colour) + L")";
+        SendMessageW(c, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(none.c_str()));
+    }
 }
 
 void MainWindow::command(int id, int code) {
@@ -689,26 +700,15 @@ void MainWindow::command(int id, int code) {
     const int d = (id - 1000) / 100, item = (id - 1000) % 100;
     if (d < 0 || d > 1) return;
     Strip& s = strips_[d];
-    if (item == iPreset && code == CBN_SELCHANGE) {
-        const LRESULT sel = SendMessageW(s.preset, CB_GETCURSEL, 0, 0);
-        if (sel >= 0 && static_cast<size_t>(sel) < settings_.presets.size()) {
-            settings_.deck[d].preset = settings_.presets[static_cast<size_t>(sel)].name;
-            if (linked()) settings_.deck[1 - d].preset = settings_.deck[d].preset; // both decks
-            save();
-            applyAll(); // the other strip's note ("also used by ...") changes too
-            editor_.refresh();
+    if (item == iSound && code == CBN_SELCHANGE) {
+        const LRESULT sel = SendMessageW(s.sound, CB_GETCURSEL, 0, 0);
+        if (sel >= 0 && static_cast<size_t>(sel) < settings_.sounds.size()) {
+            chooseSound(d, settings_.sounds[static_cast<size_t>(sel)].name);
+            fillSounds(0); // a deck that had no sound has one now: its extra entry goes
+            fillSounds(1);
+            refreshStrip(0);
+            refreshStrip(1);
         }
-    } else if (item == iColour && code == CBN_SELCHANGE) {
-        const LRESULT sel = SendMessageW(s.colour, CB_GETCURSEL, 0, 0);
-        if (sel >= 0 && static_cast<size_t>(sel) < settings_.colours.size()) {
-            settings_.deck[d].colour = settings_.colours[static_cast<size_t>(sel)].name;
-            if (linked()) settings_.deck[1 - d].colour = settings_.deck[d].colour; // both decks
-            save();
-            applyAll();
-            colourEditor_.refresh();
-        }
-    } else if (item == iEditColour && code == BN_CLICKED) {
-        colourEditor_.show(hwnd_, settings_.deck[d].colour, d);
     } else if (item == iGraphs && code == BN_CLICKED) { // the analysis window
         analysisWindow_.show(hwnd_);
     } else if (item == iProcessing && code == BN_CLICKED) {
@@ -719,8 +719,8 @@ void MainWindow::command(int id, int code) {
         spectrumWindow_.show(hwnd_, d);
     } else if (item == iMeter && code >= kMeterOpenRow && code < kMeterOpenRow + kMeterTargets) { // a row or bar clicked
         editor_.show(hwnd_, settings_.deck[d].preset, d, meterStage(code - kMeterOpenRow));
-    } else if (item == iEdit && code == BN_CLICKED) {
-        editor_.show(hwnd_, settings_.deck[d].preset, d);
+    } else if (item == iEdit && code == BN_CLICKED) { // the Sound window
+        soundWindow_.show(hwnd_, settings_.deck[d].sound, d);
     }
 }
 
@@ -733,7 +733,9 @@ void MainWindow::applyAll() {
                          SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
         layout();
     }
-    if (linked()) { // one set of controls, deck A's: deck B follows its colour and processing switch
+    if (linked()) { // one set of controls, deck A's: deck B follows its sound and processing switch
+        settings_.deck[1].sound = settings_.deck[0].sound;
+        settings_.deck[1].preset = settings_.deck[0].preset;
         settings_.deck[1].colour = settings_.deck[0].colour;
         settings_.deck[1].processing = settings_.deck[0].processing;
     }
@@ -754,15 +756,23 @@ void MainWindow::applyDeck(int d) {
 
 void MainWindow::refreshStrip(int d) {
     Strip& s = strips_[d];
-    const std::string& name = settings_.deck[d].preset;
-    for (size_t i = 0; i < settings_.presets.size(); ++i)
-        if (settings_.presets[i].name == name) SendMessageW(s.preset, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
-    for (size_t i = 0; i < settings_.colours.size(); ++i)
-        if (settings_.colours[i].name == settings_.deck[d].colour) SendMessageW(s.colour, CB_SETCURSEL, static_cast<WPARAM>(i), 0);
-    theme::setBypass(s.processing, !settings_.deck[d].processing);
+    const DeckSettings& k = settings_.deck[d];
+    // its sound - or the extra last entry, its two parts, when no sound holds them
+    int sel = -1;
+    for (size_t i = 0; i < settings_.sounds.size(); ++i)
+        if (settings_.sounds[i].name == k.sound) sel = static_cast<int>(i);
+    const bool extra = SendMessageW(s.sound, CB_GETCOUNT, 0, 0) != static_cast<LRESULT>(settings_.sounds.size());
+    if (sel < 0 || extra) fillSounds(d); // the extra entry comes, goes, or shows the parts as they are now
+    if (sel < 0) sel = static_cast<int>(SendMessageW(s.sound, CB_GETCOUNT, 0, 0) - 1);
+    if (SendMessageW(s.sound, CB_GETCURSEL, 0, 0) != sel) SendMessageW(s.sound, CB_SETCURSEL, static_cast<WPARAM>(sel), 0);
+    const std::wstring parts = fromUtf8(k.preset) + L", " + fromUtf8(k.colour);
+    wchar_t now[256] = {};
+    GetWindowTextW(s.parts, now, 256);
+    if (parts != now) SetWindowTextW(s.parts, parts.c_str());
+    theme::setBypass(s.processing, !k.processing);
     // one channel: deck B's strip is not there; linked presets: one set of controls, on deck A
     const bool gone = d == 1 && settings_.decks == 1, single = gone || (d == 1 && linked());
-    for (HWND h : {s.presetLabel, s.preset, s.colourLabel, s.colour, s.edit, s.editColour, s.processing, s.graphs})
+    for (HWND h : {s.soundLabel, s.sound, s.parts, s.edit, s.processing, s.graphs})
         ShowWindow(h, single ? SW_HIDE : SW_SHOW);
     for (HWND h : {s.title, s.route, s.routeOut, s.meter}) ShowWindow(h, gone ? SW_HIDE : SW_SHOW);
     if (d == 0) SetWindowTextW(s.title, settings_.decks == 1 ? L"Channel" : L"Deck A");
@@ -949,9 +959,10 @@ void MainWindow::updateTrayTip() {
     const int decks = settings_.decks == 1 ? 1 : 2;
     for (int d = 0; d < decks; ++d) {
         const DeckSettings& k = settings_.deck[d];
-        t += L"\n" + (decks == 1 ? std::wstring(L"Loudness") : deckName(d)) + L": ";
+        t += L"\n" + (decks == 1 ? std::wstring(L"Sound") : deckName(d)) + L": ";
         if (!k.processing) t += L"bypass";
-        else t += fromUtf8(k.preset) + (k.colour == "Neutral" ? L"" : L", " + fromUtf8(k.colour));
+        else if (!k.sound.empty()) t += fromUtf8(k.sound);
+        else t += fromUtf8(k.preset) + L", " + fromUtf8(k.colour);
     }
     tray_.setTip(t);
 }
@@ -1113,6 +1124,8 @@ void MainWindow::save() {
         std::vector<std::string> n;
         for (const Preset& p : settings_.presets) n.push_back(p.name);
         for (const Preset& p : settings_.colours) n.push_back("\x01" + p.name);
+        for (const Sound& s : settings_.sounds) n.push_back("\x02" + s.name + "\x03" + s.loudness + "\x03" + s.eq);
+        for (const DeckSettings& k : settings_.deck) n.push_back("\x04" + k.sound + "\x03" + k.preset + "\x03" + k.colour);
         return n;
     };
     const std::vector<std::string> before = names();
@@ -1122,13 +1135,13 @@ void MainWindow::save() {
                          ? std::string()
                          : "settings not saved: " + toUtf8(ini_.wstring());
     }
-    if (names() != before) { // a plug-in's new, renamed or deleted presets: the lists show them
-        fillPresets(0);
-        fillPresets(1);
-        refreshStrip(0);
-        refreshStrip(1);
+    if (names() != before) { // a plug-in's new, renamed or deleted presets or sounds: the lists show them
+        fillSounds(0);
+        fillSounds(1);
+        applyAll(); // a sound the plug-in changed: the decks playing it follow (Settings::saveMerged)
         editor_.refresh();
         colourEditor_.refresh();
+        soundWindow_.refresh();
     }
     updateStatus();
 }

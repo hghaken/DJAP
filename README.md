@@ -65,12 +65,18 @@ bass) and a contour for quiet listening. The leveller keeps the loudness on targ
 only the balance. Nine shipped EQs (Neutral, Warm, Bass+, Less mid, Bright, Vocal, Oldies, Auto, Quiet); own
 EQs are managed like loudness presets.
 
+A deck chooses a **sound**: a loudness preset and an EQ together under one name. Twelve are shipped, named after the
+provincial capitals of the Netherlands - from Leeuwarden (DAB+, Neutral) and Den Haag (Gentle, Warm) through Utrecht
+(Medium, Auto) and Lelystad (Medium, Neutral) to Zwolle (Loud, Bass+) and Groningen (Very Loud, Bass+); in the Sound
+window its two parts are chosen and edited, and own sounds are saved, renamed and deleted.
+
 ## Programs
 
-- `DJAP.exe` - the GUI: two deck strips (loudness preset and EQ - one choice when both decks share them -, processing /
+- `DJAP.exe` - the GUI: two deck strips (the sound, with the Sound window for its loudness preset and EQ - one choice
+  when both decks share them -, processing /
   bypass, meters for input and output loudness, true peak, the gain of every stage and the spectrum of input and
   output), a spectrum window (a click on a deck's spectrum: the EQ as a curve with points to drag, the
-  MB Compressor bands with their gains, the loudness preset and EQ lists, the four bass sliders - bass level,
+  MB Compressor bands with their gains, the deck's loudness preset and EQ, the four bass sliders - bass level,
   enhancer, width and frequency - and how long the spectrum is averaged), an analysis window (compressor curve, loudness and gain over the last minute,
   goniometer, correlation and stereo width), a loudness window with the stage switches and every parameter (the
   Leveller, Noise, Compressor and MB Compressor tabs are all graphs - the leveller's gain over the level of the live
@@ -106,9 +112,9 @@ EQs are managed like loudness presets.
 
   A 2-channel file is deck A, a 4-channel file is deck A (1-2) and deck B (3-4). Input may be WAV or anything
   Windows decodes (MP3, M4A, WMA, FLAC; mono plays on both channels); the output is WAV.
-- `DJAP.vst3` - the plug-in for DJ software: one deck (stereo in, stereo out) with the same chain, the same loudness presets
-  and EQs (read from the program's settings file) and a window like a deck strip of the program: loudness preset,
-  EQ, look-ahead, Bypass, the four bass sliders and the meter panel. Every value is a parameter the host can
+- `DJAP.vst3` - the plug-in for DJ software: one deck (stereo in, stereo out) with the same chain, the same sounds,
+  loudness presets and EQs (read from the program's settings file) and a window like a deck strip of the program: the
+  sound (with the Sound window), look-ahead, Bypass, the four bass sliders and the meter panel. Every value is a parameter the host can
   show and automate; a project stores the values themselves. The host is told the latency (the look-ahead).
 
 ## Building

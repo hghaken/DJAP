@@ -110,6 +110,7 @@ add_executable(DJAP WIN32
     src/app/main.cpp
     src/app/mainwnd.cpp
     src/app/editwnd.cpp
+    src/app/soundwnd.cpp
     src/app/compgraph.cpp
     src/app/graphstrip.cpp
     src/app/levgraph.cpp

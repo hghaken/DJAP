@@ -110,6 +110,28 @@ const char* const kPresetPrefix = "Preset ";
 const char* const kSavedSuffix = ".Saved";
 const char* const kSavedNote = "; <key>.Saved: the value it was saved with (Save as), where that differs: what its reset button goes back to\n";
 const char* const kColourPrefix = "Colour ";
+const char* const kSoundPrefix = "Sound ";
+
+// The twelve shipped sounds, named after the provincial capitals (client, 2026-11-13), from the quietest loudness to
+// the loudest - a loudness preset and an EQ each, for one use:
+const struct {
+    const char* name;
+    const char* loudness;
+    const char* eq;
+} kShippedSounds[] = {
+    {"Leeuwarden", "DAB+", "Neutral"},          // broadcast: wide dynamics, EBU R 128
+    {"Den Haag", "Gentle", "Warm"},             // background, dinner
+    {"Middelburg", "Gentle", "Quiet"},          // low volume: the contour
+    {"Haarlem", "Light", "Vocal"},              // speech and singing in front
+    {"Maastricht", "Light", "Oldies"},          // old recordings
+    {"Assen", "Web Stream", "Less mid"},        // streaming, MP3 / AAC
+    {"Utrecht", "Medium", "Auto"},              // all-round, each song's tone evened out
+    {"Lelystad", "Medium", "Neutral"},          // the plain middle (the default)
+    {"Arnhem", "FM Station", "Bright"},         // the sound of FM radio
+    {"Zwolle", "Loud", "Bass+"},                // parties
+    {"'s-Hertogenbosch", "Loud", "Warm"},       // parties, warmer
+    {"Groningen", "Very Loud", "Bass+"},        // club
+};
 
 bool validName(const std::string& name, std::string& error) {
     if (trim(name).empty()) {
@@ -141,6 +163,156 @@ Settings::Settings() {
         colours.push_back(p);
     }
     sortPresets();
+    for (const auto& s : kShippedSounds) {
+        Sound sound;
+        sound.name = s.name;
+        sound.loudness = sound.savedLoudness = s.loudness;
+        sound.eq = sound.savedEq = s.eq;
+        sound.shipped = true;
+        sounds.push_back(sound);
+    }
+}
+
+int Settings::shippedSoundCount() { return static_cast<int>(sizeof kShippedSounds / sizeof kShippedSounds[0]); }
+
+int Settings::shippedSoundIndex(const std::string& name) {
+    for (int i = 0; i < shippedSoundCount(); ++i)
+        if (name == kShippedSounds[i].name) return i;
+    return -1;
+}
+
+bool Settings::shippedSoundParts(const std::string& name, std::string& loudness, std::string& eq) {
+    const int i = shippedSoundIndex(name);
+    if (i < 0) return false;
+    loudness = kShippedSounds[i].loudness;
+    eq = kShippedSounds[i].eq;
+    return true;
+}
+
+Sound* Settings::findSound(const std::string& name) {
+    for (Sound& s : sounds)
+        if (s.name == name) return &s;
+    return nullptr;
+}
+
+const Sound* Settings::findSound(const std::string& name) const {
+    for (const Sound& s : sounds)
+        if (s.name == name) return &s;
+    return nullptr;
+}
+
+const Sound* Settings::soundWith(const std::string& loudness, const std::string& eq) const {
+    for (const Sound& s : sounds)
+        if (s.loudness == loudness && s.eq == eq) return &s;
+    return nullptr;
+}
+
+bool Settings::chooseSound(int d, const std::string& name) {
+    const Sound* s = findSound(name);
+    if (!s || d < 0 || d > 1) return false;
+    deck[d].sound = s->name;
+    deck[d].preset = find(s->loudness) ? s->loudness : std::string("Medium");
+    deck[d].colour = find(s->eq, PresetKind::Colour) ? s->eq : std::string("Neutral");
+    return true;
+}
+
+void Settings::setSoundPart(const std::string& sound, PresetKind k, const std::string& preset) {
+    Sound* s = findSound(sound);
+    if (!s || !find(preset, k)) return;
+    (k == PresetKind::Colour ? s->eq : s->loudness) = preset;
+    for (int d = 0; d < 2; ++d)
+        if (deck[d].sound == sound) chooseSound(d, sound);
+}
+
+void Settings::setDeckPart(int d, PresetKind k, const std::string& preset) {
+    if (d < 0 || d > 1 || !find(preset, k)) return;
+    if (findSound(deck[d].sound)) {
+        setSoundPart(deck[d].sound, k, preset);
+    } else { // no sound: the deck alone - and the sound that has its two parts now, if there is one
+        (k == PresetKind::Colour ? deck[d].colour : deck[d].preset) = preset;
+        const Sound* same = soundWith(deck[d].preset, deck[d].colour);
+        deck[d].sound = same ? same->name : std::string();
+    }
+}
+
+bool Settings::saveSoundAs(const std::string& name, const std::string& loudness, const std::string& eq,
+                           std::string& error) {
+    if (!validName(name, error)) return false;
+    if (Sound* s = findSound(name)) {
+        if (s->shipped) {
+            error = "\"" + name + "\" is a shipped sound; choose another name.";
+            return false;
+        }
+        s->loudness = s->savedLoudness = loudness;
+        s->eq = s->savedEq = eq;
+        for (int d = 0; d < 2; ++d)
+            if (deck[d].sound == name) chooseSound(d, name);
+        return true;
+    }
+    Sound s;
+    s.name = name;
+    s.loudness = s.savedLoudness = loudness;
+    s.eq = s.savedEq = eq;
+    sounds.push_back(s);
+    return true;
+}
+
+bool Settings::renameSound(const std::string& from, const std::string& to, std::string& error) {
+    Sound* s = findSound(from);
+    if (!s) {
+        error = "There is no sound \"" + from + "\".";
+        return false;
+    }
+    if (s->shipped) {
+        error = "Shipped sounds cannot be renamed.";
+        return false;
+    }
+    if (!validName(to, error)) return false;
+    if (from == to) return true;
+    if (findSound(to)) {
+        error = "A sound \"" + to + "\" already exists.";
+        return false;
+    }
+    s->name = to;
+    for (DeckSettings& d : deck)
+        if (d.sound == from) d.sound = to;
+    for (auto& [n, slot] : pluginSlots)
+        if (slot.sound == from) slot.sound = to;
+    return true;
+}
+
+bool Settings::removeSound(const std::string& name, std::string& error) {
+    for (size_t i = 0; i < sounds.size(); ++i) {
+        if (sounds[i].name != name) continue;
+        if (sounds[i].shipped) {
+            error = "Shipped sounds cannot be deleted (they can be reset).";
+            return false;
+        }
+        sounds.erase(sounds.begin() + static_cast<long long>(i));
+        for (int d = 0; d < 2; ++d)
+            if (deck[d].sound == name) chooseSound(d, kDefaultSound);
+        return true;
+    }
+    error = "There is no sound \"" + name + "\".";
+    return false;
+}
+
+void Settings::soundResetParts(const std::string& name, std::string& loudness, std::string& eq) const {
+    if (shippedSoundParts(name, loudness, eq)) return;
+    const Sound* s = findSound(name);
+    loudness = s ? s->savedLoudness : std::string("Medium");
+    eq = s ? s->savedEq : std::string("Neutral");
+}
+
+void Settings::resetSound(const std::string& name) {
+    Sound* s = findSound(name);
+    if (!s) return;
+    std::string loudness, eq;
+    soundResetParts(name, loudness, eq);
+    s->loudness = find(loudness) ? loudness : std::string("Medium");
+    s->eq = find(eq, PresetKind::Colour) ? eq : std::string("Neutral");
+    for (int d = 0; d < 2; ++d)
+        if (deck[d].sound == name) chooseSound(d, name);
 }
 
 // The list from the quietest to the loudest output (target + output gain; DAB+ -23 .. Very Loud -10), own presets
@@ -233,6 +405,11 @@ bool Settings::rename(const std::string& from, const std::string& to, std::strin
         std::string& used = k == PresetKind::Colour ? d.colour : d.preset;
         if (used == from) used = to;
     }
+    for (Sound& s : sounds) { // the sounds made of it follow
+        for (std::string* part : {k == PresetKind::Colour ? &s.eq : &s.loudness,
+                                  k == PresetKind::Colour ? &s.savedEq : &s.savedLoudness})
+            if (*part == from) *part = to;
+    }
     return true;
 }
 
@@ -245,9 +422,15 @@ bool Settings::remove(const std::string& name, std::string& error, PresetKind k)
             return false;
         }
         l.erase(l.begin() + static_cast<long long>(i));
+        const char* fallback = k == PresetKind::Colour ? "Neutral" : "Medium";
         for (DeckSettings& d : deck) {
             std::string& used = k == PresetKind::Colour ? d.colour : d.preset;
-            if (used == name) used = k == PresetKind::Colour ? "Neutral" : "Medium";
+            if (used == name) used = fallback;
+        }
+        for (Sound& s : sounds) { // a sound made of it takes the default in its place
+            for (std::string* part : {k == PresetKind::Colour ? &s.eq : &s.loudness,
+                                      k == PresetKind::Colour ? &s.savedEq : &s.savedLoudness})
+                if (*part == name) *part = fallback;
         }
         return true;
     }
@@ -328,7 +511,14 @@ std::string Settings::toText() const {
     o << "; The outputs follow the volume and mute of Windows' default playback device (the volume keys), with one\n"
          "; channel and with two decks (1 = on)\nFollowWindowsVolumeOneChannel="
       << (followVolume[0] ? 1 : 0) << "\nFollowWindowsVolumeTwoDecks=" << (followVolume[1] ? 1 : 0) << "\n\n";
-    o << "[Decks]\n; Loudness preset and processing switch (1 = on, 0 = bypass) of each deck\n";
+    auto soundOf = [&](int d) { // only a sound that holds the deck's two parts (else none: they were chosen apart)
+        const Sound* s = findSound(deck[d].sound);
+        return s && s->loudness == deck[d].preset && s->eq == deck[d].colour ? s->name : std::string();
+    };
+    o << "[Decks]\n; Sound of each deck (a loudness preset with an EQ, see the [Sound ...] sections; empty: none): its\n"
+         "; two parts are the Preset and Colour lines below\nSoundA="
+      << soundOf(0) << "\nSoundB=" << soundOf(1) << "\n";
+    o << "; Loudness preset and processing switch (1 = on, 0 = bypass) of each deck\n";
     o << "PresetA=" << deck[0].preset << "\nProcessingA=" << (deck[0].processing ? 1 : 0) << "\n";
     o << "PresetB=" << deck[1].preset << "\nProcessingB=" << (deck[1].processing ? 1 : 0) << "\n";
     o << "; EQ of each deck (tone, auto tone, sub bass, contour; the keys keep their old name Colour)\nColourA=" << deck[0].colour
@@ -357,9 +547,11 @@ std::string Settings::toText() const {
         o << "\n[Plugin]\n; 1 = the plug-ins keep the same settings (the first one open leads)\nLink=" << (pluginLink ? 1 : 0)
           << "\n";
         o << "; What each plug-in instance last chose - 1 = the first one open (deck 1 in a DJ program), 2 = the\n"
-             "; second, ...: loudness preset, EQ (Colour), look-ahead (ms), oversampling, 1 = mono; taken at its next start\n";
+             "; second, ...: sound (empty: none), loudness preset, EQ (Colour), look-ahead (ms), oversampling, 1 = mono;\n"
+             "; taken at its next start\n";
         for (const auto& [n, c] : pluginSlots)
-            o << "Loudness" << n << "=" << c.preset << "\nColour" << n << "=" << c.colour << "\nLookAhead" << n << "="
+            o << "Sound" << n << "=" << c.sound << "\nLoudness" << n << "=" << c.preset << "\nColour" << n << "=" << c.colour
+              << "\nLookAhead" << n << "="
               << compact(c.lookAheadMs) << "\nOversampling" << n << "=" << c.oversampling << "\nMono" << n << "="
               << (c.mono ? 1 : 0) << "\n";
     }
@@ -419,6 +611,18 @@ std::string Settings::toText() const {
             if (!shipped && std::fabs(p.saved[static_cast<size_t>(i)] - v) > 1e-9)
                 o << info.key << kSavedSuffix << "=" << compact(p.saved[static_cast<size_t>(i)]) << "\n";
         }
+    }
+    for (const Sound& s : sounds) {
+        std::string loudness, eq;
+        const bool shipped = shippedSoundParts(s.name, loudness, eq);
+        if (shipped && s.loudness == loudness && s.eq == eq) continue; // as shipped: nothing to write
+        o << "\n[" << kSoundPrefix << s.name << "]\n";
+        o << (shipped ? "; Shipped sound: its loudness preset and EQ (shipped: " + loudness + ", " + eq + ")\n"
+                      : "; Own sound: its loudness preset and EQ; <key>.Saved: what it was saved with (Save as), where "
+                        "that differs\n");
+        o << "Loudness=" << s.loudness << "\nEQ=" << s.eq << "\n";
+        if (!shipped && s.savedLoudness != s.loudness) o << "Loudness" << kSavedSuffix << "=" << s.savedLoudness << "\n";
+        if (!shipped && s.savedEq != s.eq) o << "EQ" << kSavedSuffix << "=" << s.savedEq << "\n";
     }
     return o.str();
 }
@@ -551,6 +755,7 @@ void Settings::fromText(const std::string& text) {
         double d = 0;
         if (what == "Loudness") c.preset = value;
         else if (what == "Colour") c.colour = value;
+        else if (what == "Sound") c.sound = value;
         else if (what == "LookAhead" && parseDouble(value, d)) c.lookAheadMs = std::min(5.0, std::max(0.0, d));
         else if (what == "Oversampling") c.oversampling = toInt(value, 4) >= 6 ? 8 : toInt(value, 4) >= 3 ? 4 : 2;
         else if (what == "Mono") c.mono = toInt(value, 0) != 0;
@@ -655,8 +860,51 @@ void Settings::fromText(const std::string& text) {
         if (auto v = get("Decks", d == 0 ? "ColourA" : "ColourB"))
             if (find(*v, PresetKind::Colour)) deck[d].colour = *v;
     }
+    // the sounds: a shipped one's parts as the file has them, an own one as it was saved
+    const std::string soundPrefix = kSoundPrefix;
+    for (const std::string& s : order) {
+        if (s.compare(0, soundPrefix.size(), soundPrefix) != 0) continue;
+        const std::string name = s.substr(soundPrefix.size());
+        std::string error;
+        if (!validName(name, error)) continue;
+        const auto& keys = sections[s];
+        auto part = [&](const std::string& key, PresetKind k, const std::string& fallback) {
+            auto it = keys.find(key);
+            return it != keys.end() && find(it->second, k) ? it->second : fallback;
+        };
+        Sound sound;
+        sound.name = name;
+        sound.shipped = shippedSoundParts(name, sound.loudness, sound.eq);
+        sound.loudness = part("Loudness", PresetKind::Dynamics, sound.loudness);
+        sound.eq = part("EQ", PresetKind::Colour, sound.eq);
+        if (sound.shipped) {
+            shippedSoundParts(name, sound.savedLoudness, sound.savedEq);
+        } else {
+            sound.savedLoudness = part(std::string("Loudness") + kSavedSuffix, PresetKind::Dynamics, sound.loudness);
+            sound.savedEq = part(std::string("EQ") + kSavedSuffix, PresetKind::Colour, sound.eq);
+        }
+        if (Sound* known = findSound(name)) *known = sound;
+        else sounds.push_back(sound);
+    }
+    // each deck's sound: what the deck plays (its preset and colour) is what counts - its sound is the one the file
+    // names when that one has these two parts, else the first sound that has them, else none (a file of a version
+    // before the sounds, 2026-11-13, or a deck whose parts were chosen apart: the main window then shows the two)
+    for (int d = 0; d < 2; ++d) {
+        const auto v = get("Decks", d == 0 ? "SoundA" : "SoundB");
+        const Sound* named = v ? findSound(*v) : nullptr;
+        if (!named || named->loudness != deck[d].preset || named->eq != deck[d].colour)
+            named = soundWith(deck[d].preset, deck[d].colour);
+        deck[d].sound = named ? named->name : std::string();
+    }
+    // a plug-in instance's sound likewise: one with its two parts, or none ("(other)")
+    for (auto& [n, slot] : pluginSlots) {
+        if (sections["Plugin"].count("Sound" + std::to_string(n)) && (slot.sound.empty() || findSound(slot.sound))) continue;
+        const Sound* same = soundWith(slot.preset, slot.colour);
+        slot.sound = same ? same->name : std::string();
+    }
     if (auto v = get("Decks", "LinkPresets")) linkPresets = toInt(*v, 0) != 0;
     if (linkPresets) { // a hand edit cannot leave them apart
+        deck[1].sound = deck[0].sound;
         deck[1].preset = deck[0].preset;
         deck[1].colour = deck[0].colour;
     }
@@ -745,6 +993,32 @@ void mergeList(std::vector<Preset>& result, const std::vector<Preset>& ours, con
     }
 }
 
+Sound* namedSound(std::vector<Sound>& list, const std::string& name) {
+    for (Sound& s : list)
+        if (s.name == name) return &s;
+    return nullptr;
+}
+
+const Sound* namedSound(const std::vector<Sound>& list, const std::string& name) {
+    for (const Sound& s : list)
+        if (s.name == name) return &s;
+    return nullptr;
+}
+
+// The sounds as mergeList the presets: the file's list, with this writer's changes since `base` applied to it.
+void mergeSounds(std::vector<Sound>& result, const std::vector<Sound>& ours, const std::vector<Sound>& base) {
+    for (const Sound& b : base)
+        if (!b.shipped && !namedSound(ours, b.name))
+            result.erase(std::remove_if(result.begin(), result.end(), [&](const Sound& r) { return r.name == b.name; }),
+                         result.end());
+    for (const Sound& s : ours) {
+        const Sound* b = namedSound(base, s.name);
+        if (b && *b == s) continue; // not touched here: the file's version stays
+        if (Sound* r = namedSound(result, s.name)) *r = s;
+        else result.push_back(s);
+    }
+}
+
 } // namespace
 
 bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, SaveRole role) {
@@ -759,6 +1033,13 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
     out.colours = now.colours;
     mergeList(out.presets, presets, base.presets);
     mergeList(out.colours, colours, base.colours);
+    out.sounds = now.sounds;
+    mergeSounds(out.sounds, sounds, base.sounds);
+    bool played[2]; // the deck plays its sound's two parts (before the other's changes come in)
+    for (int d = 0; d < 2; ++d) {
+        const Sound* s = findSound(deck[d].sound);
+        played[d] = s && s->loudness == deck[d].preset && s->eq == deck[d].colour;
+    }
     // what this writer's decks use stays, even if the other deleted it meanwhile; a guest (the plug-in) is one deck:
     // its other deck entry is only what it read from the file and must not bring back what the program deleted
     const int protectedDecks = role == SaveRole::Owner ? 2 : 1;
@@ -768,6 +1049,8 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
             if (const Preset* p = named(presets, d.preset)) out.presets.push_back(*p);
         if (!named(out.colours, d.colour))
             if (const Preset* c = named(colours, d.colour)) out.colours.push_back(*c);
+        if (!namedSound(out.sounds, d.sound))
+            if (const Sound* s = namedSound(sounds, d.sound)) out.sounds.push_back(*s);
     }
     out.sortPresets();
     // everything is worked out in `out` first and taken over into this and `base` only after the file is written (or
@@ -805,8 +1088,15 @@ bool Settings::saveMerged(const std::filesystem::path& file, Settings& base, Sav
     pluginSlots = base.pluginSlots = out.pluginSlots;
     presets = out.presets;
     colours = out.colours;
+    sounds = out.sounds;
     base.presets = presets;
     base.colours = colours;
+    base.sounds = sounds;
+    // a sound the other changed meanwhile: a deck of the program that played it plays its new parts (the program
+    // applies them next; the plug-in follows its sound itself); a deck whose parts were set apart stays as it is
+    for (int d = 0; role == SaveRole::Owner && d < 2; ++d)
+        if (const Sound* s = findSound(deck[d].sound))
+            if (played[d] && (s->loudness != deck[d].preset || s->eq != deck[d].colour)) chooseSound(d, s->name);
     return true;
 }
 

@@ -279,6 +279,7 @@ void Plugin::loadLists() {
         const PluginSlot& c = kept->second;
         if (settings_.find(c.preset)) settings_.deck[0].preset = c.preset;
         if (settings_.find(c.colour, PresetKind::Colour)) settings_.deck[0].colour = c.colour;
+        settings_.deck[0].sound = c.sound; // kept where it still holds the two (soundName)
         lookMs_ = snapLook(c.lookAheadMs);
         oversampling_ = snapOversampling(c.oversampling);
         mono_ = c.mono;
@@ -634,6 +635,75 @@ int Plugin::colourIndex() const {
     return static_cast<int>(settings_.colours.size());
 }
 
+// The sound that holds the chosen preset and colour: the one chosen last when it still does (two sounds may hold the
+// same two), else the first that does; none for values that match no preset ("(other values)").
+std::string Plugin::soundName() const {
+    const DeckSettings& d = settings_.deck[0];
+    if (d.preset.empty() || d.colour.empty()) return {};
+    const Sound* s = settings_.findSound(d.sound);
+    if (!s || s->loudness != d.preset || s->eq != d.colour) s = settings_.soundWith(d.preset, d.colour);
+    return s ? s->name : std::string();
+}
+
+int Plugin::soundIndex() const {
+    const std::string name = soundName();
+    for (size_t i = 0; i < settings_.sounds.size(); ++i)
+        if (settings_.sounds[i].name == name) return static_cast<int>(i);
+    return static_cast<int>(settings_.sounds.size());
+}
+
+void Plugin::chooseSound(int index) {
+    if (index < 0 || index >= static_cast<int>(settings_.sounds.size())) return;
+    const Sound s = settings_.sounds[static_cast<size_t>(index)]; // a copy: the choices below may save and merge
+    settings_.deck[0].sound = s.name;
+    auto indexIn = [](const std::vector<Preset>& items, const std::string& name) {
+        for (size_t i = 0; i < items.size(); ++i)
+            if (items[i].name == name) return static_cast<int>(i);
+        return -1;
+    };
+    // only a part that changes: a preset chosen again would load its values again (the host's automation, a bass
+    // slider's change would go)
+    const int pi = indexIn(settings_.presets, s.loudness), ci = indexIn(settings_.colours, s.eq);
+    if (pi >= 0 && pi != presetIndex()) choose(false, pi);
+    if (ci >= 0 && ci != colourIndex()) choose(true, ci);
+    settings_.deck[0].sound = s.name; // (the first choice above saw it hold only one of the two)
+    rememberChoice(true);
+    shareState();
+    if (view_) view_->refresh();
+}
+
+void Plugin::openSoundWindow(HWND owner) {
+    saveSettings(); // the lists as they are in the file now
+    if (!soundWindow_) {
+        soundWindow_ = std::make_unique<SoundWindow>(
+            settings_, [this](bool listChanged) { soundEdited(listChanged); },
+            [this, owner](PresetKind kind, const std::string& preset, int) {
+                openEditor(kind == PresetKind::Colour, owner, {}, preset);
+            });
+        soundWindow_->setDeckName(L"this plug-in");
+    }
+    settings_.deck[0].sound = soundName();
+    soundWindow_->show(owner, settings_.deck[0].sound, 0);
+}
+
+// The Sound window changed a sound: when it is this plug-in's, its preset or colour now - the list parameters follow,
+// with their values, as a choice in the window's lists; or it made, renamed or deleted a sound.
+void Plugin::soundEdited(bool listChanged) {
+    for (const bool colour : {false, true}) {
+        const ParamID id = colour ? kColourId : kPresetId;
+        const size_t count = colour ? settings_.colours.size() : settings_.presets.size();
+        const double v = static_cast<double>(colour ? colourIndex() : presetIndex()) / static_cast<double>(count);
+        if (getParamNormalized(id) == v) continue;
+        fromWindow_ = true; // the values the choice changes are told to the host (loadPresetIntoController)
+        edit(id, v);
+        fromWindow_ = false;
+    }
+    rememberChoice(false);
+    saveSettings();
+    if (view_) view_->listsChanged();
+    (void)listChanged;
+}
+
 double Plugin::plainOf(ParamID id) const {
     const ParamValue v = const_cast<Plugin*>(this)->getParamNormalized(id);
     if (id == kLookId) return lookOfNormalized(v); // what runs (deck.h)
@@ -782,7 +852,7 @@ void Plugin::edited(bool listChanged, bool save) {
     if (view_) view_->refresh();
 }
 
-void Plugin::openEditor(bool colour, HWND owner, const std::string& tab) {
+void Plugin::openEditor(bool colour, HWND owner, const std::string& tab, const std::string& preset) {
     saveSettings(); // the lists as they are in the file now (another plug-in or the program may have added some)
     std::unique_ptr<EditWindow>& e = colour ? colourEditor_ : editor_;
     if (!e) {
@@ -793,13 +863,14 @@ void Plugin::openEditor(bool colour, HWND owner, const std::string& tab) {
         e->setWindowTitle((colour ? L"Settings EQ: " : L"Settings Loudness: ") + deck);
         if (!colour) e->setLive(editorLive_);
     }
-    const std::string& chosen = colour ? settings_.deck[0].colour : settings_.deck[0].preset;
+    const std::string chosen = !preset.empty() ? preset : colour ? settings_.deck[0].colour : settings_.deck[0].preset;
     e->show(owner, chosen.empty() ? std::string(colour ? "Neutral" : "Medium") : chosen, 0, tab);
 }
 
 void Plugin::closeEditors() {
     editor_.reset();
     colourEditor_.reset();
+    soundWindow_.reset();
 }
 
 tresult PLUGIN_API Plugin::setParamNormalized(ParamID id, ParamValue value) {
@@ -866,6 +937,7 @@ void Plugin::takeState(Plugin& from) {
     };
     settings_.deck[0].preset = own(settings_.presets, from.settings_.deck[0].preset);
     settings_.deck[0].colour = own(settings_.colours, from.settings_.deck[0].colour);
+    settings_.deck[0].sound = from.settings_.deck[0].sound; // (kept where it holds the two: soundName)
     exact_ = from.exact_;
     std::vector<ParamID> changed;
     loading_ = true;
@@ -895,6 +967,8 @@ bool Plugin::rememberChoice(bool save) {
     PluginSlot c = old != settings_.pluginSlots.end() ? old->second : PluginSlot();
     if (!settings_.deck[0].preset.empty()) c.preset = settings_.deck[0].preset; // "(other values)": the last name stays
     if (!settings_.deck[0].colour.empty()) c.colour = settings_.deck[0].colour;
+    settings_.deck[0].sound = soundName();
+    c.sound = settings_.deck[0].sound;
     c.lookAheadMs = plainOf(kLookId);
     c.oversampling = static_cast<int>(plainOf(kOversamplingId));
     c.mono = plainOf(kMonoId) >= 0.5;

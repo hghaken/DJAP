@@ -867,7 +867,11 @@ void AudioWindow::command(int id, int code) {
     }
     if (id == idLink && code == BN_CLICKED) {
         settings_.linkPresets = SendMessageW(link_, BM_GETCHECK, 0, 0) == BST_CHECKED;
-        if (settings_.linkPresets) settings_.deck[1].preset = settings_.deck[0].preset; // deck B follows deck A
+        if (settings_.linkPresets) { // deck B follows deck A: its sound and the sound's two parts
+            settings_.deck[1].sound = settings_.deck[0].sound;
+            settings_.deck[1].preset = settings_.deck[0].preset;
+            settings_.deck[1].colour = settings_.deck[0].colour;
+        }
         onChange_();
         return;
     }

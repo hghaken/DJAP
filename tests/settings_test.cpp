@@ -968,9 +968,129 @@ void savedValues(const fs::path& dir) {
     CHECK_NEAR(program.resetValueOf("Club", pLevRange), 8, 1e-12);
 }
 
+// The sounds (client, 2026-11-13): a loudness preset and an EQ under one name - twelve shipped, own ones made, changed,
+// renamed, deleted and reset; what a deck plays follows its sound; a settings file of a version before the sounds;
+// the program and the plug-in saving them in the same file.
+void sounds(const fs::path& dir) {
+    std::printf("-- sounds: a loudness preset and an EQ under one name\n");
+    Settings s;
+    CHECK(static_cast<int>(s.sounds.size()) == Settings::shippedSoundCount() && s.sounds.size() == 12);
+    for (const Sound& x : s.sounds) {
+        CHECK(x.shipped && s.find(x.loudness) && s.find(x.eq, PresetKind::Colour));
+        CHECK(Settings::shippedSoundIndex(x.name) >= 0);
+    }
+    CHECK(s.deck[0].sound == "Lelystad" && s.deck[0].preset == "Medium" && s.deck[0].colour == "Neutral");
+    CHECK(s.findSound("Zwolle")->loudness == "Loud" && s.findSound("Zwolle")->eq == "Bass+");
+    CHECK(s.findSound("Utrecht")->loudness == "Medium" && s.findSound("Utrecht")->eq == "Auto");
+    // as shipped, no sound is written
+    CHECK(s.toText().find("\n[Sound ") == std::string::npos);
+
+    // a deck takes a sound; a sound's part changes and its decks follow; reset
+    CHECK(s.chooseSound(0, "Zwolle") && s.deck[0].preset == "Loud" && s.deck[0].colour == "Bass+");
+    CHECK(!s.chooseSound(1, "Amsterdam") && s.deck[1].sound == "Lelystad");
+    CHECK(s.chooseSound(1, "Zwolle"));
+    s.setSoundPart("Zwolle", PresetKind::Colour, "Warm");
+    CHECK(s.deck[0].colour == "Warm" && s.deck[1].colour == "Warm" && s.findSound("Zwolle")->eq == "Warm");
+    s.setSoundPart("Zwolle", PresetKind::Colour, "No such EQ"); // refused
+    CHECK(s.findSound("Zwolle")->eq == "Warm");
+    s.setDeckPart(0, PresetKind::Dynamics, "Very Loud"); // the deck's sound changes, and the other deck with it
+    CHECK(s.findSound("Zwolle")->loudness == "Very Loud" && s.deck[1].preset == "Very Loud");
+    std::string text = s.toText();
+    CHECK(text.find("[Sound Zwolle]") != std::string::npos && text.find("SoundA=Zwolle") != std::string::npos);
+    Settings back;
+    back.fromText(text);
+    CHECK(back.findSound("Zwolle")->eq == "Warm" && back.findSound("Zwolle")->loudness == "Very Loud");
+    CHECK(back.deck[0].sound == "Zwolle" && back.deck[0].colour == "Warm" && back.deck[1].sound == "Zwolle");
+    CHECK(back.toText() == text);
+    s.resetSound("Zwolle");
+    CHECK(s.findSound("Zwolle")->eq == "Bass+" && s.findSound("Zwolle")->loudness == "Loud" && s.deck[0].colour == "Bass+");
+    CHECK(s.toText().find("[Sound Zwolle]") == std::string::npos);
+
+    // own sounds: save as, saved over, rename, delete; a shipped name is refused
+    std::string err;
+    CHECK(!s.saveSoundAs("Utrecht", "Loud", "Warm", err) && !err.empty());
+    CHECK(!s.saveSoundAs("bad=name", "Loud", "Warm", err));
+    CHECK(s.saveSoundAs("Feest", "Loud", "Warm", err) && !s.findSound("Feest")->shipped);
+    CHECK(s.chooseSound(0, "Feest") && s.deck[0].preset == "Loud" && s.deck[0].colour == "Warm");
+    s.setSoundPart("Feest", PresetKind::Dynamics, "Light");
+    std::string l, e;
+    s.soundResetParts("Feest", l, e);
+    CHECK(l == "Loud" && e == "Warm"); // an own sound resets to what it was saved with
+    text = s.toText();
+    CHECK(text.find("Loudness.Saved=Loud") != std::string::npos);
+    back.fromText(text);
+    back.soundResetParts("Feest", l, e);
+    CHECK(back.findSound("Feest")->loudness == "Light" && l == "Loud" && e == "Warm");
+    CHECK(s.saveSoundAs("Feest", "Gentle", "Quiet", err) && s.deck[0].preset == "Gentle"); // saved over: its decks follow
+    CHECK(!s.renameSound("Zwolle", "Kampen", err)); // shipped
+    CHECK(!s.renameSound("Feest", "Utrecht", err)); // taken
+    CHECK(s.renameSound("Feest", "Party", err) && s.deck[0].sound == "Party");
+    s.pluginSlots[1].sound = "Party";
+    CHECK(s.renameSound("Party", "Fest", err) && s.pluginSlots[1].sound == "Fest");
+    CHECK(!s.removeSound("Groningen", err));
+    CHECK(s.removeSound("Fest", err) && !s.findSound("Fest"));
+    CHECK(s.deck[0].sound == "Lelystad" && s.deck[0].preset == "Medium" && s.deck[0].colour == "Neutral");
+
+    // a sound follows its presets: one renamed, one deleted
+    CHECK(s.saveAs("Club", defaultValues(), err));
+    CHECK(s.saveSoundAs("Nacht", "Club", "Bright", err) && s.chooseSound(1, "Nacht"));
+    CHECK(s.rename("Club", "Club 2", err) && s.findSound("Nacht")->loudness == "Club 2" && s.deck[1].preset == "Club 2");
+    s.findSound("Nacht")->savedLoudness = "Club 2";
+    CHECK(s.remove("Club 2", err) && s.findSound("Nacht")->loudness == "Medium" &&
+          s.findSound("Nacht")->savedLoudness == "Medium");
+
+    // a deck's parts set apart: no sound, and the file says so; a file of a version before the sounds
+    Settings apart;
+    apart.deck[0].preset = "Gentle";
+    apart.deck[0].colour = "Bright";
+    text = apart.toText();
+    CHECK(text.find("SoundA=\n") != std::string::npos);
+    back.fromText(text);
+    CHECK(back.deck[0].sound.empty() && back.deck[0].preset == "Gentle" && back.deck[0].colour == "Bright");
+    back.setDeckPart(0, PresetKind::Colour, "Warm"); // now Den Haag's two parts
+    CHECK(back.deck[0].sound == "Den Haag");
+    back.fromText("[Decks]\nPresetA=Loud\nColourA=Bass+\nPresetB=Gentle\nColourB=Bright\n"
+                  "[Plugin]\nLoudness1=Medium\nColour1=Auto\nLoudness2=Light\nColour2=Bright\n");
+    CHECK(back.deck[0].sound == "Zwolle" && back.deck[1].sound.empty() && back.deck[1].preset == "Gentle");
+    CHECK(back.pluginSlots[1].sound == "Utrecht" && back.pluginSlots[2].sound.empty());
+    back.fromText("[Decks]\nSoundA=Zwolle\nPresetA=Gentle\nColourA=Warm\n"); // the file's sound does not hold them
+    CHECK(back.deck[0].sound == "Den Haag" && back.deck[0].preset == "Gentle");
+
+    // the program and the plug-in: each keeps the other's sounds and changes
+    const fs::path file = dir / "sounds.ini";
+    std::error_code ec;
+    fs::remove(file, ec);
+    Settings program, programBase, plugin, pluginBase;
+    CHECK(program.saveSoundAs("Mijn", "Loud", "Auto", err) && program.chooseSound(0, "Mijn"));
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(plugin.load(file) && pluginBase.load(file) && plugin.findSound("Mijn"));
+    plugin.setSoundPart("Utrecht", PresetKind::Colour, "Vocal");
+    CHECK(plugin.saveSoundAs("Plug", "Light", "Warm", err));
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    program.setSoundPart("Mijn", PresetKind::Dynamics, "Gentle");
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    Settings check;
+    CHECK(check.load(file));
+    CHECK(check.findSound("Plug") && check.findSound("Utrecht")->eq == "Vocal" && check.findSound("Mijn")->loudness == "Gentle");
+    CHECK(check.deck[0].sound == "Mijn" && check.deck[0].preset == "Gentle");
+    // the plug-in deletes the program's sound meanwhile: the program's deck A uses it, so it stays
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest)); // takes the program's change in
+    CHECK(plugin.removeSound("Mijn", err) && plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(check.load(file) && check.findSound("Mijn"));
+    // a sound the plug-in changed: the program's deck playing it follows at its next save
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    plugin.setSoundPart("Mijn", PresetKind::Colour, "Bright");
+    CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));
+    CHECK(program.saveMerged(file, programBase, Settings::SaveRole::Owner));
+    CHECK(program.deck[0].sound == "Mijn" && program.deck[0].colour == "Bright");
+    std::printf("   twelve shipped; chosen, changed, reset, own ones made, renamed and deleted; old files; merged\n");
+}
+
 int main() {
     const fs::path dir = tempDir();
     defaults();
+    sounds(dir);
     savedValues(dir);
     positions();
     roundTrip(dir);

@@ -74,9 +74,10 @@ private:
     bool frameChecked_ = false;
     RECT frameRect_{};
     int frameStill_ = 0;
-    HWND hwnd_ = nullptr, title_ = nullptr, version_ = nullptr, presetLabel_ = nullptr, preset_ = nullptr,
-         colourLabel_ = nullptr, colour_ = nullptr, bypass_ = nullptr, meter_ = nullptr, edit_ = nullptr,
-         editColour_ = nullptr, graphs_ = nullptr;
+    // the Sound list with its Edit button (the Sound window) and the sound's two parts as text took the place of the
+    // Loudness and EQ lists (client, 2026-11-13)
+    HWND hwnd_ = nullptr, title_ = nullptr, version_ = nullptr, soundLabel_ = nullptr, sound_ = nullptr,
+         parts_ = nullptr, bypass_ = nullptr, meter_ = nullptr, edit_ = nullptr, graphs_ = nullptr;
     AboutWindow aboutWnd_; // the About window with the update check (client, 2026-10-28)
     // the Graphs button's analysis window (client, 2026-10-29: "I miss the Graphs button in the plug-in"): this deck
     class Graphs : public AnalysisSource {

@@ -356,7 +356,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 
 ## 4. The main window
 
-![The main window with two decks: deck A in a pause between songs, its noise reduction holding the hiss down (Noise row); deck B playing](images/main.jpg)
+![The main window with two decks: deck A playing the sound Utrecht (Medium with Auto), deck B on Zwolle (Loud with Bass+), no music yet](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
 no menu bar: **right-click anywhere in it** for *Setup...*, *Health...* (what runs, the counters and their graphs:
@@ -373,11 +373,11 @@ that still shows every meter row and a readable spectrum.
 - **Analysis** opens the analysis window (8.1).
 - **Bypass Off / Bypass On.** Green "Bypass Off": the deck is processed. Red "Bypass On": the deck's input goes out
   unchanged, delayed by the look-ahead. A click switches it; saved per deck.
-- **Loudness** and its **Edit...** button: the deck's loudness preset (the loudness and dynamics) and the loudness window
-  (chapter 6). The list runs from the quietest output to the loudest; your own loudness presets are sorted in.
-- **EQ** and its **Edit...** button: the deck's EQ (the tone) and the EQ window (chapter 7).
+- **Sound** and its **Edit...** button: the deck's sound - a loudness preset (the loudness and dynamics, chapter 6)
+  with an EQ (the tone, chapter 7) under one name - and the Sound window (4.6). Beside the button the sound's two
+  parts, for example "Medium, Auto".
 
-A new loudness preset or EQ is heard at once, without a click.
+A new sound is heard at once, without a click.
 
 ### 4.2 The bass settings
 
@@ -441,9 +441,46 @@ drift and the health counters are in the Health window (8.3).
 ### 4.5 Linked presets
 
 With "Deck A and deck B use the same loudness preset and EQ" on (Setup window), the main window shows one set of controls - deck A's
-loudness preset, EQ, Edit buttons and Bypass - and they count for both decks (the spectrum window's bass sliders
+sound, its Edit button and Bypass - and they count for both decks (the spectrum window's bass sliders
 too). Deck B's strip shows only its route
 and its meters.
+
+### 4.6 Sounds and the Sound window
+
+![The Sound window: Zwolle with its loudness preset and EQ](images/sound.jpg)
+
+A **sound** is a loudness preset and an EQ together under one name: what a deck plays. Twelve are shipped, named
+after the provincial capitals of the Netherlands, from the quietest loudness to the loudest:
+
+| Sound | Loudness preset | EQ | For |
+|---|---|---|---|
+| **Leeuwarden** | DAB+ | Neutral | broadcast the EBU R 128 way: wide dynamics |
+| **Den Haag** | Gentle | Warm | background music, dinner |
+| **Middelburg** | Gentle | Quiet | a low volume: the contour keeps it full |
+| **Haarlem** | Light | Vocal | speech and singing in front |
+| **Maastricht** | Light | Oldies | old recordings |
+| **Assen** | Web Stream | Less mid | streaming, MP3 / AAC |
+| **Utrecht** | Medium | Auto | all-round: each song's tone evened out |
+| **Lelystad** | Medium | Neutral | the plain middle (the start) |
+| **Arnhem** | FM Station | Bright | the sound of FM radio |
+| **Zwolle** | Loud | Bass+ | parties |
+| **'s-Hertogenbosch** | Loud | Warm | parties, warmer |
+| **Groningen** | Very Loud | Bass+ | clubs |
+
+Your own sounds follow in the list. A deck's **Edit...** button opens the Sound window on its sound:
+
+- **Sound** - the sound shown (choosing one here only shows it; the main window's list chooses what a deck plays),
+  with **Save as...** (a new sound of these two parts - the deck it was opened from moves to it), **Rename...** and
+  **Delete** (your own sounds; a deck that used a deleted sound goes to Lelystad) and **Reset sound** (a shipped sound
+  back to its shipped two, your own to the two it was saved with). The line under it says who uses the sound.
+- **Loudness** and **EQ** - the sound's two parts, each with its list and an **Edit...** button that opens the
+  loudness window (6.2) or the EQ window (7.2) on it, and what the chosen one does. A part that differs from the
+  sound's reset is in bold.
+
+A change is heard at once on every deck that uses the sound, and saved at once - the sounds are kept in the settings
+file with the presets (13), shared with the plug-in. A settings file of a version before the sounds keeps what each
+deck played: the deck shows the sound that holds its loudness preset and EQ, or - when none does - the two in
+brackets, for example "(Gentle, Bright)"; Save as makes a sound of them.
 
 ## 5. The Setup window
 
@@ -557,7 +594,7 @@ These values are starting points; change them to taste.
 
 ![The loudness window on the Noise tab of an own loudness preset](images/preset.jpg)
 
-Click **Edit...** next to a deck's loudness preset. At the top:
+In the Sound window (4.6), click **Edit...** next to the loudness preset. At the top:
 
 - **Loudness** - the loudness preset shown; choosing another one here also moves the deck it was opened from to it.
 - **Save as...** saves the current values under a new name; the deck moves to the new loudness preset. The values
@@ -908,8 +945,8 @@ volume.
 
 ![The EQ window](images/colour.jpg)
 
-Click **Edit...** next to a deck's EQ. It works like the loudness window (6.2): Save as, Rename, Delete (own
-EQs; deleting moves its decks to Neutral), Reset EQ, and a tab per part. The EQ window has no on / off
+In the Sound window (4.6), click **Edit...** next to the EQ. It works like the loudness window (6.2): Save as, Rename,
+Delete (own EQs; deleting moves its decks and sounds to Neutral), Reset EQ, and a tab per part. The EQ window has no on / off
 switches: a part with all its amounts at 0 is off.
 
 ### 7.3 All EQ values
@@ -1030,7 +1067,8 @@ Click the **spectrum** in a deck's meter panel (in the plug-in too, 9.2). The bi
   sudden drop of 20 dB still shows only 3 dB lower a quarter of a second later. The meter panel's spectrum follows the
   same choice; the EQ and MB Compressor lines are never averaged. The program and the plug-in each keep their own.
 - With two decks, **Deck A / B** switches between them. **Loudness** and **EQ** choose the deck's loudness preset
-  and EQ, as the lists in the main window do (both decks when they are linked).
+  and EQ - its sound's two parts, as the Sound window's lists do (4.6): every deck playing that sound follows (both
+  decks when they are linked).
 - The **four bass sliders** (4.2) - bass level, enhancer, width and frequency - in a second row,
   for the deck shown, and the curve shows the change at once.
 - The bass level and frequency **in the graph**: the blue bass point is the bass level (drag up or down) and the
@@ -1108,8 +1146,9 @@ The window is one deck strip of the program:
   in the program.
 - **Bypass Off / Bypass On** - green "Bypass Off": the channel is processed; red "Bypass On": the input goes out
   unchanged, delayed by the same look-ahead.
-- **Loudness** and **EQ** - the lists of the program (see 9.3), each with its **Edit...** button: the same loudness preset
-  and EQ windows as in the program (chapters 6 and 7), with every value, Save as, Rename, Delete and Reset.
+- **Sound** - the program's sounds (see 9.3 and 4.6) with its **Edit...** button: the same Sound window as in the
+  program, with the loudness preset and EQ lists and their Edit buttons (the loudness and EQ windows, chapters 6 and
+  7, with every value, Save as, Rename, Delete and Reset). Beside it the sound's two parts.
 - **The meter panel** - LED bars, the gain of each stage and the spectrum with the MB Compressor bands and the EQ curve, as in the main
   window (4.3). Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
   program; clicking the spectrum opens the spectrum window (8.2) for this channel, with the four bass sliders and
@@ -1135,8 +1174,11 @@ the spectrum window, the Setup window and the right-click menu now.
 
 ### 9.3 Loudness presets, EQs and values
 
-- The loudness preset and EQ lists come from the program's settings file (`%APPDATA%\DJAP\DJAP.ini`): the shipped
-  loudness presets and EQs, and your own. Without the program the plug-in has the shipped ones, and works just the same.
+- The sounds, loudness presets and EQs come from the program's settings file (`%APPDATA%\DJAP\DJAP.ini`): the
+  shipped ones and your own. Without the program the plug-in has the shipped ones, and works just the same.
+- Choosing a sound chooses its loudness preset and EQ (only the one that changes is loaded). Each plug-in remembers
+  its sound, as its other choices. "(other)" in the sound list: a loudness preset and EQ no sound holds, or values
+  that match no loudness preset.
 - Loudness presets and EQs made or changed in the plug-in's loudness window are saved in that same file, so the program
   and every plug-in share them. Program and plug-ins never overwrite each other's loudness presets: each saves only its own
   changes into the file as it is at that moment. The plug-in never changes the program's other settings. A loudness preset
@@ -1327,11 +1369,12 @@ The About window shows which file is in use. DJAP saves it after every change. I
 | Section | Holds |
 |---|---|
 | `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume, oversampling, `Mono` |
-| `[Decks]` | Each deck's loudness preset, EQ and processing switch, linked presets |
+| `[Decks]` | Each deck's sound (empty: none holds its two parts), loudness preset, EQ and processing switch, linked presets |
 | `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options. The plug-in's windows have lines of their own (`PluginSpectrum`, `PluginSetup`, ...) |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |
 | `[Preset <name>]` | The values of a loudness preset that differ from its shipped values (own loudness presets: all values, and `<key>.Saved` for a value that was changed since the preset was saved - its reset value) |
 | `[Colour <name>]` | The same for an EQ |
+| `[Sound <name>]` | A sound's loudness preset and EQ (`Loudness=`, `EQ=`): an own sound always (with `.Saved` where it was changed since it was saved), a shipped one only where it differs from its shipped two |
 
 To start over, close DJAP and delete (or rename) the file; DJAP starts with the shipped loudness presets and opens the Setup
 window. Back the file up to keep your own loudness presets.
@@ -1361,7 +1404,7 @@ old file stays.
 | **DJAP does not start with Windows** | Check the option in the Setup window and Windows' startup apps list. |
 | **The update failed** | The Setup window says why; `%TEMP%\DJAP-update\setup.log` has the setup's log. The setup can always be downloaded from the GitHub page and run by hand. |
 | **The DJ software does not list the plug-in** | Was "VST® plug-in for DJ software" chosen in the setup, in an installation for all users? Is `C:\Program Files\Common Files\VST3\DJAP\DJAP.vst3` there? Let the DJ software scan its plug-ins again and restart it. The DJ software must be 64-bit. |
-| **The plug-in's loudness preset list lacks my own loudness presets** | The plug-in reads the program's settings in `%APPDATA%\DJAP\DJAP.ini` when it is loaded and when its loudness window is opened: click Edit... once, or load the plug-in again. A portable program (settings next to `DJAP.exe`) is not seen. |
+| **The plug-in's sound list lacks my own sounds or presets** | The plug-in reads the program's settings in `%APPDATA%\DJAP\DJAP.ini` when it is loaded and when its Sound window is opened: click Edit... once, or load the plug-in again. A portable program (settings next to `DJAP.exe`) is not seen. |
 | **DJAP closed unexpectedly** | Start `DJAP.exe --diag <file.txt>` from a command prompt; when it happens again, the file holds a report that helps to find the cause. |
 
 ## 15. Glossary

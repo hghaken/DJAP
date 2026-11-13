@@ -670,23 +670,24 @@ int main(int argc, char** argv) {
             return t.str();
         };
         {
-            Instance a, b; // instances 1 and 2 (deck 1 and deck 2)
+            Instance a, b; // instances 1 and 2 (deck 1 and deck 2); the window's list is the sounds (2026-11-13)
             CHECK(a.open(module, &host) && b.open(module, &host));
-            CHECK(pick(a, 1, L"Loud"));
-            CHECK(pick(b, 2, L"Warm"));
+            CHECK(pick(a, 1, L"Zwolle"));   // Loud with Bass+
+            CHECK(pick(b, 1, L"Den Haag")); // Gentle with Warm
             a.close();
             b.close();
         }
         const std::string text = fileText();
         CHECK(text.find("Loudness1=Loud\n") != std::string::npos && text.find("Colour2=Warm\n") != std::string::npos);
+        CHECK(text.find("Sound1=Zwolle\n") != std::string::npos && text.find("Sound2=Den Haag\n") != std::string::npos);
         {
             Instance a, b;
             CHECK(a.open(module, &host) && b.open(module, &host));
             const State sa = a.state(), sb = b.state();
             std::printf("-- the next start: instance 1 %s with %s, instance 2 %s with %s\n", sa.preset.c_str(),
                         sa.colour.c_str(), sb.preset.c_str(), sb.colour.c_str());
-            CHECK(sa.preset == "Loud" && sa.colour == "Neutral");
-            CHECK(sb.preset == "Medium" && sb.colour == "Warm");
+            CHECK(sa.preset == "Loud" && sa.colour == "Bass+");
+            CHECK(sb.preset == "Gentle" && sb.colour == "Warm");
             // the host's reset: every parameter to its default, then activated - the kept preset's values again
             int reset = 0;
             for (int32 k = 0; k < a.controller->getParameterCount(); ++k) {
@@ -808,12 +809,12 @@ int main(int argc, char** argv) {
             Instance a, b;
             CHECK(a.open(module, &host) && b.open(module, &host));
             const State b0 = b.state();
-            CHECK(pick(a, 1, L"Very Loud"));
+            CHECK(pick(a, 1, L"Groningen")); // Very Loud with Bass+
             const State b1 = b.state();
-            CHECK(pick(b, 2, L"Bright"));
+            CHECK(pick(b, 1, L"Arnhem")); // FM Station with Bright
             const State a2 = a.state(), b2 = b.state();
-            std::printf("-- %s: deck 2 started on %s with %s (mono %.0f); deck 1 chose Very Loud: deck 2 %s; deck 2 chose "
-                        "Bright: deck 1 %s\n",
+            std::printf("-- %s: deck 2 started on %s with %s (mono %.0f); deck 1 chose Groningen: deck 2 %s; deck 2 chose "
+                        "Arnhem: deck 1 %s\n",
                         link ? "linked" : "not linked", b0.preset.c_str(), b0.colour.c_str(),
                         b.controller->getParamNormalized(ap::plugin::kMonoId), b1.preset.c_str(), a2.colour.c_str());
             if (link) {
@@ -822,7 +823,7 @@ int main(int argc, char** argv) {
                 CHECK(a2.values == b2.values);
             } else {
                 CHECK(b0.preset == "Gentle" && b0.colour == "Neutral");
-                CHECK(b1.preset == "Gentle" && a2.colour == "Warm" && b2.colour == "Bright");
+                CHECK(b1.preset == "Gentle" && a2.colour == "Bass+" && b2.colour == "Bright" && b2.preset == "FM Station");
             }
             a.close();
             b.close();

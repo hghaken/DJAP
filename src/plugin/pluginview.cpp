@@ -36,7 +36,7 @@ namespace {
 const wchar_t* const kClass = L"DJAPPluginView";
 // (the bass sliders, oversampling, look-ahead and About left the window on 2026-10-29: client, "they can all go,
 // they are in other windows" - the spectrum window, the Setup window and the right-click menu)
-enum Id { idPreset = 1, idColour, idBypass, idEdit, idEditColour, idGraphs, idVersion, idMeter = 20 };
+enum Id { idSound = 1, idBypass = 3, idEdit, idGraphs = 6, idVersion, idMeter = 20 };
 enum MenuId { mSetup = 1, mAbout };
 
 int g_views = 0; // open windows of this DLL: the classes and GDI+ live while one is open
@@ -244,6 +244,7 @@ void PluginView::registerClasses(HINSTANCE instance) {
     AnalysisWindow::setModule(instance); // and the Graphs window
     SpectrumWindow::setModule(instance); // the spectrum window
     SetupWindow::setModule(instance);    // the Setup window
+    SoundWindow::setModule(instance);    // the Sound window
     if (!g_updater) g_updater = std::make_unique<Updater>();
     INITCOMMONCONTROLSEX icc{sizeof icc, ICC_BAR_CLASSES | ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES};
     InitCommonControlsEx(&icc);
@@ -256,6 +257,7 @@ void PluginView::unregisterClasses() {
     AnalysisWindow::unregisterClass();
     SpectrumWindow::unregisterClass();
     SetupWindow::unregisterClass();
+    SoundWindow::unregisterClass();
     EditWindow::unregisterClasses();
     unregisterMeterView();
     UnregisterClassW(kClass, ghInst);
@@ -399,15 +401,13 @@ void PluginView::create() {
     version_ = make(L"STATIC", wide(AP_VERSION_STRING).c_str(), SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY, idVersion);
     graphs_ = make(L"BUTTON", L"Analysis", BS_OWNERDRAW | WS_TABSTOP, idGraphs); // the window's name (was "Graphs")
     bypass_ = make(L"BUTTON", L"Bypass Off", BS_OWNERDRAW | WS_TABSTOP, idBypass);
-    presetLabel_ = make(L"STATIC", L"Loudness", SS_LEFT | SS_CENTERIMAGE, 0);
-    preset_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idPreset);
-    colourLabel_ = make(L"STATIC", L"EQ", SS_LEFT | SS_CENTERIMAGE, 0);
-    colour_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idColour);
+    soundLabel_ = make(L"STATIC", L"Sound", SS_LEFT | SS_CENTERIMAGE, 0);
+    sound_ = make(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP, idSound);
     edit_ = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idEdit);
-    editColour_ = make(L"BUTTON", L"Edit...", BS_OWNERDRAW | WS_TABSTOP, idEditColour);
+    parts_ = make(L"STATIC", L"", SS_LEFT | SS_CENTERIMAGE | SS_ENDELLIPSIS | SS_NOPREFIX | SS_NOTIFY, 0);
     meter_ = createMeterView(hwnd_, idMeter);
-    for (HWND b : {graphs_, bypass_, edit_, editColour_}) theme::makeButton(b);
-    for (HWND c : {preset_, colour_}) theme::makeCombo(c);
+    for (HWND b : {graphs_, bypass_, edit_}) theme::makeButton(b);
+    theme::makeCombo(sound_);
     fillLists();
 
     tips_.create(hwnd_);
@@ -415,16 +415,16 @@ void PluginView::create() {
                         L"EQs. Every value is also a parameter in the host's own list, and can be automated.\n\n"
                         L"Right-click anywhere on the window: Setup (look-ahead, oversampling, tooltips, the update "
                         L"check) and About DJAP. When a newer version exists it says so here (About DJAP has the details).");
-    tips_.add(preset_, L"The loudness preset: the target loudness and every stage's values. The list holds the program's "
-                       L"loudness presets and your own (from the settings file the program and the plug-in share). The "
-                       L"project keeps the values themselves, so it sounds the same on a computer without that "
-                       L"preset; \"(other values)\" = values that match no preset in the list.");
-    tips_.add(colour_, L"The EQ, on top of the loudness preset: tone, auto tone, sub bass and a contour. "
-                       L"Neutral changes nothing.");
-    tips_.add(edit_, L"Opens the loudness window: the stage switches and every value of the loudness preset with its unit, "
-                     L"range and meaning; Save as, Rename, Delete and Reset. Your presets are saved in the settings "
-                     L"file the program uses too.");
-    tips_.add(editColour_, L"Opens the EQ window: every value of the EQ; Save as, Rename, Delete and Reset.");
+    tips_.add(sound_, L"The sound: a loudness preset (the target loudness and every stage's values) with an EQ, under "
+                      L"one name - the twelve shipped ones are named after the provincial capitals, your own follow "
+                      L"(from the settings file the program and the plug-in share). The project keeps the values "
+                      L"themselves, so it sounds the same on a computer without that sound; \"(other)\" = a loudness "
+                      L"preset and EQ no sound holds, or values that match no preset.");
+    tips_.add(parts_, L"The sound's loudness preset and EQ. Edit... sets them apart, and opens their windows.");
+    tips_.add(edit_, L"Opens the Sound window: the sound's loudness preset and EQ, each with its list and an Edit button "
+                     L"(the loudness window: the stage switches and every value; the EQ window); Save as, Rename, "
+                     L"Delete and Reset of the sound. Your sounds and presets are saved in the settings file the program "
+                     L"uses too.");
     tips_.add(graphs_, L"Opens the analysis window of this channel: the signal chain step by step (a click on a step "
                        L"opens its settings), the compressor's curve, loudness and gains of the last 60 s, the scope "
                        L"(right-click: input or output) and the goniometer with correlation and stereo width.");
@@ -459,22 +459,17 @@ void PluginView::layout() {
     MoveWindow(graphs_, m + W - bypassW - gap - graphsW, y, graphsW, rowH, TRUE);
     MoveWindow(bypass_, m + W - bypassW, y, bypassW, rowH, TRUE);
     y += rowH + gap;
-    // Loudness [....] [Edit...]  Colour [....] [Edit...]
-    const int labelW = px(66), colourLabelW = px(26), editW = px(64); // "EQ" (was "Colour", 50 px)
-    const int combos = W - labelW - colourLabelW - 2 * editW - 5 * gap - px(10);
-    const int presetW = combos / 2, colourW = combos - presetW;
+    // Sound [....] [Edit...]  Loudness preset, EQ
+    const int labelW = px(48), editW = px(64);
+    const int soundW = std::max(px(140), (W - labelW - editW - 3 * gap) * 11 / 20);
     int x = m;
-    MoveWindow(presetLabel_, x, y, labelW, rowH, TRUE);
+    MoveWindow(soundLabel_, x, y, labelW, rowH, TRUE);
     x += labelW + gap;
-    MoveWindow(preset_, x, y, presetW, px(300), TRUE);
-    x += presetW + gap;
+    MoveWindow(sound_, x, y, soundW, px(400), TRUE);
+    x += soundW + gap;
     MoveWindow(edit_, x, y, editW, rowH, TRUE);
-    x += editW + gap + px(10);
-    MoveWindow(colourLabel_, x, y, colourLabelW, rowH, TRUE);
-    x += colourLabelW + gap;
-    MoveWindow(colour_, x, y, colourW, px(300), TRUE);
-    x += colourW + gap;
-    MoveWindow(editColour_, x, y, editW, rowH, TRUE);
+    x += editW + gap + px(4);
+    MoveWindow(parts_, x, y, std::max(0, m + W - x), rowH, TRUE);
     y += rowH + gap; // = meterTop(dpi_), as the program's meterTop()
     MoveWindow(meter_, m, y, W, rc.bottom - m - y, TRUE);
     RedrawWindow(hwnd_, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
@@ -487,22 +482,27 @@ void PluginView::listsChanged() {
 }
 
 void PluginView::fillLists() {
-    // the presets and colours of the shared settings file, and one entry for values that match none
-    for (const bool colour : {false, true}) {
-        HWND box = colour ? colour_ : preset_;
-        SendMessageW(box, CB_RESETCONTENT, 0, 0);
-        for (const Preset& p : colour ? plugin_->colours() : plugin_->presets())
-            SendMessageW(box, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(wide(p.name).c_str()));
-        SendMessageW(box, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"(other values)"));
-    }
+    // the sounds of the shared settings file, and one entry for a preset and colour no sound holds
+    SendMessageW(sound_, CB_RESETCONTENT, 0, 0);
+    for (const Sound& s : plugin_->sounds()) SendMessageW(sound_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(wide(s.name).c_str()));
+    SendMessageW(sound_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"(other)"));
 }
 
 void PluginView::fill() {
     dirty_ = false;
     if (!hwnd_) return;
+    const int si = plugin_->soundIndex();
+    if (SendMessageW(sound_, CB_GETCURSEL, 0, 0) != si) SendMessageW(sound_, CB_SETCURSEL, static_cast<WPARAM>(si), 0);
+    // the two parts: the preset's and the colour's names, "other values" where the values match none
     const int pi = plugin_->presetIndex(), ci = plugin_->colourIndex();
-    if (SendMessageW(preset_, CB_GETCURSEL, 0, 0) != pi) SendMessageW(preset_, CB_SETCURSEL, static_cast<WPARAM>(pi), 0);
-    if (SendMessageW(colour_, CB_GETCURSEL, 0, 0) != ci) SendMessageW(colour_, CB_SETCURSEL, static_cast<WPARAM>(ci), 0);
+    const auto& presets = plugin_->presets();
+    const auto& colours = plugin_->colours();
+    const std::wstring parts = (pi < static_cast<int>(presets.size()) ? wide(presets[static_cast<size_t>(pi)].name) : std::wstring(L"other values")) +
+                               L", " +
+                               (ci < static_cast<int>(colours.size()) ? wide(colours[static_cast<size_t>(ci)].name) : std::wstring(L"other values"));
+    wchar_t now[256] = {};
+    GetWindowTextW(parts_, now, 256);
+    if (parts != now) SetWindowTextW(parts_, parts.c_str());
     theme::setBypass(bypass_, plugin_->plainOf(kBypassId) >= 0.5);
 }
 
@@ -571,18 +571,17 @@ void PluginView::followFrame() {
 void PluginView::command(int id, int code) {
     // CBN_SELENDOK too: the item that is already chosen, picked again, sends no CBN_SELCHANGE - and choosing it again
     // loads its values again (back to the preset after changes)
-    if ((id == idPreset || id == idColour) && (code == CBN_SELCHANGE || code == CBN_SELENDOK)) {
-        const bool colour = id == idColour;
-        const int sel = static_cast<int>(SendMessageW(colour ? colour_ : preset_, CB_GETCURSEL, 0, 0));
-        plugin_->choose(colour, sel);
+    if (id == idSound && (code == CBN_SELCHANGE || code == CBN_SELENDOK)) { // (a sound chosen again changes nothing)
+        const int sel = static_cast<int>(SendMessageW(sound_, CB_GETCURSEL, 0, 0));
+        plugin_->chooseSound(sel);
         fill();
     } else if (id == idBypass && code == BN_CLICKED) {
         plugin_->edit(kBypassId, plugin_->plainOf(kBypassId) >= 0.5 ? 0.0 : 1.0);
         fill();
     } else if (id == idGraphs && code == BN_CLICKED) {
         graphsWnd_.show(GetAncestor(hwnd_, GA_ROOT));
-    } else if ((id == idEdit || id == idEditColour) && code == BN_CLICKED) {
-        plugin_->openEditor(id == idEditColour, GetAncestor(hwnd_, GA_ROOT));
+    } else if (id == idEdit && code == BN_CLICKED) { // the Sound window
+        plugin_->openSoundWindow(GetAncestor(hwnd_, GA_ROOT));
     } else if (id == idMeter && code == kMeterOpenRow + kMeterSpectrum) { // the spectrum: the spectrum window
         spectrumWnd_.show(GetAncestor(hwnd_, GA_ROOT), 0);
     } else if (id == idMeter && code >= kMeterOpenRow && code < kMeterOpenRow + kMeterTargets) { // a row or bar

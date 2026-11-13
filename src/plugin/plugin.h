@@ -12,6 +12,7 @@
 #include "params.h"
 #include "realtime.h"
 #include "settings.h"
+#include "soundwnd.h"
 
 #include "public.sdk/source/vst/vstsinglecomponenteffect.h"
 
@@ -89,10 +90,19 @@ public:
     // The window chose a preset or colour (index into its list): the list parameter, or - when it is already the
     // chosen one - every value of it again (back to the preset after changes).
     void choose(bool colour, int index);
-    // The program's preset (or colour) window for this plug-in, on `tab` (empty: as it was); while the plug-in's
-    // window is open (closeEditors when it closes).
-    void openEditor(bool colour, HWND owner, const std::string& tab = {});
+    // The program's preset (or colour) window for this plug-in, on `tab` (empty: as it was) and on `preset` (empty:
+    // the plug-in's own); while the plug-in's window is open (closeEditors when it closes).
+    void openEditor(bool colour, HWND owner, const std::string& tab = {}, const std::string& preset = {});
     void closeEditors();
+    // The sounds (client, 2026-11-13): the window's list. The plug-in's sound is the one that holds its chosen preset
+    // and colour (its own choice first); the list's size = "(other)": no sound holds them.
+    const std::vector<Sound>& sounds() const { return settings_.sounds; }
+    int soundIndex() const;
+    std::string soundName() const; // "" for "(other)"
+    // The window chose a sound: its preset and its colour, as two choices of the lists.
+    void chooseSound(int index);
+    // The Sound window for this plug-in (the Edit button beside its Sound list).
+    void openSoundWindow(HWND owner);
     // The loudness window's Compressor graphs: whose audio they draw (the plug-in's window, while it is open) and
     // that window's timer.
     void setEditorLive(const AnalysisSource* source) {
@@ -120,6 +130,7 @@ private:
     void loadPresetIntoController(bool colour); // the values of the chosen preset (or colour), if it exists
     void listsChanged();                        // presets added, renamed or deleted: the list parameters follow
     void edited(bool listChanged, bool save);   // the preset window changed a preset or the choice
+    void soundEdited(bool listChanged);         // the Sound window changed a sound (the plug-in's own: its parts)
     PresetValues chosenValues() const;          // the chosen preset with the chosen colour (exact_ for "other")
     bool saveSettings();                        // the preset lists into the settings file, merged
     // The window's choice of preset, colour, look-ahead, oversampling or mono: kept for this instance in the settings
@@ -145,6 +156,7 @@ private:
     PresetValues applied_{}; // chosenValues() when last taken over: edited() takes only what changed since
     std::filesystem::path ini_;
     std::unique_ptr<EditWindow> editor_, colourEditor_;
+    std::unique_ptr<SoundWindow> soundWindow_;
     const AnalysisSource* editorLive_ = nullptr;
 
     // audio side

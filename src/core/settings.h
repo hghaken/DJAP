@@ -23,7 +23,29 @@ struct Preset {
     bool shipped = false;
 };
 
+// A sound: a loudness preset and an EQ together under one name - what a deck (and a plug-in) chooses (client,
+// 2026-11-13: "combine the Loudness and the EQ into one setting named after a capital in the Netherlands ... stored
+// on disk, changed by the user and saved again ... chosen in the main window with a drop-down; an Edit button where
+// the Loudness and the EQ are set apart"; then "make 12 sets, the 12 provincial capitals"). The twelve shipped ones
+// carry those names; the user's own follow. Its two parts are chosen in the Sound window; a change is saved at once,
+// as a preset's values, and every deck using the sound follows.
+struct Sound {
+    std::string name;
+    std::string loudness = "Medium", eq = "Neutral";
+    // what "reset" goes back to: a shipped sound's shipped parts, an own sound's parts as it was saved (Save as)
+    std::string savedLoudness = "Medium", savedEq = "Neutral";
+    bool shipped = false;
+    bool operator==(const Sound& o) const {
+        return name == o.name && loudness == o.loudness && eq == o.eq && savedLoudness == o.savedLoudness &&
+               savedEq == o.savedEq && shipped == o.shipped;
+    }
+};
+
 struct DeckSettings {
+    // Its sound: Medium with Neutral, the two below. What the deck plays is `preset` and `colour`; the sound is the
+    // one that holds them (Settings::chooseSound, setDeckPart) - empty when they were chosen apart and no sound has
+    // them (a settings file of a version before the sounds).
+    std::string sound = "Lelystad";
     std::string preset = "Medium";
     std::string colour = "Neutral"; // colour preset (tone, auto tone, sub bass, loudness)
     bool processing = true;
@@ -48,12 +70,13 @@ struct WindowPlace {
 // restart of the DJ program"): that program keeps no plug-in state - at every start it sets each parameter back to
 // its default - so the plug-in keeps its own choices here, per instance (Settings::pluginSlots).
 struct PluginSlot {
+    std::string sound = "Lelystad"; // its sound; empty: the two below match none (values set by the host)
     std::string preset = "Medium", colour = "Neutral";
     double lookAheadMs = 1.5;
     int oversampling = 4;
     bool mono = false;
     bool operator==(const PluginSlot& o) const {
-        return preset == o.preset && colour == o.colour && lookAheadMs == o.lookAheadMs &&
+        return sound == o.sound && preset == o.preset && colour == o.colour && lookAheadMs == o.lookAheadMs &&
                oversampling == o.oversampling && mono == o.mono;
     }
 };
@@ -137,6 +160,31 @@ public:
     std::vector<Preset> presets; // from the quietest output to the loudest (sortPresets), own ones among them
     std::vector<Preset> colours; // colour presets: shipped first, then the user's in the order made
     void sortPresets();          // after loading and when a preset is added
+    // sounds: the twelve shipped ones (from the quietest loudness to the loudest), then the user's in the order made
+    std::vector<Sound> sounds;
+    static constexpr const char* kDefaultSound = "Lelystad"; // Medium with Neutral: the decks' defaults
+    Sound* findSound(const std::string& name);
+    const Sound* findSound(const std::string& name) const;
+    // The first sound with these two parts (shipped ones first), or null.
+    const Sound* soundWith(const std::string& loudness, const std::string& eq) const;
+    // Deck d takes the sound (its loudness preset and EQ); false when there is no such sound.
+    bool chooseSound(int d, const std::string& name);
+    // A sound's loudness preset (Dynamics) or EQ (Colour) is now `preset`: every deck using the sound follows.
+    void setSoundPart(const std::string& sound, PresetKind k, const std::string& preset);
+    // Deck d's loudness preset or EQ is now `preset` (a list in the spectrum window, a preset saved under a new
+    // name): its sound changes with it - or, for a deck without a sound, the deck alone.
+    void setDeckPart(int d, PresetKind k, const std::string& preset);
+    // Sound management, as the presets'. Save as: a new own sound with these parts (or an own one saved over).
+    bool saveSoundAs(const std::string& name, const std::string& loudness, const std::string& eq, std::string& error);
+    bool renameSound(const std::string& from, const std::string& to, std::string& error); // decks and slots follow
+    bool removeSound(const std::string& name, std::string& error); // its decks keep their parts, on the default sound
+    void resetSound(const std::string& name);                        // back to its reset parts; its decks follow
+    // The parts it resets to (shipped: shipped; own: as saved).
+    void soundResetParts(const std::string& name, std::string& loudness, std::string& eq) const;
+    // A shipped sound's name by its index (0 .. count - 1), and its shipped parts; -1 / false for another name.
+    static int shippedSoundCount();
+    static int shippedSoundIndex(const std::string& name);
+    static bool shippedSoundParts(const std::string& name, std::string& loudness, std::string& eq);
 
     bool load(const std::filesystem::path& file);
     bool save(const std::filesystem::path& file) const;

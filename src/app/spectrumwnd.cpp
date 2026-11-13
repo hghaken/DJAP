@@ -102,9 +102,14 @@ void SettingsSpectrum::choose(int d, bool colour, int index) {
     const std::vector<Preset>& list = colour ? settings_.colours : settings_.presets;
     if (index < 0 || static_cast<size_t>(index) >= list.size()) return;
     const std::string name = list[static_cast<size_t>(index)].name;
-    for (int k = 0; k < 2; ++k) // the deck shown; both when the presets are linked
-        if (k == d || (settings_.linkPresets && settings_.decks == 2))
-            (colour ? settings_.deck[k].colour : settings_.deck[k].preset) = name;
+    // the deck shown takes it - as its sound's part, so every deck playing that sound follows; both decks when the
+    // presets are linked
+    settings_.setDeckPart(d, colour ? PresetKind::Colour : PresetKind::Dynamics, name);
+    if (settings_.linkPresets && settings_.decks == 2 && !settings_.chooseSound(1 - d, settings_.deck[d].sound)) {
+        settings_.deck[1 - d].preset = settings_.deck[d].preset;
+        settings_.deck[1 - d].colour = settings_.deck[d].colour;
+        settings_.deck[1 - d].sound = settings_.deck[d].sound;
+    }
     if (changed_) changed_(true); // heard at once, saved; the main window's lists follow
 }
 

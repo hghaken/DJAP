@@ -137,5 +137,7 @@ private:
 
 // Asks for a preset name in a small modal window. Returns false when cancelled.
 bool askName(HWND owner, const std::wstring& title, const std::wstring& prompt, std::string& name);
+// The line that describes a preset or a colour (the loudness and EQ windows under their choice; the Sound window).
+std::wstring describePreset(const Preset& p, PresetKind kind);
 
 } // namespace ap

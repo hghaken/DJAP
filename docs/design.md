@@ -271,6 +271,49 @@ low-mid -2, presence +2.5), Oldies (bass +1, treble +1, auto tone 70 %, sub bass
 Quiet (loudness 60 %). Managed like presets: save as, rename and delete own colours, reset a value or a shipped
 colour. Cost: every colour stage on adds about 0.7 % of a core per deck (`deck_test --cpu`: 3.9 % against 3.2 %).
 
+### 3.4 Sounds
+
+Client, 2026-11-13: "combine the Loudness and the EQ into one setting named after a capital in the Netherlands ...
+stored on disk, changed by the user and saved again ... chosen in the main window with a drop-down; an Edit button
+where the Loudness and the EQ are set apart; the current Loudness and EQ drop-downs in the main window go. Think of a
+name for this combination"; then "make 12 sets, the 12 provincial capitals". The name: a **sound** (as "the Philly
+sound"; proposed with Profile, Style, Station and Signature). A sound is a name, a loudness preset and an EQ
+(`Sound` in settings.h); twelve are shipped, from the quietest loudness to the loudest:
+
+| Sound | Loudness | EQ | Use |
+|---|---|---|---|
+| Leeuwarden | DAB+ | Neutral | broadcast, wide dynamics |
+| Den Haag | Gentle | Warm | background, dinner |
+| Middelburg | Gentle | Quiet | a low volume |
+| Haarlem | Light | Vocal | speech and singing |
+| Maastricht | Light | Oldies | old recordings |
+| Assen | Web Stream | Less mid | streaming |
+| Utrecht | Medium | Auto | all-round |
+| Lelystad | Medium | Neutral | the plain middle; the decks' default (it is what a deck played by default before) |
+| Arnhem | FM Station | Bright | FM radio |
+| Zwolle | Loud | Bass+ | parties (the client's example) |
+| 's-Hertogenbosch | Loud | Warm | parties, warmer |
+| Groningen | Very Loud | Bass+ | clubs |
+
+Managed like the presets: a change of a part is saved at once and heard on every deck that plays the sound
+(`setSoundPart`); Save as (a new own sound, its reset parts what it was saved with), rename, delete (its decks go to
+Lelystad), reset (shipped: the shipped parts). A renamed or deleted preset carries over into the sounds made of it.
+**What a deck plays is still its preset and colour** (`DeckSettings::preset`, `colour`); its sound is the one that holds
+them: `chooseSound` sets both, `setDeckPart` (the spectrum window's lists, a preset saved under a new name) changes the
+deck's sound's part. A deck whose two parts no sound holds - a settings file of a version before the sounds, or parts
+set apart - has no sound: the main window shows its parts in brackets, "(Gentle, Bright)", and Save as in the Sound
+window makes a sound of them; no sound is made behind the user's back. The file: `[Decks] SoundA=` / `SoundB=` (empty:
+none; read back only when that sound holds the deck's two parts, else the first sound that does), `[Sound <name>]`
+sections with `Loudness=` and `EQ=` (and `.Saved` for an own sound's reset parts; a shipped sound only where it
+differs), `Sound<n>=` per plug-in instance. Merged three-way between the program and the plug-ins as the presets
+(`mergeSounds`); a sound the other changed is played at once by the program's decks that played it. The plug-in: a
+Sound list with "(other)" (its preset and colour held by no sound, or values that match no preset); choosing a sound
+chooses its preset and colour through the two list parameters (only the one that changes - a choice of the same
+preset would load its values again); the host still sees and automates the two lists, so projects stay valid.
+The main window's strip: Sound, Edit... (the Sound window, `soundwnd.*`), and the two parts as text; the Sound window:
+the sound with Save as, Rename, Delete, Reset sound, and its Loudness and EQ lists, each with an Edit button that opens
+the loudness or EQ window on that preset, and the preset's description.
+
 ## 4. True-peak detection in the limiter
 
 The handbook records that a 4x / 16-tap detector let full-band noise through by ~1.4 dB (fault 25). Plan: 8x
