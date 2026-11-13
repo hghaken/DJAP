@@ -716,6 +716,33 @@ attack's and the release's) and the wheel anywhere over it (one slider position 
 frequency axis ends at 1 kHz instead of 16 kHz - the high-pass goes to 200 Hz, so the bass it is about gets the
 width (grid at 50, 100, 200, 500 Hz). The strip is at least 214 px high (four legend lines); 21 tooltip rectangles.
 
+Then the curve went into the level graph (client, the same day: "can the curve graph be integrated in the Level and
+reduction graph?"; a sketch with the two side by side in one panel - "not beside each other but in each other, give
+an example"; a second sketch - "yes build this one, with: ratio text left of the mark, threshold text left of the
+mark, make-up text right of the mark"; while it was built: "the side chain graph can be narrower", then "make the
+attack, release and side chain windows equally wide"). Four panels are left. **Level and curve**: one plot whose
+vertical axis is the level (LU to the level the threshold is relative to, -30 .. +18) for both pictures in it -
+behind, the last 4 s over the plot's whole width (level in as a grey area, level out as a thin line, the reduction
+from the top), dimmed; in front, the curve (level in to the right over the same width, so it is stretched, not
+square: the price of one plot). On that shared axis the four values are level lines across both: the threshold
+(music above it is compressed; its mark where the line crosses the 1:1 diagonal, the input level at which the curve
+bends), the knee's band around it (mark on its upper edge at the left; on the threshold's line at 0), the ratio
+through the curve's loud end and the make-up through its quiet end, as before. All four are dragged up / down, by
+the mark or anywhere along the line; the upright threshold line and the left / right drag are gone. The names stand
+at the lines beside the marks as the client asked - the threshold's and the ratio's left of the mark on the line,
+the make-up's right of its mark under the line (above it the curve rises through the text), the knee's right of its
+mark. The white dot of "now" is joined to the newest music at the right edge by a thin dotted line; the histogram
+of levels is gone (the level behind shows it). The legend moved into the panel's header - on the title's line
+between the title and the reduction's number, or in columns under the title when that does not fit - off the
+graph. Layout: this panel across the top (58 % of the height) with attack, release and side chain under it,
+equally wide; all four side by side (2.2 : 1 : 1 : 1) when the strip is too low for two rows or so wide that the
+top panel would be wider than 4.6 times its height. Drawing: the curve is still but lies over what moves, so the
+"still bitmap, live parts on top" order no longer held; drawn with GDI+ at every refresh its long dashed and dotted
+anti-aliased lines took 29 % of a processor core (measured, test instance). It now has a layer of its own - a 32-bit
+premultiplied DIB that GDI+ draws when a value, the size or the DPI changes (`renderCurve`) and `GdiAlphaBlend`
+lays over the level at every refresh: 5 % (the whole test instance, default size), as before the merge. 20 tooltip
+rectangles.
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its

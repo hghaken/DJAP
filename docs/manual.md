@@ -650,26 +650,25 @@ threshold: it should fill in the pauses, not while the music plays.
 | Value | Unit | Range | Default | What it does |
 |---|---|---|---|---|
 | On | | | on | |
-| Threshold | LU | -10 .. +15 | +2 | Relative to the target: material louder than this is compressed. Lower = more compression. Set in the Curve graph (below). |
-| Ratio | :1 | 1 .. 8 | 2.0 | How strongly. Higher is more even and more "in your face"; too much sounds flat and tired. Set in the Curve graph (below). |
-| Knee | dB | 0 .. 12 | 6 | Width of the soft knee: wider starts more gently. Set in the Curve graph (below). |
+| Threshold | LU | -10 .. +15 | +2 | Relative to the target: material louder than this is compressed. Lower = more compression. Set in the Level and curve graph (below). |
+| Ratio | :1 | 1 .. 8 | 2.0 | How strongly. Higher is more even and more "in your face"; too much sounds flat and tired. Set in the Level and curve graph (below). |
+| Knee | dB | 0 .. 12 | 6 | Width of the soft knee: wider starts more gently. Set in the Level and curve graph (below). |
 | Attack | ms | 1 .. 100 | 10 | Short catches drum hits (less punch); longer lets them through (more punch). Set in its graph (below). |
 | Release | ms | 20 .. 1000 | 200 | Short sounds lively but can pump; long is smooth. Set in its graph (below). |
 | Side-chain high-pass | Hz | off, 40 .. 200 | 150 | Bass below this does not make the compressor work, so a heavy kick does not pull the whole mix down with every beat ("pumping"). Lower it only if you want the compressor to follow the bass. Set in its graph (below). |
-| Make-up | dB | auto, 0 .. 12 | auto | Gain after compression. Auto keeps the target level unchanged. Set in the Curve graph (below). |
+| Make-up | dB | auto, 0 .. 12 | auto | Gain after compression. Auto keeps the target level unchanged. Set in the Level and curve graph (below). |
 
-![The Compressor tab: the stage's switch and, under it, the five graphs](images/compressor.jpg)
+![The Compressor tab: the stage's switch and, under it, the four graphs](images/compressor.jpg)
 
-The Compressor tab has no sliders: only the stage's switch, and under it five graphs that show what the values do -
-with the music of the deck the window was opened from drawn behind them. Every value is set in the graphs.
+The Compressor tab has no sliders: only the stage's switch, and under it four graphs that show what the values do -
+with the music of the deck the window was opened from in them. Every value is set in the graphs.
 
-- **Threshold**, **Ratio** and **Make-up** are the three dashed lines of the Curve graph, each with its name on it.
-  Drag a line anywhere along it (or its round mark): the Threshold left and right, the Ratio and the Make-up up and
-  down.
-- **Knee** is the shaded band around the Threshold's line. Drag the round mark at its top, or an edge of the band,
-  left and right.
-- The Curve graph's legend lists these four with their values; turn the mouse wheel over a line of the legend for
-  one step (0.5 LU, 0.1, 0.5 dB, 0.5 dB).
+- **Threshold**, **Ratio** and **Make-up** are the three dashed lines across the Level and curve graph, each with
+  its name beside its round mark. Drag a line anywhere along it (or its mark) up and down.
+- **Knee** is the shaded band around the Threshold's line. Drag the round mark at its left, or an edge of the band,
+  up and down.
+- The graph's legend, in its top line, lists these four with their values; turn the mouse wheel over one of them
+  for one step (0.5 LU, 0.1, 0.5 dB, 0.5 dB).
 - **Attack**, **Release** and the **Side-chain high-pass** are set in their own graphs: drag the mark, or turn the
   mouse wheel over the graph for one step (1 ms, 10 ms, 5 Hz).
 - Each of the seven has a small arrow as its **reset** button - behind its value in the legend, and in the corner of
@@ -678,28 +677,31 @@ with the music of the deck the window was opened from drawn behind them. Every v
 
 The graphs:
 
-- **Curve** - the level going in (to the right) against the level coming out (up). Under the threshold the line is
-  straight; above it, it bends: flatter with a higher Ratio, rounder with a wider Knee. The grey bars show where the
-  music's level was in the last seconds and the white dot where it is now, with an orange stroke for how much it is
-  turned down at this moment. The upright dashed line is the Threshold, the band around it the Knee. The Ratio's
-  line lies where the loudest music comes out: lower is a higher ratio. The Make-up's line lies at the quiet end of
-  the curve, which the make-up lifts, and the whole curve with it; all the way down is auto.
+- **Level and curve** - two pictures in one, on the same scale of levels (up).
+  - Behind: the last 4 seconds of the music, the newest at the right - the level at the compressor (grey), what it
+    lets out (the thin line) and, from the top, how much it turns down (orange, with the largest reduction as a
+    number).
+  - In front: the compressor's curve, the thick line - the level going in (to the right) against the level coming
+    out (up). Under the threshold it follows the dotted diagonal; above it, it bends: flatter with a higher Ratio,
+    rounder with a wider Knee. The white dot is where the level is now, joined by a thin dotted line to the newest
+    music at the right edge, with an orange stroke for how much it is turned down at this moment.
+  - The lines lie across both. Music that rises above the **Threshold**'s line is compressed, and the curve bends
+    where it crosses that line; the **Knee** is the band around it. The **Ratio**'s line lies where the loudest
+    music comes out: lower is a higher ratio. The **Make-up**'s line lies at the quiet end of the curve, which the
+    make-up lifts, and the whole curve with it; all the way down is auto.
 - **Attack** - a hit 10 dB over the threshold in its first 150 ms: dashed as it comes in, the line as it comes out.
   What is above the line before the mark still gets through - the punch.
 - **Release** - the gain on the rest of the music after that hit: still down when the hit ends, back after the
   release time. If it is back before the next beat, the music goes up and down with every beat (pumping); with a
   long release it stays down and is smooth.
-- **Level and reduction** - the last 4 seconds: the level at the compressor (grey), what it lets out (the line) and,
-  from the top, how much it turns down (orange, with the largest reduction as a number). The dashed line is the
-  threshold.
 - **Side-chain high-pass** - the music's spectrum from 30 Hz to 1 kHz (grey) and the part of it the compressor
   listens to (coloured): what the high-pass leaves of the bass. Drag the mark to the left and the kick turns
-  coloured - the compressor then follows it, and the Level graph shows the reduction with every beat. All the way
-  to the left is off.
+  coloured - the compressor then follows it, and the Level and curve graph shows the reduction with every beat. All
+  the way to the left is off.
 
-The graphs take the room the window has under the switch and grow with it. They stand in two rows, or in one row
-in a wide window; the Curve's legend stands beside the curve or above it, whichever leaves the curve larger. Without
-audio on the deck the two live graphs say so and the others still show the values.
+The graphs take the room the window has under the switch and grow with it: the Level and curve graph across the
+top with the other three, equally wide, under it - or all four side by side in a wide window. Without audio on the
+deck the two graphs with music say so and still show the values.
 
 **MB Compressor** - the multiband stage.
 

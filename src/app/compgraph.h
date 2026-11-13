@@ -21,6 +21,11 @@
 // chain graph run to 1 k instead of 10 k"): the knee is the curve's shaded band with a mark at its top and a fourth
 // line in the legend; the side-chain high-pass has its graph, which now carries its name, a reset icon and the
 // wheel. The tab keeps the stage's switch alone.
+// And the curve went into the level graph (client, 2026-11-13: "can the curve graph be integrated in the Level and
+// reduction graph?", after a sketch of the two side by side "not beside each other but in each other", then "build
+// this one"): one panel, the level of the last 4 s behind and the curve over it on the same vertical scale, so the
+// threshold, the knee, the ratio and the make-up are level lines across both; the legend stands in the panel's
+// header. Four panels are left.
 // One child window, custom-drawn (GDI+ for the shapes, GDI for the texts), refreshed by its owner's timer.
 // Compiled into the plug-in too (the loudness window is the same there).
 #pragma once
@@ -41,7 +46,7 @@ namespace ap {
 
 class CompressorGraphs {
 public:
-    static constexpr int kPanels = 5;
+    static constexpr int kPanels = 4; // the level with the curve in it, attack, release, side chain
     // The values set in the graphs alone (no row on the tab), each with a reset icon: attack, release and the
     // side-chain high-pass in the corner of their own graphs, then the curve's legend - threshold, ratio, knee,
     // make-up.
@@ -49,11 +54,12 @@ public:
     static constexpr int kLegend = 4;                    // the legend's lines: reset icons kResets - kLegend ..
     static constexpr int kFirstLegend = kResets - kLegend; // = the number of graphs with an icon in their corner
     // The strip's tooltip rectangles (they do not overlap):
-    //   0 .. 9    the panels' own: the curve's panel around its legend (above it, beside it, under it); the
-    //             attack's, the release's (left of the icon, under the icon); the level; the side chain's (likewise);
-    //   10 .. 13  the legend's lines without their icons - the owner's text (what the value does, its range);
-    //   14 .. 20  the reset icons, in resetParam's order - the owner's text (the reset value).
-    static constexpr int kPanelTips = 10;
+    //   0 .. 8    the panels' own: the level-and-curve panel around its legend (the graph under its header, the
+    //             header left of the legend or above it, the header right of the legend); the attack's, the
+    //             release's and the side chain's (left of the icon, under the icon);
+    //   9 .. 12   the legend's items without their icons - the owner's text (what the value does, its range);
+    //   13 .. 19  the reset icons, in resetParam's order - the owner's text (the reset value).
+    static constexpr int kPanelTips = 9;
     static constexpr int kFirstNameTip = kPanelTips, kFirstResetTip = kPanelTips + kLegend;
     static constexpr int kTips = kFirstResetTip + kResets;
     // A mark was dragged, the wheel turned or a reset icon clicked: the parameter and its new value (on one of its
@@ -77,7 +83,7 @@ public:
     RECT tipRect(int i);
     static const wchar_t* tipText(int i);
     static int resetParam(int k); // the parameter of reset icon k
-    // The smallest height the strip is useful at (at this DPI): the curve under its legend.
+    // The smallest height the strip is useful at (at this DPI): the level-and-curve graph under its header.
     static int minHeight(UINT dpi) { return static_cast<int>(214.0 * dpi / 96.0 + 0.5); }
 
     static void registerClass(HINSTANCE module);
@@ -107,6 +113,7 @@ private:
     LRESULT handle(UINT msg, WPARAM wp, LPARAM lp);
     void paint(HDC target);
     void renderStill(HDC dc, int w, int h, int th); // what does not move with the audio
+    void renderCurve(int w, int h, int th);         // the curve's layer: still as well, but it lies over the level
     void paintLive(HDC dc, int th);                 // what does
     void drawMark(Gdiplus::Graphics& g, int id, double x, double y);
     void layoutPanels(int w, int h);
@@ -131,9 +138,12 @@ private:
     UINT dpi_ = 96;
     PresetValues values_ = defaultValues(), resetValues_ = defaultValues();
     RECT reset_[kResets] = {}; // the reset icons (layoutPanels)
-    RECT legend_ = {};         // the curve's legend: its lines one under the other, their icons at its right edge
-    RECT curveArea_ = {};      // where the curve's square plot goes: under the legend, or beside it
-    int textH_ = 13, nameW_ = 56, valueW_ = 50; // the small font's height, the widest name and value of the legend
+    // The legend in the level-and-curve panel's header: its items (name and value; the icon is reset_'s) on the
+    // title's line, or in columns under it; where the header ends.
+    RECT legend_ = {}, legendItem_[kLegend] = {};
+    int headerBottom_ = 0;
+    // the small font: its height, the legend's names and widest values, the widest title and reduction number
+    int textH_ = 13, nameW_[kLegend] = {56, 30, 30, 48}, valueW_[kLegend] = {50, 32, 42, 42}, titleW_ = 120, numberW_ = 46;
     int press_ = -1;           // the reset icon the mouse button went down on
     int wheel_ = 0;            // wheel movement not yet a whole step
     const AnalysisSource* source_ = nullptr;
@@ -144,6 +154,11 @@ private:
     POINT mark_[kMarks] = {};
     int drag_ = mNone;
     HBITMAP still_ = nullptr, frame_ = nullptr; // the still picture, and the frame being drawn
+    // The curve with its lines and marks: a layer with its own transparency (32 bits, premultiplied), laid over the
+    // level at every refresh and drawn again only with the still picture; its names are written after it.
+    HBITMAP curve_ = nullptr;
+    void* curveBits_ = nullptr;
+    std::vector<Label> curveNames_;
     int bitmapW_ = 0, bitmapH_ = 0;
     bool stillDirty_ = true;
 };

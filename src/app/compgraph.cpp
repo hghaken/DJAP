@@ -97,6 +97,7 @@ CompressorGraphs::~CompressorGraphs() {
     if (symbol_) DeleteObject(symbol_);
     if (still_) DeleteObject(still_);
     if (frame_) DeleteObject(frame_);
+    if (curve_) DeleteObject(curve_);
 }
 
 void CompressorGraphs::registerClass(HINSTANCE module) {
@@ -146,9 +147,15 @@ void CompressorGraphs::setDpi(UINT dpi) {
             GetTextExtentPoint32W(dc, s, lstrlenW(s), &z);
             return static_cast<int>(z.cx);
         };
+        static const wchar_t* const kNames[kLegend] = {L"Threshold", L"Ratio", L"Knee", L"Make-up"};
+        static const wchar_t* const kWidest[kLegend] = {L"+15.0 LU", L"8.0:1", L"12.0 dB", L"12.0 dB"};
         textH_ = tm.tmHeight;
-        nameW_ = std::max(width(L"Threshold"), width(L"Make-up"));
-        valueW_ = std::max(width(L"+15.0 LU"), width(L"12.0 dB"));
+        for (int j = 0; j < kLegend; ++j) {
+            nameW_[j] = width(kNames[j]);
+            valueW_[j] = width(kWidest[j]);
+        }
+        titleW_ = width(L"Level and curve (off)");
+        numberW_ = width(L"-12.0 dB");
         SelectObject(dc, old);
         ReleaseDC(nullptr, dc);
     }
@@ -183,7 +190,7 @@ int CompressorGraphs::resetParam(int k) {
 }
 
 int CompressorGraphs::cornerPanel(int k) {
-    static const int kCorner[kFirstLegend] = {1, 2, 4}; // attack, release, side chain
+    static const int kCorner[kFirstLegend] = {1, 2, 3}; // attack, release, side chain
     return kCorner[k];
 }
 
@@ -194,50 +201,50 @@ bool CompressorGraphs::resetLit(int k) const {
 
 // The rectangles do not overlap (the tooltip control keeps the tool the mouse is in): a panel with an icon in its
 // corner (attack, release, side chain) is two rectangles around the icon - what is left of it, what is under it;
-// the curve's panel is three around its legend - above it, beside it, under it - and the legend is a rectangle
-// per line plus that line's icon.
+// the level-and-curve panel is its graph under the header plus the header on either side of the legend (or above
+// it and beside it, when the legend stands under the title); the legend is a rectangle per item plus that item's
+// icon.
 RECT CompressorGraphs::tipRect(int i) {
     RECT rc{};
     if (hwnd_) GetClientRect(hwnd_, &rc);
     layoutPanels(rc.right, rc.bottom);
     if (i < 0 || i >= kTips) return RECT{};
     if (i >= kFirstResetTip) return reset_[i - kFirstResetTip];
-    if (i >= kFirstNameTip) {
-        const RECT& icon = reset_[kFirstLegend + i - kFirstNameTip];
-        return RECT{legend_.left, icon.top, icon.left, icon.bottom};
-    }
+    if (i >= kFirstNameTip) return legendItem_[i - kFirstNameTip];
     const RECT& c = panel_[0];
+    const bool inLine = legend_.top < c.top + textH_; // the legend on the title's line
     switch (i) {
     case 0:
-        return RECT{c.left, c.top, legend_.right, legend_.top};
+        return RECT{c.left, headerBottom_, c.right, c.bottom};
     case 1:
-        return RECT{legend_.right, c.top, c.right, c.bottom};
+        return inLine ? RECT{c.left, c.top, legend_.left, headerBottom_} : RECT{c.left, c.top, c.right, legend_.top};
     case 2:
-        return RECT{c.left, legend_.bottom, legend_.right, c.bottom};
-    case 7:
-        return panel_[3];
+        return inLine ? RECT{legend_.right, c.top, c.right, headerBottom_}
+                      : RECT{legend_.right, legend_.top, c.right, headerBottom_};
     default: {
-        const int k = i == 3 || i == 4 ? 0 : i == 5 || i == 6 ? 1 : 2; // the icon in this panel's corner
+        const int k = (i - 3) / 2; // the icon in this panel's corner
         const RECT& p = panel_[cornerPanel(k)];
-        if (i == 3 || i == 5 || i == 8) return RECT{p.left, p.top, reset_[k].left, p.bottom}; // left of the icon
-        return RECT{reset_[k].left, reset_[k].bottom, p.right, p.bottom};                     // under it
+        if ((i - 3) % 2 == 0) return RECT{p.left, p.top, reset_[k].left, p.bottom}; // left of the icon
+        return RECT{reset_[k].left, reset_[k].bottom, p.right, p.bottom};           // under it
     }
     }
 }
 
 const wchar_t* CompressorGraphs::tipText(int i) {
-    static const int kPanelOf[kPanelTips] = {0, 0, 0, 1, 1, 2, 2, 3, 4, 4};
-    if (i < 0 || i >= kPanelTips) return nullptr; // a legend line or a reset icon: the owner's text
+    static const int kPanelOf[kPanelTips] = {0, 0, 0, 1, 1, 2, 2, 3, 3};
+    if (i < 0 || i >= kPanelTips) return nullptr; // a legend item or a reset icon: the owner's text
     i = kPanelOf[i];
     static const wchar_t* const kPanelTexts[kPanels] = {
-        L"The compressor's curve: the level going in (to the right) against the level coming out (up), in LU to the "
-        L"target. Under the threshold nothing happens (the dotted diagonal); above it the line bends - flatter with a "
-        L"higher ratio, rounder with a wider knee (the shaded band). The grey bars show where the music's level was in "
-        L"the last seconds, the white dot where it is now.\n\nThe three dashed lines are set here; drag one anywhere "
-        L"along it. Threshold: left / right. Ratio: up / down - the level the loudest music comes out at. Make-up: up / "
-        L"down - the quiet end of the curve, and the whole curve with it; all the way down = auto. Knee: the shaded "
-        L"band - drag its mark at the top, or an edge of the band. The legend names their values; the arrow behind a "
-        L"value sets it back.",
+        L"Behind: the last 4 seconds of this deck - the level at the compressor (grey: what its side chain hears), the "
+        L"level it lets out (thin line) and, from the top, how much it turns down (orange; the number is the largest "
+        L"reduction). In front: the compressor's curve on the same scale - the level going in (to the right) against "
+        L"the level coming out (up), in LU to the target. Under the threshold it follows the dotted diagonal; above "
+        L"it, it bends - flatter with a higher ratio, rounder with a wider knee. The white dot is the level now."
+        L"\n\nFour values are set here, each a line across the graph: drag a line anywhere along it, or its mark, up "
+        L"or down. Threshold: music above this line is compressed. Knee: the shaded band around it. Ratio: the level "
+        L"the loudest music comes out at - lower is a higher ratio. Make-up: the quiet end of the curve, and the "
+        L"whole curve with it; all the way down = auto. The legend names their values; the arrow behind a value sets "
+        L"it back.",
         L"Attack (1 .. 100 ms): a hit 10 dB over the threshold in its first 150 ms. Dashed: the hit as it comes in; "
         L"the line: what comes out. What is above the line before the mark still gets through - the punch. Shorter "
         L"catches the hit sooner, longer lets it through.\n\nSet it here: drag the mark, or turn the mouse wheel over "
@@ -246,8 +253,6 @@ const wchar_t* CompressorGraphs::tipText(int i) {
         L"ends and comes back in the release time. Short: back before the next beat - lively, but the music goes up "
         L"and down with every beat (pumping). Long: smooth.\n\nSet it here: drag the mark, or turn the mouse wheel "
         L"over this graph for one step of 10 ms. The arrow in the corner sets it back.",
-        L"The last 4 seconds of this deck: the level at the compressor (grey - what its side chain hears), the level it "
-        L"lets out (line) and, from the top, how much it turns down (orange). The dashed line is the threshold.",
         L"Side-chain high-pass (off, 40 .. 200 Hz): the music's spectrum up to 1 kHz (grey) and the part of it the "
         L"compressor listens to (coloured) - what the high-pass leaves of the bass. Bass under its frequency does not "
         L"make the compressor work; a kick the compressor hears pulls the whole mix down with every beat (pumping)."
@@ -275,31 +280,33 @@ double CompressorGraphs::hitReduction() const {
     return in - compressorCurveDb(in, threshold(), values_[pCompRatio], values_[pCompKnee]);
 }
 
-// Five panels side by side: the curve, attack, release, the level, the side chain - the two live ones a little wider.
-// A strip much taller than its panels are wide (a narrow window) gets two rows instead: the curve, attack and release
-// above, the level and the side chain - the wide ones - below.
+// Four panels. The level graph with the curve in it wants the width: it lies across the top, a little over half of
+// the height, with the attack, the release and the side chain in a row under it, the three equally wide (client,
+// 2026-11-13: "the side chain graph can be narrower", then "make the attack, release and side chain windows equally
+// wide"). A strip too low for two rows, or so wide that the top panel would be a ribbon in which the curve goes
+// flat, has all four side by side instead, the first by far the widest.
 void CompressorGraphs::layoutPanels(int w, int h) {
-    static const double kShare[kPanels] = {1.0, 0.8, 1.0, 1.3, 1.2};
+    static const double kBeside[kPanels] = {2.2, 1.0, 1.0, 1.0}; // all four in one row
+    static const double kUnder[kPanels] = {0.0, 1.0, 1.0, 1.0};  // the three under the wide one
     const int gap = px(5), pad = px(5);
-    const double oneRow = (w - 2 * pad - (kPanels - 1) * gap) / static_cast<double>(kPanels); // a panel's width in one row
-    const bool twoRows = h - 2 * pad >= 2 * px(130) + gap && h - 2 * pad > 1.9 * oneRow;
-    auto row = [&](int first, int count, int top, int bottom) {
+    const int innerH = h - 2 * pad, topH = static_cast<int>((innerH - gap) * 0.58);
+    const bool twoRows = innerH >= 2 * px(130) + gap && (w - 2 * pad) <= 4.6 * topH;
+    auto row = [&](const double* share, int first, int count, int top, int bottom) {
         double sum = 0.0;
-        for (int i = first; i < first + count; ++i) sum += kShare[i];
+        for (int i = first; i < first + count; ++i) sum += share[i];
         const double usable = w - 2 * pad - (count - 1) * gap;
         double x = pad;
         for (int i = first; i < first + count; ++i) {
-            const double pw = usable * kShare[i] / sum;
+            const double pw = usable * share[i] / sum;
             panel_[i] = {static_cast<LONG>(x + 0.5), top, static_cast<LONG>(x + pw + 0.5), bottom};
             x += pw + gap;
         }
     };
     if (twoRows) {
-        const int mid = pad + (h - 2 * pad - gap) / 2;
-        row(0, 3, pad, mid);
-        row(3, 2, mid + gap, h - pad);
+        panel_[0] = {pad, pad, w - pad, pad + topH};
+        row(kUnder, 1, kPanels - 1, pad + topH + gap, h - pad);
     } else {
-        row(0, kPanels, pad, h - pad);
+        row(kBeside, 0, kPanels, pad, h - pad);
     }
     // the reset icons of the attack, the release and the side chain's high-pass: in their panels' title line, at
     // the right (above the plot)
@@ -308,24 +315,43 @@ void CompressorGraphs::layoutPanels(int w, int h) {
         const RECT& p = panel_[cornerPanel(k)];
         reset_[k] = {p.right - px(3) - iconW, p.top + px(1), p.right - px(3), p.top + px(1) + rowH};
     }
-    // The curve's legend - a line per value: its name, its value, its reset icon - and the room for the square plot:
-    // under the legend (which then is as wide as the panel, its icons in the panel's right corner like the others')
-    // or beside it, whichever leaves the larger square.
+    // The legend of the level-and-curve panel - an item per value: its name, its value, its reset icon. In the
+    // panel's header, off the graph: on the title's line between the title and the reduction's number where that
+    // fits, else in columns under the title (as many as fit; two by two rather than three and one).
     const RECT& c = panel_[0];
-    const int top = static_cast<int>(c.top) + textH_ + px(5), bottom = top + kLegend * rowH;
-    const int narrow = px(6) + nameW_ + px(8) + valueW_ + px(3) + iconW; // the legend at its smallest width
-    const int under = std::min(static_cast<int>(c.right - c.left) - 2 * px(8), static_cast<int>(c.bottom) - px(8) - (bottom + px(4)));
-    const int beside = std::min(static_cast<int>(c.right - c.left) - narrow - 2 * px(8),
-                                static_cast<int>(c.bottom) - px(8) - (static_cast<int>(c.top) + textH_ + px(7)));
-    if (under >= beside) {
-        legend_ = {c.left, top, c.right - px(3), bottom};
-        curveArea_ = {c.left + px(8), bottom + px(4), c.right - px(8), c.bottom - px(8)};
+    const int cTop = static_cast<int>(c.top), cLeft = static_cast<int>(c.left), between = px(14);
+    int inLine = 0;
+    for (int j = 0; j < kLegend; ++j) inLine += nameW_[j] + px(6) + valueW_[j] + px(2) + iconW + (j ? between : 0);
+    const int from = cLeft + px(6) + titleW_ + px(16), until = static_cast<int>(c.right) - px(6) - numberW_ - px(12);
+    if (from + inLine <= until) {
+        const int top = cTop + px(3) - (rowH - textH_) / 2; // the texts on the title's base line
+        int x = from;
+        for (int j = 0; j < kLegend; ++j) {
+            const int item = nameW_[j] + px(6) + valueW_[j] + px(2);
+            legendItem_[j] = {x, top, x + item, top + rowH};
+            reset_[kFirstLegend + j] = {x + item, top, x + item + iconW, top + rowH};
+            x += item + iconW + between;
+        }
+        legend_ = {from, top, x - between, top + rowH};
+        headerBottom_ = std::max(cTop + textH_ + px(5), top + rowH);
     } else {
-        legend_ = {c.left, top, c.left + narrow, bottom};
-        curveArea_ = {legend_.right + px(8), c.top + textH_ + px(7), c.right - px(8), c.bottom - px(8)};
+        int nameW = 0, valueW = 0;
+        for (int j = 0; j < kLegend; ++j) {
+            nameW = std::max(nameW, nameW_[j]);
+            valueW = std::max(valueW, valueW_[j]);
+        }
+        const int item = nameW + px(8) + valueW + px(2), cell = item + iconW;
+        int perLine = std::min(kLegend, std::max(1, (static_cast<int>(c.right) - cLeft - 2 * px(6) + between) / (cell + between)));
+        if (perLine == 3) perLine = 2;
+        const int top = cTop + textH_ + px(5), lines = (kLegend + perLine - 1) / perLine;
+        for (int j = 0; j < kLegend; ++j) {
+            const int x = cLeft + px(6) + (j % perLine) * (cell + between), y = top + (j / perLine) * rowH;
+            legendItem_[j] = {x, y, x + item, y + rowH};
+            reset_[kFirstLegend + j] = {x + item, y, x + cell, y + rowH};
+        }
+        legend_ = {cLeft + px(6), top, cLeft + px(6) + perLine * (cell + between) - between, top + lines * rowH};
+        headerBottom_ = top + lines * rowH;
     }
-    for (int j = 0; j < kLegend; ++j)
-        reset_[kFirstLegend + j] = {legend_.right - iconW, top + j * rowH, legend_.right, top + (j + 1) * rowH};
 }
 
 // What does not move with the audio - the panels, the curve, the attack and release graphs, their marks and texts -
@@ -339,8 +365,7 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
     auto label = [&](double x, double y, const std::wstring& s, COLORREF c, UINT align = TA_LEFT) {
         labels.push_back({static_cast<int>(x + 0.5), static_cast<int>(y + 0.5), s, c, align});
     };
-    static const wchar_t* const kTitle[kPanels] = {L"Curve", L"Attack", L"Release", L"Level and reduction, 4 s",
-                                                   L"Side-chain high-pass"};
+    static const wchar_t* const kTitle[kPanels] = {L"Level and curve", L"Attack", L"Release", L"Side-chain high-pass"};
     const bool on = values_[pCompOn] >= 0.5;
     const double thr = threshold(), mk = makeup(), ratio = values_[pCompRatio], knee = values_[pCompKnee];
     const double attack = values_[pCompAttack], release = values_[pCompRelease];
@@ -351,9 +376,8 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         g.Clear(col(kBack));
         const float lw = static_cast<float>(std::max(1.0, dpi_ / 96.0)); // a hairline
-        Pen grid(col(kGrid), lw), dots(col(kGrid), lw), dash(col(kOrange), lw), curve(col(kTeal), 2.0f * lw),
+        Pen grid(col(kGrid), lw), dash(col(kOrange), lw), curve(col(kTeal), 2.0f * lw),
             inputDash(col(kInput), 1.5f * lw), edge(col(kEdge), 1.0f);
-        dots.SetDashStyle(DashStyleDot);
         dash.SetDashStyle(DashStyleDash);
         inputDash.SetDashStyle(DashStyleDash);
         curve.SetLineJoin(LineJoinRound);
@@ -364,12 +388,12 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
                             static_cast<REAL>(p.right - p.left), static_cast<REAL>(p.bottom - p.top));
             g.DrawRectangle(&edge, static_cast<REAL>(p.left) + 0.5f, static_cast<REAL>(p.top) + 0.5f,
                             static_cast<REAL>(p.right - p.left - 1), static_cast<REAL>(p.bottom - p.top - 1));
-            label(p.left + px(6), p.top + px(3), i == 0 && !on ? std::wstring(L"Curve (compressor off)") : kTitle[i],
+            label(p.left + px(6), p.top + px(3), i == 0 && !on ? std::wstring(L"Level and curve (off)") : kTitle[i],
                   kDim);
             Plot& q = plot_[i];
             q.l = p.left + px(8);
             q.r = p.right - px(8);
-            q.t = p.top + th + px(7);
+            q.t = i == 0 ? headerBottom_ + px(5) : p.top + th + px(7); // the first: under its legend
             q.b = p.bottom - px(8);
             q.logX = false;
         }
@@ -379,74 +403,21 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
                             static_cast<REAL>(q.b - q.t + 2)));
         };
 
-        // ---- 1. the curve ----
+        // ---- 1. the level and the curve: the legend in the panel's header (the graph itself is drawn with the
+        // audio, in paintLive: the level lies behind the curve) ----
         {
             Plot& q = plot_[0];
-            q.x0 = q.y0 = kLo;
+            q.x0 = q.y0 = kLo; // level in to the right, level out - and the level of the last seconds - up
             q.x1 = q.y1 = kHi;
-            q.l = curveArea_.left; // under its legend, or beside it (layoutPanels)
-            q.r = curveArea_.right;
-            q.t = curveArea_.top;
-            q.b = curveArea_.bottom;
-            const double side = std::max(1.0, std::min(q.r - q.l, q.b - q.t)); // in and out share a scale: square, centred
-            q.l += (q.r - q.l - side) / 2;
-            q.r = q.l + side;
-            q.t += (q.b - q.t - side) / 2;
-            q.b = q.t + side;
-            // The three values set here are three dashed lines, each through its mark on the curve: the threshold
-            // upright, the ratio level through the curve's loud end (where the loudest music comes out), the
-            // make-up level through its quiet end (which the make-up lifts, and the whole curve with it).
-            // The knee is the shaded band around the threshold, with thin edges and a mark at the top of its right
-            // edge (on the threshold's line when the knee is 0: there it is still there to take).
-            const double xr = kHi - kRatioMarkLu, xm = kLo + kMakeupMarkLu;
-            const double xThr = q.X(thr), yRatio = q.Y(out(xr)), yMakeup = q.Y(out(xm));
-            const double xKneeL = q.X(thr - knee / 2), xKneeR = q.X(thr + knee / 2), yKnee = q.t + px(6);
-            clipTo(q);
-            g.DrawLine(&dots, pt(q.X(0), q.t), pt(q.X(0), q.b));
-            g.DrawLine(&dots, pt(q.l, q.Y(0)), pt(q.r, q.Y(0)));
-            if (knee > 0.0) {
-                g.FillRectangle(&orangeFill, static_cast<REAL>(xKneeL), static_cast<REAL>(q.t),
-                                static_cast<REAL>(xKneeR - xKneeL), static_cast<REAL>(q.b - q.t));
-                Pen kneeEdge(col(kOrange, 150), lw);
-                kneeEdge.SetDashStyle(DashStyleDot);
-                g.DrawLine(&kneeEdge, pt(xKneeL, q.t), pt(xKneeL, q.b));
-                g.DrawLine(&kneeEdge, pt(xKneeR, q.t), pt(xKneeR, q.b));
-            }
-            g.DrawLine(&dots, pt(q.X(kLo), q.Y(kLo + mk)), pt(q.X(kHi - mk), q.Y(kHi))); // no compression
-            g.DrawLine(&dash, pt(xThr, q.t), pt(xThr, q.b));
-            g.DrawLine(&dash, pt(q.l, yRatio), pt(q.r, yRatio));
-            g.DrawLine(&dash, pt(q.l, yMakeup), pt(q.r, yMakeup));
-            std::vector<PointF> line;
-            for (int i = 0; i <= 96; ++i) {
-                const double in = kLo + (kHi - kLo) * i / 96.0;
-                line.push_back(pt(q.X(in), q.Y(out(in))));
-            }
-            g.DrawLines(&curve, line.data(), static_cast<INT>(line.size()));
-            g.SetClip(&whole);
-            drawMark(g, mThreshold, xThr, q.Y(out(thr)));
-            drawMark(g, mRatio, q.X(xr), yRatio);
-            drawMark(g, mMakeup, q.X(xm), yMakeup);
-            drawMark(g, mKnee, xKneeR, yKnee);
-            // Each of the four carries its name. The top of the plot: the threshold's name left of its line, the
-            // knee's right of its mark (a line lower, at the plot's right edge, where the panel ends first). The
-            // ratio's at the left on its line (under it when the line is at the top), the make-up's at the right
-            // on its line.
             static const wchar_t* const kName[kLegend] = {L"Threshold", L"Ratio", L"Knee", L"Make-up"};
-            label(xThr - px(4), q.t, kName[0], kOrange, TA_RIGHT);
-            if (xKneeR + px(8) + nameW_ / 2 <= panel_[0].right - px(3)) label(xKneeR + px(8), q.t, kName[2], kOrange);
-            else label(q.r, q.t + px(13), kName[2], kOrange, TA_RIGHT);
-            label(q.l + px(3), yRatio - th - px(1) < q.t + th + px(1) ? yRatio + px(2) : yRatio - th - px(1), kName[1],
-                  kOrange);
-            label(q.r - px(3), yMakeup - th - px(1), kName[3], kOrange, TA_RIGHT);
-            // the legend: the same names, their values, and (drawn with the others, below) their reset icons
             const std::wstring value[kLegend] = {
                 number(thr, 1, L" LU", true), number(ratio, 1, L":1"), number(knee, 1, L" dB"),
                 values_[pCompMakeup] < 0.0 ? std::wstring(L"auto") : number(mk, 1, L" dB")};
             for (int j = 0; j < kLegend; ++j) {
-                const RECT& icon = reset_[kFirstLegend + j];
-                const double y = icon.top + (icon.bottom - icon.top - th) / 2.0;
-                label(legend_.left + px(6), y, kName[j], kText);
-                label(icon.left - px(3), y, value[j], kOrange, TA_RIGHT);
+                const RECT& item = legendItem_[j];
+                const double y = item.top + (item.bottom - item.top - th) / 2.0;
+                label(item.left, y, kName[j], kText);
+                label(item.right - px(2), y, value[j], kOrange, TA_RIGHT);
             }
         }
 
@@ -517,14 +488,10 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h, int th) {
             if (release < 780.0) label(q.X(1000.0) - px(3), q.b - th - px(4), L"1 s", kDim, TA_RIGHT);
         }
 
-        // ---- 4 and 5: their scales (drawn with the audio, in paintLive) ----
-        plot_[3].x0 = 0.0;
-        plot_[3].x1 = kTimePoints - 1.0;
-        plot_[3].y0 = kLo;
-        plot_[3].y1 = kHi;
-        plot_[4].logX = true;
-        plot_[4].x0 = kSpecLoHz;
-        plot_[4].x1 = kSpecHiHz;
+        // ---- 4. the side chain: its scale (drawn with the audio, in paintLive) ----
+        plot_[3].logX = true;
+        plot_[3].x0 = kSpecLoHz;
+        plot_[3].x1 = kSpecHiHz;
     }
     SetBkMode(dc, TRANSPARENT);
     for (const Label& l : labels) {
@@ -555,13 +522,90 @@ void CompressorGraphs::drawMark(Gdiplus::Graphics& g, int id, double x, double y
     mark_[id] = {static_cast<LONG>(x + 0.5), static_cast<LONG>(y + 0.5)};
 }
 
-// The parts that move with the audio, on a copy of the still picture: the level and the reduction of the last 4 s,
-// the side chain's spectrum with its filter, and on the curve where the level was and is.
+// The curve of the level-and-curve graph is still, yet it lies over the level, which moves: it has a layer of its
+// own - a 32-bit bitmap with transparency, drawn here when a value, the size or the DPI changes and laid over the
+// level at every refresh (paintLive). Drawn with the level at every refresh instead, its long dashed and dotted
+// anti-aliased lines took a quarter of a processor core.
+void CompressorGraphs::renderCurve(int w, int h, int th) {
+    curveNames_.clear();
+    if (!curve_ || !curveBits_) return;
+    const double thr = threshold(), mk = makeup();
+    {
+        using namespace Gdiplus;
+        Bitmap layer(w, h, w * 4, PixelFormat32bppPARGB, static_cast<BYTE*>(curveBits_));
+        Graphics g(&layer);
+        g.SetSmoothingMode(SmoothingModeAntiAlias);
+        g.Clear(Color(0, 0, 0, 0));
+        const float lw = static_cast<float>(std::max(1.0, dpi_ / 96.0));
+        // ---- the curve, over the level and on its vertical scale - so the four values set here are level lines
+        // across both: the threshold (music above it is compressed), the knee's band around it, the ratio through
+        // the curve's loud end (where the loudest music comes out), the make-up through its quiet end (which it
+        // lifts, and the whole curve with it). ----
+        const Plot& q = plot_[0];
+        const double knee = values_[pCompKnee], ratioIn = kHi - kRatioMarkLu, makeupIn = kLo + kMakeupMarkLu;
+        auto row = [](double y) { return std::floor(y) + 0.5; }; // a level line on a pixel row: sharp
+        const double yThr = row(q.Y(thr)), yRatio = row(q.Y(out(ratioIn))), yMakeup = row(q.Y(out(makeupIn)));
+        const double yKneeT = row(q.Y(thr + knee / 2)), yKneeB = row(q.Y(thr - knee / 2));
+        const double xThr = q.X(thr), xRatio = q.X(ratioIn), xMakeup = q.X(makeupIn), xKnee = q.l + px(7);
+        g.SetClip(RectF(static_cast<REAL>(q.l - 1), static_cast<REAL>(q.t - 1), static_cast<REAL>(q.r - q.l + 2),
+                        static_cast<REAL>(q.b - q.t + 2)));
+        Pen dots(col(kGrid), lw), dash(col(kOrange), lw), curve(col(kTeal), 3.0f * lw);
+        dots.SetDashStyle(DashStyleDot);
+        dash.SetDashStyle(DashStyleDash);
+        curve.SetLineJoin(LineJoinRound);
+        g.DrawLine(&dots, pt(q.l, row(q.Y(0))), pt(q.r, row(q.Y(0)))); // the target's level
+        if (knee > 0.0) {
+            SolidBrush band(col(kOrange, 40));
+            g.FillRectangle(&band, static_cast<REAL>(q.l), static_cast<REAL>(yKneeT), static_cast<REAL>(q.r - q.l),
+                            static_cast<REAL>(yKneeB - yKneeT));
+            Pen kneeEdge(col(kOrange, 150), lw);
+            kneeEdge.SetDashStyle(DashStyleDot);
+            g.DrawLine(&kneeEdge, pt(q.l, yKneeT), pt(q.r, yKneeT));
+            g.DrawLine(&kneeEdge, pt(q.l, yKneeB), pt(q.r, yKneeB));
+        }
+        g.DrawLine(&dots, pt(q.X(kLo), q.Y(kLo + mk)), pt(q.X(kHi - mk), q.Y(kHi))); // no compression
+        g.DrawLine(&dash, pt(q.l, yThr), pt(q.r, yThr));
+        g.DrawLine(&dash, pt(q.l, yRatio), pt(q.r, yRatio));
+        g.DrawLine(&dash, pt(q.l, yMakeup), pt(q.r, yMakeup));
+        std::vector<PointF> line;
+        for (int i = 0; i <= 96; ++i) {
+            const double in = kLo + (kHi - kLo) * i / 96.0;
+            line.push_back(pt(q.X(in), q.Y(out(in))));
+        }
+        g.DrawLines(&curve, line.data(), static_cast<INT>(line.size()));
+        g.ResetClip();
+        // The marks: the threshold's where its line crosses the diagonal - the level at which the curve bends -,
+        // the ratio's and the make-up's on the curve's ends, the knee's on the band's upper edge at the left (on
+        // the threshold's line at a knee of 0, where it can still be taken).
+        drawMark(g, mThreshold, xThr, yThr);
+        drawMark(g, mRatio, xRatio, yRatio);
+        drawMark(g, mMakeup, xMakeup, yMakeup);
+        drawMark(g, mKnee, xKnee, yKneeT);
+        // Each name stands at its line beside its mark: the threshold's and the ratio's left of their marks, the
+        // make-up's and the knee's right of theirs (client, 2026-11-13: "ratio text left of the mark, threshold
+        // text left of the mark, make-up text right of the mark"). On the line, where the curve is not: left of a
+        // mark the curve lies under the line, right of the make-up's mark it rises over it - that name hangs under
+        // its line. A name that would leave the plot at the top goes under its line too, and so does the
+        // threshold's where the ratio's name is in its way.
+        const double above = th + px(2), under = px(2), side = px(8);
+        double yRatioName = yRatio - above < q.t ? yRatio + under : yRatio - above;
+        double yThrName = yThr - above;
+        if (xRatio - side - nameW_[1] < xThr - side && std::fabs(yRatioName - yThrName) < th) yThrName = yThr + under;
+        curveNames_.push_back({static_cast<int>(xThr - side), static_cast<int>(yThrName), L"Threshold", kOrange, TA_RIGHT});
+        curveNames_.push_back({static_cast<int>(xRatio - side), static_cast<int>(yRatioName), L"Ratio", kOrange, TA_RIGHT});
+        curveNames_.push_back({static_cast<int>(xMakeup + side), static_cast<int>(yMakeup + under), L"Make-up", kOrange, TA_LEFT});
+        curveNames_.push_back({static_cast<int>(xKnee + side), static_cast<int>(yKneeT - above < q.t ? yKneeT + under : yKneeT - above),
+                         L"Knee", kOrange, TA_LEFT});
+    }
+}
+
+// The parts that move with the audio, on a copy of the still picture: the level and the reduction of the last 4 s
+// with the curve over them, and the side chain's spectrum with its filter.
 void CompressorGraphs::paintLive(HDC dc, int th) {
     const bool live = source_ && source_->audioActive() && source_->meters(deck_).live;
     const DeckAnalysis* an = source_ ? &source_->analysis(deck_) : nullptr;
     const bool have = an && live && an->compCount > 0;
-    const double thr = threshold(), mk = makeup(), corner = values_[pCompSideHpf], level0 = aim();
+    const double mk = makeup(), corner = values_[pCompSideHpf], level0 = aim();
     const int hair = std::max(1, px(1));
     SetBkMode(dc, TRANSPARENT);
     auto polygon = [&](const std::vector<POINT>& pts, COLORREF c) {
@@ -592,40 +636,54 @@ void CompressorGraphs::paintLive(HDC dc, int th) {
     };
     const COLORREF inputArea = blend(kInput, kPanel, 0.28), heardArea = blend(kTeal, inputArea, 0.32);
 
-    // ---- 4. the level and the reduction of the last 4 s ----
+    // ---- 1. the level and the reduction of the last 4 s: the background of the curve, which is drawn over it
+    // below. Dimmer than the curve; time runs over the plot's whole width, the newest at the right edge. ----
+    const Plot& qc = plot_[0];
+    double most = 0.0, nowIn = kLo - 1.0; // the largest reduction in view; the newest level (LU to the aim)
     {
-        const Plot& q = plot_[3];
-        const RECT& p = panel_[3];
-        const int saved = clip(q);
-        double most = 0.0;
+        const int saved = clip(qc);
         if (have) {
             std::vector<POINT> in, outLine, red;
-            in.push_back(ipt(q.l, q.b));
-            red.push_back(ipt(q.l, q.t));
-            const double perDb = 0.4 * (q.b - q.t) / 12.0;
+            in.push_back(ipt(qc.l, qc.b));
+            red.push_back(ipt(qc.l, qc.t));
+            const double perDb = 0.4 * (qc.b - qc.t) / 12.0, step = (qc.r - qc.l) / (kTimePoints - 1.0);
             for (int i = 0; i < kTimePoints; ++i) {
                 const DeckAnalysis::CompPoint& c = an->compAt(DeckAnalysis::kComp - kTimePoints + i);
-                const double lu = std::max(kLo, c.in - level0), x = q.X(i);
-                in.push_back(ipt(x, q.Y(lu)));
-                outLine.push_back(ipt(x, q.Y(c.in - level0 < kLo ? kLo : lu - c.reduction + mk)));
-                red.push_back(ipt(x, q.t + std::min(12.0, static_cast<double>(c.reduction)) * perDb));
+                const double lu = std::max(kLo, c.in - level0), x = qc.l + i * step;
+                in.push_back(ipt(x, qc.Y(lu)));
+                outLine.push_back(ipt(x, qc.Y(c.in - level0 < kLo ? kLo : lu - c.reduction + mk)));
+                red.push_back(ipt(x, qc.t + std::min(12.0, static_cast<double>(c.reduction)) * perDb));
                 most = std::max(most, static_cast<double>(c.reduction));
             }
-            in.push_back(ipt(q.r, q.b));
-            red.push_back(ipt(q.r, q.t));
-            polygon(in, inputArea);
-            polygon(red, blend(kOrange, kPanel, 0.6));
-            polyline(outLine, kTeal, std::max(1, px(2)));
+            in.push_back(ipt(qc.r, qc.b));
+            red.push_back(ipt(qc.r, qc.t));
+            polygon(in, blend(kInput, kPanel, 0.2));
+            polygon(red, blend(kOrange, kPanel, 0.5));
+            polyline(outLine, blend(kTeal, kPanel, 0.55), std::max(1, px(1.5)));
+            nowIn = an->compAt(DeckAnalysis::kComp - 1).in - level0;
         }
-        polyline({ipt(q.l, q.Y(0)), ipt(q.r, q.Y(0))}, kGrid, 1, PS_DOT);
-        polyline({ipt(q.l, q.Y(thr)), ipt(q.r, q.Y(thr))}, kOrange, 1, PS_DASH);
         RestoreDC(dc, saved);
-        if (have) text(p.right - px(6), p.top + px(3), number(-most, 1, L" dB"), kOrange, TA_RIGHT);
-        else text((q.l + q.r) / 2, (q.t + q.b) / 2 - th / 2, source_ ? L"no audio on this deck" : L"no deck plays this", kDim, TA_CENTER);
+    }
+    // The curve's layer over the level (GdiAlphaBlend: gdi32's own), then a thin line from the newest end of the
+    // level - the right edge - across to where that level is on the curve.
+    if (curve_) {
+        const int x = static_cast<int>(qc.l) - px(9), y = static_cast<int>(qc.t) - px(9);
+        const int cw = static_cast<int>(qc.r - qc.l) + 2 * px(9), ch = static_cast<int>(qc.b - qc.t) + 2 * px(9);
+        HDC layer = CreateCompatibleDC(dc);
+        HGDIOBJ old = SelectObject(layer, curve_);
+        const BLENDFUNCTION over{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+        GdiAlphaBlend(dc, x, y, cw, ch, layer, x, y, cw, ch, over);
+        SelectObject(layer, old);
+        DeleteDC(layer);
+    }
+    if (have && nowIn >= kLo) {
+        const int saved = clip(qc);
+        polyline({ipt(qc.X(nowIn), qc.Y(nowIn)), ipt(qc.r, qc.Y(nowIn))}, blend(kText, kPanel, 0.5), 1, PS_DOT);
+        RestoreDC(dc, saved);
     }
 
-    // ---- 5. the side chain: the spectrum (GDI), then its filter and mark (GDI+, below) ----
-    Plot& qs = plot_[4];
+    // ---- 4. the side chain: the spectrum (GDI), then its filter and mark (GDI+, below) ----
+    Plot& qs = plot_[3];
     auto filterY = [&](double db) { return qs.t + std::min(1.0, std::max(0.0, -db / kFilterRangeDb)) * (qs.b - qs.t); };
     const double xCorner = corner > 0.0 ? qs.X(corner) : qs.l;
     {
@@ -675,26 +733,12 @@ void CompressorGraphs::paintLive(HDC dc, int th) {
         Pen filterPen(col(kOrange), 2.0f * lw);
         g.DrawLines(&filterPen, filter.data(), static_cast<INT>(filter.size()));
         drawMark(g, mSideHpf, xCorner, filterY(corner > 0.0 ? -3.0 : 0.0));
-        // the curve: where the level was in the last seconds (bars), the last half second (a trail) and now
-        if (have) {
-            const Plot& q = plot_[0];
+        // where the level is now, on the curve (which lies over the level: blended in above): the last half second
+        // as a trail, the white dot, and the reduction of this moment
+        if (have && nowIn >= kLo) {
+            const Plot& q = qc;
             g.SetClip(RectF(static_cast<REAL>(q.l - 1), static_cast<REAL>(q.t - 1), static_cast<REAL>(q.r - q.l + 2),
                             static_cast<REAL>(q.b - q.t + 2)));
-            const int bins = static_cast<int>(kHi - kLo);
-            std::vector<int> count(static_cast<size_t>(bins), 0);
-            int most = 1;
-            for (int i = 0; i < DeckAnalysis::kComp; ++i) {
-                const int b = static_cast<int>(std::floor(an->compAt(i).in - level0 - kLo));
-                if (b >= 0 && b < bins) most = std::max(most, ++count[static_cast<size_t>(b)]);
-            }
-            SolidBrush bar(col(kInput, 90));
-            const double bw = (q.r - q.l) / bins, top = 0.3 * (q.b - q.t);
-            for (int b = 0; b < bins; ++b) {
-                const double bh = top * count[static_cast<size_t>(b)] / most;
-                if (bh >= 0.5)
-                    g.FillRectangle(&bar, static_cast<REAL>(q.l + b * bw + 0.5), static_cast<REAL>(q.b - bh),
-                                    static_cast<REAL>(std::max(1.0, bw - 1.0)), static_cast<REAL>(bh));
-            }
             const int n = 50; // 0.5 s
             for (int k = 0; k < n; ++k) {
                 const DeckAnalysis::CompPoint& c = an->compAt(DeckAnalysis::kComp - n + k);
@@ -717,8 +761,12 @@ void CompressorGraphs::paintLive(HDC dc, int th) {
                                   static_cast<REAL>(2 * r));
                 }
             }
+            g.ResetClip();
         }
     }
+    for (const Label& n : curveNames_) text(n.x, n.y, n.text, n.colour, n.align);
+    if (have) text(panel_[0].right - px(6), panel_[0].top + px(3), number(-most, 1, L" dB"), kOrange, TA_RIGHT);
+    else text((qc.l + qc.r) / 2, qc.b - th - px(4), source_ ? L"no audio on this deck" : L"no deck plays this", kDim, TA_CENTER);
     text(qs.X(100.0) + px(3), qs.b - th - px(2), L"100", kText); // over the spectrum's filled area: the light colour
     text(qs.r - px(3), qs.b - th - px(2), L"1 k", kText, TA_RIGHT);
     text(xCorner + px(8), filterY(corner > 0.0 ? -3.0 : 0.0) + px(6),
@@ -733,8 +781,18 @@ void CompressorGraphs::paint(HDC target) {
     if (!still_ || !frame_ || w != bitmapW_ || h != bitmapH_) {
         if (still_) DeleteObject(still_);
         if (frame_) DeleteObject(frame_);
+        if (curve_) DeleteObject(curve_);
         still_ = CreateCompatibleBitmap(target, w, h);
         frame_ = CreateCompatibleBitmap(target, w, h);
+        BITMAPINFO bi{};
+        bi.bmiHeader.biSize = sizeof bi.bmiHeader;
+        bi.bmiHeader.biWidth = w;
+        bi.bmiHeader.biHeight = -h; // top-down: the first row first, as GDI+ wants it
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        curveBits_ = nullptr;
+        curve_ = CreateDIBSection(target, &bi, DIB_RGB_COLORS, &curveBits_, nullptr, 0);
         bitmapW_ = w;
         bitmapH_ = h;
         stillDirty_ = true;
@@ -747,6 +805,7 @@ void CompressorGraphs::paint(HDC target) {
     HGDIOBJ oldBmp = SelectObject(dc, still_);
     if (stillDirty_) {
         renderStill(dc, w, h, th);
+        renderCurve(w, h, th);
         stillDirty_ = false;
     }
     SelectObject(dc, frame_);
@@ -775,18 +834,18 @@ int CompressorGraphs::markAt(POINT p) const {
     return best;
 }
 
-// The curve's three dashed lines and the edges of the knee's band are taken anywhere along them, not only by their
-// marks: the nearest one within a few pixels (the threshold's upright line first where they cross or lie together -
-// a knee of 0 is taken by its mark).
+// The level lines of the level-and-curve graph - the threshold's, the ratio's, the make-up's, and the two edges of
+// the knee's band - are taken anywhere along them, not only by their marks: the nearest one within a few pixels (in
+// that order where they lie together; a knee of 0 is taken by its mark).
 int CompressorGraphs::lineAt(POINT p) const {
     const Plot& q = plot_[0];
     if (p.x < q.l - 2 || p.x > q.r + 2 || p.y < q.t - 2 || p.y > q.b + 2) return mNone;
     const long reach = px(5);
     const double half = values_[pCompKnee] / 2.0;
-    const long kneeL = std::lround(q.X(threshold() - half)), kneeR = std::lround(q.X(threshold() + half));
-    const long d[4] = {std::labs(p.x - mark_[mThreshold].x), std::labs(p.y - mark_[mRatio].y),
+    const long kneeT = std::lround(q.Y(threshold() + half)), kneeB = std::lround(q.Y(threshold() - half));
+    const long d[4] = {std::labs(p.y - mark_[mThreshold].y), std::labs(p.y - mark_[mRatio].y),
                        std::labs(p.y - mark_[mMakeup].y),
-                       half > 0.0 ? std::min(std::labs(p.x - kneeL), std::labs(p.x - kneeR)) : reach + 1};
+                       half > 0.0 ? std::min(std::labs(p.y - kneeT), std::labs(p.y - kneeB)) : reach + 1};
     static const int kLine[4] = {mThreshold, mRatio, mMakeup, mKnee};
     int best = mNone;
     long bestD = reach + 1;
@@ -799,16 +858,13 @@ int CompressorGraphs::lineAt(POINT p) const {
     return best;
 }
 
-// Where the wheel steps a value: anywhere over the attack's, the release's or the side chain's graph, and over a
-// line of the curve's legend (over the curve itself it could be any of four).
+// Where the wheel steps a value: anywhere over the attack's, the release's or the side chain's graph, and over an
+// item of the legend (over the level-and-curve graph itself it could be any of four).
 int CompressorGraphs::wheelParam(POINT p) const {
     for (int k = 0; k < kFirstLegend; ++k)
         if (PtInRect(&panel_[cornerPanel(k)], p)) return resetParam(k);
-    for (int j = 0; j < kLegend; ++j) {
-        const RECT& icon = reset_[kFirstLegend + j];
-        const RECT line{legend_.left, icon.top, legend_.right, icon.bottom};
-        if (PtInRect(&line, p)) return resetParam(kFirstLegend + j);
-    }
+    for (int j = 0; j < kLegend; ++j)
+        if (PtInRect(&legendItem_[j], p) || PtInRect(&reset_[kFirstLegend + j], p)) return resetParam(kFirstLegend + j);
     return -1;
 }
 
@@ -829,9 +885,9 @@ void CompressorGraphs::drag(POINT p) {
     int param = -1;
     double v = 0.0;
     switch (drag_) {
-    case mThreshold:
+    case mThreshold: // a level line: up / down
         param = pCompThreshold;
-        v = plot_[0].fromX(p.x);
+        v = plot_[0].fromY(p.y);
         break;
     case mRatio: { // the ratio that brings the curve's right end to the mouse (the curve falls as the ratio rises)
         param = pCompRatio;
@@ -857,7 +913,7 @@ void CompressorGraphs::drag(POINT p) {
     }
     case mKnee: // the band is as wide on both sides of the threshold: either edge (and the mark) sets half of it
         param = pCompKnee;
-        v = 2.0 * std::fabs(plot_[0].fromX(p.x) - threshold());
+        v = 2.0 * std::fabs(plot_[0].fromY(p.y) - threshold());
         break;
     case mAttack:
         param = pCompAttack;
@@ -869,7 +925,7 @@ void CompressorGraphs::drag(POINT p) {
         break;
     case mSideHpf: {
         param = pCompSideHpf;
-        const double hz = plot_[4].fromX(p.x);
+        const double hz = plot_[3].fromX(p.x);
         v = hz < 34.0 ? 0.0 : std::max(40.0, hz); // left of the lowest corner: off
         break;
     }
@@ -986,7 +1042,8 @@ LRESULT CompressorGraphs::handle(UINT msg, WPARAM wp, LPARAM lp) {
             int m = drag_ != mNone ? drag_ : markAt(p);
             if (m == mNone) m = lineAt(p);
             if (m != mNone) {
-                SetCursor(LoadCursorW(nullptr, m == mRatio || m == mMakeup ? IDC_SIZENS : IDC_SIZEWE));
+                // the level lines go up / down, the marks of the attack, the release and the high-pass left / right
+                SetCursor(LoadCursorW(nullptr, m == mAttack || m == mRelease || m == mSideHpf ? IDC_SIZEWE : IDC_SIZENS));
                 return TRUE;
             }
         }

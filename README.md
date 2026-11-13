@@ -73,8 +73,8 @@ EQs are managed like loudness presets.
   MB Compressor bands with their gains, the loudness preset and EQ lists, the four bass sliders - bass level,
   enhancer, width and frequency - and how long the spectrum is averaged), an analysis window (compressor curve, loudness and gain over the last minute,
   goniometer, correlation and stereo width), a loudness window with the stage switches and every parameter (the
-  Compressor tab is all graphs - its curve, attack, release, level and side chain over the live audio - in which its
-  values are set by dragging), a
+  Compressor tab is all graphs - its curve over the level of the live audio, attack, release and side chain - in
+  which its values are set by dragging), a
   EQ window, tooltips on every control (they can be switched off), windows that open where they were left, and
   the Setup window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
