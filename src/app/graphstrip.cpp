@@ -118,6 +118,16 @@ int GraphStrip::textWidth(HDC dc, const wchar_t* s) const {
     return static_cast<int>(z.cx);
 }
 
+int GraphStrip::textWidth(const std::wstring& s) const {
+    HDC dc = GetDC(nullptr);
+    if (!dc) return static_cast<int>(s.size()) * px(7);
+    HGDIOBJ old = SelectObject(dc, font_);
+    const int w = textWidth(dc, s.c_str());
+    SelectObject(dc, old);
+    ReleaseDC(nullptr, dc);
+    return w;
+}
+
 // Also while a mark is dragged: the owner has the value the graph gave it, and what a rule moved with it (a split
 // pushes its neighbours) has to show.
 void GraphStrip::setValues(const PresetValues& values, const PresetValues& reset) {

@@ -643,7 +643,8 @@ right); a line is taken anywhere along it, or by its round mark.
   - **After silence** - the level line the gain goes to after a silence. By default it lies on the Range's upper
     line: there the line whose name is nearer is taken (After silence left of the middle, the Range right of it).
     Dragged under the target's line it is "hold".
-  - The legend over the graph lists the five values; the mouse wheel over one of them is one step.
+  - Every line's name carries its value ("Range 12.0 dB"). The legend over the graph lists the five values too;
+    the mouse wheel over one of them is one step.
 - **Attack**, **Release** and **Speed** - an example and how it comes out over time: music that is 10 dB too loud,
   10 dB too soft, and 3 dB too loud (a small difference, which the gain closes at Speed). Dashed: the music as it
   comes in; the line: as it comes out; the upright line: the time it takes. Drag the upright line, or turn the mouse
@@ -692,9 +693,10 @@ The Compressor tab has no sliders: only the stage's switch, and under it four gr
 with the music of the deck the window was opened from in them. Every value is set in the graphs.
 
 - **Threshold**, **Ratio** and **Make-up** are the three dashed lines across the Level and curve graph, each with
-  its name beside its round mark. Drag a line anywhere along it (or its mark) up and down.
-- **Knee** is the shaded band around the Threshold's line. Drag the round mark at its left, or an edge of the band,
-  up and down.
+  its name and value beside its round mark ("Threshold +2.0 LU"). Drag a line anywhere along it (or its mark) up and
+  down.
+- **Knee** is the shaded band around the Threshold's line, its name and value at the left. Drag the round mark at
+  its left, or an edge of the band, up and down.
 - The graph's legend, in its top line, lists these four with their values; turn the mouse wheel over one of them
   for one step (0.5 LU, 0.1, 0.5 dB, 0.5 dB).
 - **Attack**, **Release** and the **Side-chain high-pass** are set in their own graphs: drag the mark, or turn the
@@ -771,7 +773,8 @@ in which every value is set, with the music of the deck in them.
   - **Maximum lift** is the level line at the height where the curve begins on the left, its name at the far right:
     a band is not lifted further than that. Drag the line (or its mark) up or down.
   - The white dots are the bands at this moment, each with its number.
-  - The legend lists the four values; the mouse wheel over one of them is one step.
+  - Every line's name carries its value ("Down above 3.0 dB"); in a small graph where both do not fit beside the
+    line, the name stands alone. The legend lists the four values too; the mouse wheel over one of them is one step.
 - **Attack** and **Release** - as on the Compressor tab: how fast a band is turned down by a hit, and how fast it
   comes back. Drag the mark, or turn the mouse wheel over the graph (1 ms, 10 ms).
 

@@ -60,6 +60,8 @@ private:
     double ratio() const;             // 1 .. 4 from the amount
     double gainAt(double x) const;    // dB: what the stage does to a band `x` dB over its own recent level
     double hitReduction() const;      // dB the example hit (10 dB over "down above") is turned down when settled
+    // The legend's j-th value as text: in the legend, and behind its name at its line in the curve's graph.
+    std::wstring valueText(int j) const;
 
     RECT panel_[kPanels] = {};
     Plot plot_[kPanels];

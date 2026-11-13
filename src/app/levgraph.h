@@ -48,6 +48,8 @@ private:
     double reference() const;  // LUFS: the level the output is brought to
     double silenceDb() const;  // where "after silence" is drawn (at "hold": under the target's line)
     double silenceMarkX() const; // where its mark stands on its line
+    // The legend's j-th value as text: in the legend, and behind its name at its line in the graph.
+    std::wstring valueText(int j) const;
 
     RECT panel_[kPanels] = {};
     Plot plot_[kPanels];

@@ -53,6 +53,8 @@ private:
     double makeup() const;    // dB (the automatic one worked out)
     double out(double in) const; // LU to the aim -> LU to the aim, through the curve and the make-up
     double hitReduction() const; // dB the example hit (10 dB over the threshold) is turned down when settled
+    // The legend's j-th value as text: in the legend, and behind its name at its line in the graph.
+    std::wstring valueText(int j) const;
 
     RECT panel_[kPanels] = {};
     Plot plot_[kPanels];

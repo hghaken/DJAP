@@ -73,6 +73,19 @@ double MbGraphs::gainAt(double x) const {
 
 double MbGraphs::hitReduction() const { return kHitDb * (1.0 - 1.0 / ratio()); }
 
+std::wstring MbGraphs::valueText(int j) const {
+    switch (j) {
+    case 0:
+        return number(values_[pDensAmount], 0, L" %");
+    case 1:
+        return number(values_[pDensDownAbove], 1, L" dB");
+    case 2:
+        return number(values_[pDensLiftBelow], 1, L" dB");
+    default:
+        return number(values_[pDensMaxLift], 1, L" dB");
+    }
+}
+
 void MbGraphs::measure(HDC dc) {
     static const wchar_t* const kNames[4] = {L"Amount", L"Down above", L"Lift below", L"Maximum lift"};
     static const wchar_t* const kWidest[4] = {L"100 %", L"12.0 dB", L"20.0 dB", L"12.0 dB"};
@@ -230,16 +243,37 @@ void MbGraphs::renderStill(HDC dc, int w, int h) {
             // largest lift's mark); the amount's under its line - which lies in the top of the graph, at the height
             // where the curve ends - and under "down above" where the two would meet; the largest lift's over its
             // line - which lies low, at the height where the curve begins - and over "lift below" where the two
-            // would meet.
-            enum { nAmount, nDown, nLift, nCap, kNames };
-            static const wchar_t* const kName[kNames] = {L"Amount", L"Down above", L"Lift below", L"Maximum lift"};
+            // would meet. Each name has its value behind it (client, 2026-11-13: "put the set values behind the
+            // text") - in a small graph, where the two do not fit beside the line, the name alone (the legend beside
+            // the graph has the value).
+            enum { nAmount, nDown, nLift, nCap, kNames }; // the legend's order
+            std::wstring text[kNames];
+            int textW[kNames];
+            auto fits = [&](int j, int w) {
+                switch (j) {
+                case nDown:
+                    return xDown - px(5) - w >= q.l - px(4) || xDown + px(5) + w <= q.r + px(4);
+                case nLift:
+                    return xLift - px(5) - w >= q.X(capIn) + px(8) || xLift + px(5) + w <= q.r + px(4);
+                default:
+                    return w <= q.r - q.l - px(8);
+                }
+            };
+            for (int j = 0; j < kNames; ++j) {
+                text[j] = std::wstring(legend_.name[j]) + L" " + valueText(j);
+                textW[j] = textWidth(text[j]);
+                if (!fits(j, textW[j])) {
+                    text[j] = legend_.name[j];
+                    textW[j] = legend_.nameW[j];
+                }
+            }
             const int bottomRow = static_cast<int>(q.b) - th - px(2);
-            const bool downRight = xDown - px(5) - legend_.nameW[nDown] < q.l - px(4);
-            const bool liftRight = xLift - px(5) - legend_.nameW[nLift] < q.X(capIn) + px(8);
+            const bool downRight = xDown - px(5) - textW[nDown] < q.l - px(4);
+            const bool liftRight = xLift - px(5) - textW[nLift] < q.X(capIn) + px(8);
             std::vector<RECT> name(kNames);
             auto place = [&](int j, double x, int y, bool leftAligned) {
                 const int at = static_cast<int>(x);
-                name[j] = leftAligned ? RECT{at, y, at + legend_.nameW[j], y + th} : RECT{at - legend_.nameW[j], y, at, y + th};
+                name[j] = leftAligned ? RECT{at, y, at + textW[j], y + th} : RECT{at - textW[j], y, at, y + th};
             };
             place(nAmount, q.l + px(4), static_cast<int>(yAmount) + px(3), true);
             place(nDown, xDown + (downRight ? px(5) : -px(5)), static_cast<int>(q.t) + px(1), downRight);
@@ -270,15 +304,13 @@ void MbGraphs::renderStill(HDC dc, int w, int h) {
             drawMark(g, mMaxLift, q.X(capIn), yCap);
             drawMark(g, mAmount, xAmount, yAmount);
             for (int j = 0; j < kNames; ++j)
-                all.push_back({static_cast<int>(name[j].left), static_cast<int>(name[j].top), kName[j], kOrange, TA_LEFT});
+                all.push_back({static_cast<int>(name[j].left), static_cast<int>(name[j].top), text[j], kOrange, TA_LEFT});
         }
-        const std::wstring value[4] = {number(values_[pDensAmount], 0, L" %"), number(down, 1, L" dB"),
-                                       number(lift, 1, L" dB"), number(maxLift, 1, L" dB")};
         for (int j = 0; j < legend_.count; ++j) {
             const RECT& item = legend_.item[j];
             const int y = static_cast<int>(item.top + (item.bottom - item.top - th) / 2.0 + 0.5);
             all.push_back({static_cast<int>(item.left), y, legend_.name[j], kText, TA_LEFT});
-            all.push_back({static_cast<int>(item.right) - px(2), y, value[j], kOrange, TA_RIGHT});
+            all.push_back({static_cast<int>(item.right) - px(2), y, valueText(j), kOrange, TA_RIGHT});
         }
         // ---- 3 and 4. the attack and the release ----
         const double reduce = hitReduction();

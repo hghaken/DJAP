@@ -138,12 +138,24 @@ double CompressorGraphs::hitReduction() const {
     return in - compressorCurveDb(in, threshold(), values_[pCompRatio], values_[pCompKnee]);
 }
 
+std::wstring CompressorGraphs::valueText(int j) const {
+    switch (j) {
+    case 0:
+        return number(threshold(), 1, L" LU", true);
+    case 1:
+        return number(values_[pCompRatio], 1, L":1");
+    case 2:
+        return number(values_[pCompKnee], 1, L" dB");
+    default:
+        return values_[pCompMakeup] < 0.0 ? std::wstring(L"auto") : number(makeup(), 1, L" dB");
+    }
+}
+
 // The panels, their titles, the legend's texts, the attack and release graphs.
 void CompressorGraphs::renderStill(HDC dc, int w, int h) {
     (void)w, (void)h;
     static const wchar_t* const kTitle[kPanels] = {L"Level and curve", L"Attack", L"Release", L"Side-chain high-pass"};
     const bool on = values_[pCompOn] >= 0.5;
-    const double thr = threshold(), mk = makeup(), ratio = values_[pCompRatio], knee = values_[pCompKnee];
     const double reduce = hitReduction();
     const int th = textH_;
     std::vector<Label> all;
@@ -167,13 +179,11 @@ void CompressorGraphs::renderStill(HDC dc, int w, int h) {
         // audio, in paintLive: the level lies behind the curve) ----
         plot_[0].x0 = plot_[0].y0 = kLo; // level in to the right, level out - and the level of the last seconds - up
         plot_[0].x1 = plot_[0].y1 = kHi;
-        const std::wstring value[4] = {number(thr, 1, L" LU", true), number(ratio, 1, L":1"), number(knee, 1, L" dB"),
-                                       values_[pCompMakeup] < 0.0 ? std::wstring(L"auto") : number(mk, 1, L" dB")};
         for (int j = 0; j < legend_.count; ++j) {
             const RECT& item = legend_.item[j];
             const int y = static_cast<int>(item.top + (item.bottom - item.top - th) / 2.0 + 0.5);
             all.push_back({static_cast<int>(item.left), y, legend_.name[j], kText, TA_LEFT});
-            all.push_back({static_cast<int>(item.right) - px(2), y, value[j], kOrange, TA_RIGHT});
+            all.push_back({static_cast<int>(item.right) - px(2), y, valueText(j), kOrange, TA_RIGHT});
         }
         // ---- 2 and 3. the attack and the release ----
         drawAttack(g, plot_[1], mAttack, kHitDb, reduce, values_[pCompAttack], kAttackSpanMs, 50.0, L"150 ms", all);
@@ -247,17 +257,33 @@ void CompressorGraphs::renderLayer(Gdiplus::Graphics& g, int w, int h) {
     // left of the mark, make-up text right of the mark"). On the line, where the curve is not: left of a mark the
     // curve lies under the line, right of the make-up's mark it rises over it - that name hangs under its line. A
     // name that would leave the plot at the top goes under its line too, and so does the threshold's where the
-    // ratio's name is in its way.
+    // ratio's name is in its way. Each name has its value behind it (client, 2026-11-13: "put the set values behind
+    // the text"); the knee's, which stands only half a knee over the threshold's, goes over that one where the two
+    // would meet.
+    std::wstring name[4]; // the legend's order: threshold, ratio, knee, make-up
+    int nameW[4];
+    for (int j = 0; j < 4; ++j) {
+        name[j] = std::wstring(legend_.name[j]) + L" " + valueText(j);
+        nameW[j] = textWidth(name[j]);
+    }
     const double above = th + px(2), under = px(2), side = px(8);
     const double yRatioName = yRatio - above < q.t ? yRatio + under : yRatio - above;
     double yThrName = yThr - above;
-    if (xRatio - side - legend_.nameW[1] < xThr - side && std::fabs(yRatioName - yThrName) < th) yThrName = yThr + under;
-    curveNames_.push_back({static_cast<int>(xThr - side), static_cast<int>(yThrName), L"Threshold", kOrange, TA_RIGHT});
-    curveNames_.push_back({static_cast<int>(xRatio - side), static_cast<int>(yRatioName), L"Ratio", kOrange, TA_RIGHT});
-    curveNames_.push_back({static_cast<int>(xMakeup + side), static_cast<int>(yMakeup + under), L"Make-up", kOrange, TA_LEFT});
-    curveNames_.push_back({static_cast<int>(xKnee + side),
-                           static_cast<int>(yKneeT - above < q.t ? yKneeT + under : yKneeT - above), L"Knee", kOrange,
-                           TA_LEFT});
+    if (xRatio - side - nameW[1] < xThr - side && std::fabs(yRatioName - yThrName) < th) yThrName = yThr + under;
+    double yKneeName = yKneeT - above < q.t ? yKneeT + under : yKneeT - above;
+    const RECT thrRect{static_cast<LONG>(xThr - side - nameW[0]), static_cast<LONG>(yThrName), static_cast<LONG>(xThr - side),
+                       static_cast<LONG>(yThrName + th)};
+    const RECT kneeRect{static_cast<LONG>(xKnee + side), static_cast<LONG>(yKneeName),
+                        static_cast<LONG>(xKnee + side + nameW[2]), static_cast<LONG>(yKneeName + th)};
+    RECT both;
+    if (IntersectRect(&both, &thrRect, &kneeRect)) {
+        yKneeName = thrRect.top - th;
+        if (yKneeName < q.t) yKneeName = thrRect.bottom;
+    }
+    curveNames_.push_back({static_cast<int>(xThr - side), static_cast<int>(yThrName), name[0], kOrange, TA_RIGHT});
+    curveNames_.push_back({static_cast<int>(xRatio - side), static_cast<int>(yRatioName), name[1], kOrange, TA_RIGHT});
+    curveNames_.push_back({static_cast<int>(xMakeup + side), static_cast<int>(yMakeup + under), name[3], kOrange, TA_LEFT});
+    curveNames_.push_back({static_cast<int>(xKnee + side), static_cast<int>(yKneeName), name[2], kOrange, TA_LEFT});
 }
 
 // The parts that move with the audio, on a copy of the still picture: the level and the reduction of the last 4 s

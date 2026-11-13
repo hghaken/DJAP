@@ -121,6 +121,21 @@ double LevellerGraphs::silenceDb() const { return values_[pLevSilence] < 0.0 ? k
 
 double LevellerGraphs::silenceMarkX() const { return plot_[0].l + kSilenceMarkAt * (plot_[0].r - plot_[0].l); }
 
+std::wstring LevellerGraphs::valueText(int j) const {
+    switch (j) {
+    case 0:
+        return number(values_[pLevRange], 1, L" dB");
+    case 1:
+        return number(values_[pLevWindow], 1, L" dB");
+    case 2:
+        return number(values_[pLevHold], 0, L" LU");
+    case 3:
+        return number(values_[pLevQuietWait], 1, L" s");
+    default:
+        return values_[pLevSilence] < 0.0 ? std::wstring(L"hold") : number(values_[pLevSilence], 1, L" dB");
+    }
+}
+
 // The panels, their titles, the legend's texts and the three small graphs. The first graph itself is drawn with the
 // audio: its lines lie over the level (renderLayer, paintLive).
 void LevellerGraphs::renderStill(HDC dc, int w, int h) {
@@ -152,15 +167,11 @@ void LevellerGraphs::renderStill(HDC dc, int w, int h) {
         plot_[0].x1 = 0.0;
         plot_[0].y0 = kLo;
         plot_[0].y1 = kHi;
-        const std::wstring value[5] = {number(values_[pLevRange], 1, L" dB"), number(values_[pLevWindow], 1, L" dB"),
-                                       number(values_[pLevHold], 0, L" LU"), number(values_[pLevQuietWait], 1, L" s"),
-                                       values_[pLevSilence] < 0.0 ? std::wstring(L"hold")
-                                                                  : number(values_[pLevSilence], 1, L" dB")};
         for (int j = 0; j < legend_.count; ++j) {
             const RECT& item = legend_.item[j];
             const int y = static_cast<int>(item.top + (item.bottom - item.top - th) / 2.0 + 0.5);
             all.push_back({static_cast<int>(item.left), y, legend_.name[j], kText, TA_LEFT});
-            all.push_back({static_cast<int>(item.right) - px(2), y, value[j], kOrange, TA_RIGHT});
+            all.push_back({static_cast<int>(item.right) - px(2), y, valueText(j), kOrange, TA_RIGHT});
         }
         // ---- 2, 3 and 4. the attack, the release (never slower than the speed) and the speed ----
         drawRamp(g, plot_[1], mAttack, kFastDb, std::max(kFastDb / attack, speed), attack, number(attack, 1, L" s"), all);
@@ -248,13 +259,16 @@ void LevellerGraphs::renderLayer(Gdiplus::Graphics& g, int w, int h) {
     // range's lower line often lies close under it -, "after silence" right of its mark over its line, the quiet
     // wait's at the bottom of its upright line, left of it. A line gives way to a name it would run through
     // (lineAround); the lower "Range" is left out where the quiet wait's stretch on the hold line is in its way.
+    // Each name has its value behind it (client, 2026-11-13: "put the set values behind the text"); "after silence"
+    // goes under its line where it would run into another name.
     enum { nRange, nRangeLow, nWindow, nHold, nWait, nSilence, kNames };
-    static const wchar_t* const kName[kNames] = {L"Range", L"Range", L"Window", L"Hold below", L"Quiet wait", L"After silence"};
-    static const int kWidthOf[kNames] = {0, 0, 1, 2, 3, 4}; // the legend's name widths
+    static const int kLegendOf[kNames] = {0, 0, 1, 2, 3, 4};
+    std::wstring text[kNames];
+    for (int j = 0; j < kNames; ++j) text[j] = std::wstring(legend_.name[kLegendOf[j]]) + L" " + valueText(kLegendOf[j]);
     const int above = th + px(2), under = px(2), side = px(8);
     std::vector<RECT> name(kNames);
     auto place = [&](int j, double x, double y, bool leftAligned) {
-        const int at = static_cast<int>(x), top = static_cast<int>(y), width = legend_.nameW[kWidthOf[j]];
+        const int at = static_cast<int>(x), top = static_cast<int>(y), width = textWidth(text[j]);
         name[static_cast<size_t>(j)] = leftAligned ? RECT{at, top, at + width, top + th} : RECT{at - width, top, at, top + th};
     };
     place(nRange, xRange - side, yUp - above, false);
@@ -265,6 +279,13 @@ void LevellerGraphs::renderLayer(Gdiplus::Graphics& g, int w, int h) {
     place(nSilence, xSilence + side, holds ? ySilence - th / 2.0 : ySilence - above, true);
     const bool onStretch = name[nRangeLow].top - px(2) <= yHold && yHold <= name[nRangeLow].bottom + px(2);
     if (range <= 0.0 || onStretch) name[nRangeLow] = RECT{0, 0, 0, 0};
+    auto meets = [&](int j) {
+        RECT both;
+        for (int k = 0; k < kNames; ++k)
+            if (k != j && IntersectRect(&both, &name[static_cast<size_t>(j)], &name[static_cast<size_t>(k)])) return true;
+        return false;
+    };
+    if (!holds && meets(nSilence)) place(nSilence, xSilence + side, ySilence + under, true);
 
     g.SetClip(RectF(static_cast<REAL>(q.l - 1), static_cast<REAL>(q.t - 1), static_cast<REAL>(q.r - q.l + 2),
                     static_cast<REAL>(q.b - q.t + 2)));
@@ -299,7 +320,7 @@ void LevellerGraphs::renderLayer(Gdiplus::Graphics& g, int w, int h) {
     drawMark(g, mSilence, xSilence, ySilence);
     for (int j = 0; j < kNames; ++j) {
         const RECT& r = name[static_cast<size_t>(j)];
-        if (r.right > r.left) names_.push_back({static_cast<int>(r.left), static_cast<int>(r.top), kName[j], kOrange, TA_LEFT});
+        if (r.right > r.left) names_.push_back({static_cast<int>(r.left), static_cast<int>(r.top), text[j], kOrange, TA_LEFT});
     }
     const int yTime = static_cast<int>(q.b) - th - px(2);
     names_.push_back({static_cast<int>(q.l) + px(3), yTime, L"30 s ago", kDim, TA_LEFT});

@@ -142,6 +142,7 @@ protected:
     // ---- what a strip uses ----
     int px(double x) const { return static_cast<int>(x * dpi_ / 96.0 + 0.5); }
     int textWidth(HDC dc, const wchar_t* s) const;
+    int textWidth(const std::wstring& s) const; // in the small font, without a DC at hand
     void drawMark(Gdiplus::Graphics& g, int id, double x, double y);
     // The four panels of a tab: the first across the top (a little over half of the height) with the other three
     // equally wide under it; all four side by side, the first by far the widest, in a strip too low for two rows or

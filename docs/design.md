@@ -809,6 +809,16 @@ go at the speed. The wheel: over a small graph its value, over a legend item tha
 the parameter's step (their sliders are logarithmic). 22 tooltip rectangles. Processor use of the test instance on
 this tab: 3 - 6 % of a core.
 
+Values at the names (client, 2026-11-13, with a picture of the Compressor's curve: "put the set values behind the
+text in the leveller, compressor and MB compressor"): every name at a line in the three strips carries its value -
+"Threshold +2.0 LU", "Range 12.0 dB", "Down above 3.0 dB" - from the same function as the legend's value
+(`valueText` per strip), so the two never differ. The rules for where a name stands are unchanged and work with the
+longer texts' measured widths (`GraphStrip::textWidth(std::wstring)`); new: the knee's name goes over the
+threshold's where the two would meet (a narrow window, a knee of a few dB), "after silence" under its line where it
+would meet another name, and in a small curve-per-band graph a name whose text with its value does not fit beside
+its line stands alone (the legend beside that graph has the value). The legends stay: they carry the reset icons
+and the wheel.
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its
