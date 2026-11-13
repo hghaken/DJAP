@@ -981,13 +981,18 @@ void sounds(const fs::path& dir) {
     }
     CHECK(s.deck[0].sound == "Lelystad" && s.deck[0].preset == "Medium" && s.deck[0].colour == "Neutral");
     CHECK(s.findSound("Zwolle")->loudness == "Medium" && s.findSound("Zwolle")->eq == "Auto"); // (client, 2026-11-13)
-    CHECK(s.findSound("Utrecht")->loudness == "Medium" && s.findSound("Utrecht")->eq == "Auto");
+    CHECK(s.findSound("Utrecht")->loudness == "Loud" && s.findSound("Utrecht")->eq == "Bass+");
     CHECK(s.findSound("Groningen")->loudness == "Very Loud" && s.findSound("Groningen")->eq == "Bass+");
-    {   // two sounds with the same two parts: a deck keeps the one it chose
+    for (const Sound& a : s.sounds) // no two shipped sounds hold the same two parts
+        for (const Sound& b : s.sounds)
+            CHECK(&a == &b || a.loudness != b.loudness || a.eq != b.eq);
+    {   // a deck keeps the sound it chose; a deck on 0.1.371's Zwolle (Loud with Bass+) is on Utrecht now
         Settings same, back2;
         CHECK(same.chooseSound(0, "Zwolle"));
         back2.fromText(same.toText());
         CHECK(back2.deck[0].sound == "Zwolle" && back2.deck[0].preset == "Medium" && back2.deck[0].colour == "Auto");
+        back2.fromText("[Decks]\nSoundA=Zwolle\nPresetA=Loud\nColourA=Bass+\n");
+        CHECK(back2.deck[0].sound == "Utrecht" && back2.deck[0].preset == "Loud" && back2.deck[0].colour == "Bass+");
     }
     // as shipped, no sound is written
     CHECK(s.toText().find("\n[Sound ") == std::string::npos);
@@ -1059,7 +1064,7 @@ void sounds(const fs::path& dir) {
     back.fromText("[Decks]\nPresetA=Loud\nColourA=Warm\nPresetB=Gentle\nColourB=Bright\n"
                   "[Plugin]\nLoudness1=Medium\nColour1=Auto\nLoudness2=Light\nColour2=Bright\n");
     CHECK(back.deck[0].sound == "'s-Hertogenbosch" && back.deck[1].sound.empty() && back.deck[1].preset == "Gentle");
-    CHECK(back.pluginSlots[1].sound == "Utrecht" && back.pluginSlots[2].sound.empty());
+    CHECK(back.pluginSlots[1].sound == "Zwolle" && back.pluginSlots[2].sound.empty());
     back.fromText("[Decks]\nSoundA=Zwolle\nPresetA=Gentle\nColourA=Warm\n"); // the file's sound does not hold them
     CHECK(back.deck[0].sound == "Den Haag" && back.deck[0].preset == "Gentle");
 

@@ -66,8 +66,8 @@ only the balance. Nine shipped EQs (Neutral, Warm, Bass+, Less mid, Bright, Voca
 EQs are managed like loudness presets.
 
 A deck chooses a **sound**: a loudness preset and an EQ together under one name. Twelve are shipped, named after the
-provincial capitals of the Netherlands - from Leeuwarden (DAB+, Neutral) and Den Haag (Gentle, Warm) through Utrecht
-and Zwolle (both Medium, Auto) and Lelystad (Medium, Neutral) to Groningen (Very Loud, Bass+); in the Sound
+provincial capitals of the Netherlands - from Leeuwarden (DAB+, Neutral) and Den Haag (Gentle, Warm) through Zwolle
+(Medium, Auto) and Lelystad (Medium, Neutral) to Utrecht (Loud, Bass+) and Groningen (Very Loud, Bass+); in the Sound
 window its two parts are chosen and edited, and own sounds are saved, renamed and deleted.
 
 ## Programs

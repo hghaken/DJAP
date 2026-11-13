@@ -460,11 +460,11 @@ after the provincial capitals of the Netherlands, from the quietest loudness to 
 | **Haarlem** | Light | Vocal | speech and singing in front |
 | **Maastricht** | Light | Oldies | old recordings |
 | **Assen** | Web Stream | Less mid | streaming, MP3 / AAC |
-| **Utrecht** | Medium | Auto | all-round: each song's tone evened out |
-| **Zwolle** | Medium | Auto | the same two: all-round |
+| **Zwolle** | Medium | Auto | all-round: each song's tone evened out |
 | **Lelystad** | Medium | Neutral | the plain middle (the start) |
 | **Arnhem** | FM Station | Bright | the sound of FM radio |
-| **'s-Hertogenbosch** | Loud | Warm | parties |
+| **Utrecht** | Loud | Bass+ | parties |
+| **'s-Hertogenbosch** | Loud | Warm | parties, warmer |
 | **Groningen** | Very Loud | Bass+ | clubs |
 
 Your own sounds follow in the list. A deck's **Edit...** button opens the Sound window on its sound:

@@ -125,12 +125,13 @@ const struct {
     {"Haarlem", "Light", "Vocal"},              // speech and singing in front
     {"Maastricht", "Light", "Oldies"},          // old recordings
     {"Assen", "Web Stream", "Less mid"},        // streaming, MP3 / AAC
-    {"Utrecht", "Medium", "Auto"},              // all-round, each song's tone evened out
-    {"Zwolle", "Medium", "Auto"},               // the same two, the client's own (2026-11-13: "fix Medium with Auto as
-                                                // Zwolle"; it was Loud with Bass+ in 0.1.371)
+    {"Zwolle", "Medium", "Auto"},               // all-round, each song's tone evened out (client, 2026-11-13: "fix
+                                                // Medium with Auto as Zwolle"; it was Loud with Bass+ in 0.1.371)
     {"Lelystad", "Medium", "Neutral"},          // the plain middle (the default)
     {"Arnhem", "FM Station", "Bright"},         // the sound of FM radio
-    {"'s-Hertogenbosch", "Loud", "Warm"},       // parties
+    {"Utrecht", "Loud", "Bass+"},               // parties (client: "Utrecht and Zwolle are the same now, change
+                                                // Utrecht" - it takes the pair Zwolle had: Medium with Auto until 0.1.373)
+    {"'s-Hertogenbosch", "Loud", "Warm"},       // parties, warmer
     {"Groningen", "Very Loud", "Bass+"},        // club
 };
 
