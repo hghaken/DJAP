@@ -223,14 +223,15 @@ void MbGraphs::renderStill(HDC dc, int w, int h) {
             const double capIn = kCurveLo + kMaxLiftMarkDb, amountIn = kCurveHi - kAmountMarkDb;
             const double yDown = q.Y(down), yLift = q.Y(-lift), yCap = q.Y(capIn + maxLift);
             const double xAmount = q.X(amountIn), yAmount = q.Y(amountIn + gainAt(amountIn));
-            // The names (client, 2026-11-13: "down above" at the bottom, left of its line; the amount a level line
-            // with its name at the far left; the largest lift a level line with its name at the far right), off the
-            // curve and the bands' dots and off each other: "down above" and "lift below" in the bottom row, each
-            // left of its own line (right of it where the graph ends, and "lift below" also where it would reach
-            // the largest lift's mark) - "lift below" a row higher where the zone is narrower than the other name;
-            // the amount's under its line - which lies in the top of the graph, at the height where the curve ends;
-            // the largest lift's over its line - which lies low, at the height where the curve begins - and over
-            // the bottom row where that name is in its way.
+            // The names (client, 2026-11-13: the amount a level line with its name at the far left; the largest lift
+            // a level line with its name at the far right; "down above" left of its line - first at the bottom,
+            // then, after seeing it under "lift below": "left of the line but all the way up"), off the curve and
+            // the bands' dots and off each other: "down above" at the top and "lift below" at the bottom, each left
+            // of its own line (right of it where the graph ends, and "lift below" also where it would reach the
+            // largest lift's mark); the amount's under its line - which lies in the top of the graph, at the height
+            // where the curve ends - and under "down above" where the two would meet; the largest lift's over its
+            // line - which lies low, at the height where the curve begins - and over "lift below" where the two
+            // would meet.
             enum { nAmount, nDown, nLift, nCap, kNames };
             static const wchar_t* const kName[kNames] = {L"Amount", L"Down above", L"Lift below", L"Maximum lift"};
             const int bottomRow = static_cast<int>(q.b) - th - px(2);
@@ -242,13 +243,12 @@ void MbGraphs::renderStill(HDC dc, int w, int h) {
                 name[j] = leftAligned ? RECT{at, y, at + legend_.nameW[j], y + th} : RECT{at - legend_.nameW[j], y, at, y + th};
             };
             place(nAmount, q.l + px(4), static_cast<int>(yAmount) + px(3), true);
-            place(nDown, xDown + (downRight ? px(5) : -px(5)), bottomRow, downRight);
+            place(nDown, xDown + (downRight ? px(5) : -px(5)), static_cast<int>(q.t) + px(1), downRight);
             place(nLift, xLift + (liftRight ? px(5) : -px(5)), bottomRow, liftRight);
             place(nCap, q.r - px(4), static_cast<int>(yCap) - th - px(3), false);
-            if (name[nLift].right + px(6) > name[nDown].left && name[nLift].left < name[nDown].right + px(6))
-                OffsetRect(&name[nLift], 0, -th);
             RECT both;
-            if (IntersectRect(&both, &name[nCap], &name[nDown])) OffsetRect(&name[nCap], 0, name[nDown].top - name[nCap].bottom);
+            if (IntersectRect(&both, &name[nAmount], &name[nDown])) OffsetRect(&name[nAmount], 0, name[nDown].bottom - name[nAmount].top);
+            if (IntersectRect(&both, &name[nCap], &name[nLift])) OffsetRect(&name[nCap], 0, name[nLift].top - name[nCap].bottom);
             // An orange line gives way to a name it would run through (the letters, not the empty top and bottom of
             // the text's row), and leaves no stub beside one.
             auto dashed = [&](bool upright, double at) {

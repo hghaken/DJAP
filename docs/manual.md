@@ -736,8 +736,8 @@ in which every value is set, with the music of the deck in them.
   - The mouse wheel steps the gain of the band under the pointer, or the split the pointer is on.
 - **Curve per band** - what the stage does to one band: the band's level against its own recent level (to the
   right) and what comes out (up). In the grey zone in the middle nothing happens.
-  - **Down above** and **Lift below** are the two upright lines at the zone's edges, their names at the bottom:
-    drag them left or right.
+  - **Down above** and **Lift below** are the two upright lines at the zone's edges - the first with its name at
+    the top, the second with its name at the bottom: drag them left or right.
   - **Amount** is the level line at the height where the curve ends on the right, its name at the far left: drag
     the line (or its mark) down for a flatter curve (4:1 at 100 %), up to the diagonal for none (0 %).
   - **Maximum lift** is the level line at the height where the curve begins on the left, its name at the far right:

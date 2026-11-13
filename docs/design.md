@@ -767,11 +767,12 @@ its largest there), the amount as the slope outside the zone - a level line thro
 end (up / down: the ratio that brings the end there, 1:1 .. 4:1 = 0 .. 100 %). The names in the graph (client,
 2026-11-13, after seeing it: "'down above' at the bottom, left of its line; 'amount' a level line, its text at the
 far left; 'max lift' a level line, its text at the far right" - until 0.1.353 the largest lift was a dotted line
-parallel to the diagonal and the amount a mark only): "down above" and "lift below" in the bottom row left of their
-lines ("lift below" a row higher where the zone is narrower than the other name, right of its line where it would
-reach the edge or the largest lift's mark), "Amount" under its line at the far left, "Maximum lift" over its line at
-the far right; an orange line gives way to a name it would run through (drawn in stretches around the names'
-rectangles).
+parallel to the diagonal and the amount a mark only; and after seeing 0.1.356, where "down above" stood in the
+bottom row with "lift below" a row over it: "'down above' left of the line but all the way up"): "down above" at the
+top and "lift below" at the bottom, each left of its line (right of it where it would reach the edge, "lift below"
+also where it would reach the largest lift's mark), "Amount" under its line at the far left, "Maximum lift" over
+its line at the far right; where two names would meet the level line's name moves clear of the other. An orange
+line gives way to a name it would run through (drawn in stretches around the names' rectangles).
 A dot per band where it is now: the stage reports a band's gain, not its level, so the dot stands where on the
 curve that gain belongs (a band left alone: small, in the middle of the zone) - no change to the audio path for it.
 Its legend stands over the graph or in a column beside it, whichever leaves the square larger. **Attack**,
