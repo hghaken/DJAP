@@ -356,7 +356,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 
 ## 4. The main window
 
-![The main window with two decks: deck A playing the sound Utrecht (Medium with Auto), deck B on Zwolle (Loud with Bass+), no music yet](images/main.jpg)
+![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), deck B on Groningen (Very Loud with Bass+), no music yet](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
 no menu bar: **right-click anywhere in it** for *Setup...*, *Health...* (what runs, the counters and their graphs:
@@ -461,10 +461,10 @@ after the provincial capitals of the Netherlands, from the quietest loudness to 
 | **Maastricht** | Light | Oldies | old recordings |
 | **Assen** | Web Stream | Less mid | streaming, MP3 / AAC |
 | **Utrecht** | Medium | Auto | all-round: each song's tone evened out |
+| **Zwolle** | Medium | Auto | the same two: all-round |
 | **Lelystad** | Medium | Neutral | the plain middle (the start) |
 | **Arnhem** | FM Station | Bright | the sound of FM radio |
-| **Zwolle** | Loud | Bass+ | parties |
-| **'s-Hertogenbosch** | Loud | Warm | parties, warmer |
+| **'s-Hertogenbosch** | Loud | Warm | parties |
 | **Groningen** | Very Loud | Bass+ | clubs |
 
 Your own sounds follow in the list. A deck's **Edit...** button opens the Sound window on its sound:

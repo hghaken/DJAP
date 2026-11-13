@@ -672,21 +672,21 @@ int main(int argc, char** argv) {
         {
             Instance a, b; // instances 1 and 2 (deck 1 and deck 2); the window's list is the sounds (2026-11-13)
             CHECK(a.open(module, &host) && b.open(module, &host));
-            CHECK(pick(a, 1, L"Zwolle"));   // Loud with Bass+
-            CHECK(pick(b, 1, L"Den Haag")); // Gentle with Warm
+            CHECK(pick(a, 1, L"'s-Hertogenbosch")); // Loud with Warm
+            CHECK(pick(b, 1, L"Den Haag"));         // Gentle with Warm
             a.close();
             b.close();
         }
         const std::string text = fileText();
         CHECK(text.find("Loudness1=Loud\n") != std::string::npos && text.find("Colour2=Warm\n") != std::string::npos);
-        CHECK(text.find("Sound1=Zwolle\n") != std::string::npos && text.find("Sound2=Den Haag\n") != std::string::npos);
+        CHECK(text.find("Sound1='s-Hertogenbosch\n") != std::string::npos && text.find("Sound2=Den Haag\n") != std::string::npos);
         {
             Instance a, b;
             CHECK(a.open(module, &host) && b.open(module, &host));
             const State sa = a.state(), sb = b.state();
             std::printf("-- the next start: instance 1 %s with %s, instance 2 %s with %s\n", sa.preset.c_str(),
                         sa.colour.c_str(), sb.preset.c_str(), sb.colour.c_str());
-            CHECK(sa.preset == "Loud" && sa.colour == "Bass+");
+            CHECK(sa.preset == "Loud" && sa.colour == "Warm");
             CHECK(sb.preset == "Gentle" && sb.colour == "Warm");
             // the host's reset: every parameter to its default, then activated - the kept preset's values again
             int reset = 0;

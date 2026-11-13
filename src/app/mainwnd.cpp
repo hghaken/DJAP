@@ -561,8 +561,8 @@ void MainWindow::createControls() {
                   L"The sound this deck plays: a loudness preset (the target loudness and every stage's values) with an "
                   L"EQ, under one name. Shipped, from quiet to loud: Leeuwarden (DAB+, Neutral), Den Haag (Gentle, "
                   L"Warm), Middelburg (Gentle, Quiet), Haarlem (Light, Vocal), Maastricht (Light, Oldies), Assen (Web "
-                  L"Stream, Less mid), Utrecht (Medium, Auto), Lelystad (Medium, Neutral), Arnhem (FM Station, Bright), "
-                  L"Zwolle (Loud, Bass+), 's-Hertogenbosch (Loud, Warm), Groningen (Very Loud, Bass+); your own follow. A "
+                  L"Stream, Less mid), Utrecht (Medium, Auto), Zwolle (Medium, Auto), Lelystad (Medium, Neutral), Arnhem "
+                  L"(FM Station, Bright), 's-Hertogenbosch (Loud, Warm), Groningen (Very Loud, Bass+); your own follow. A "
                   L"new choice is heard at once, without a click. With linked presets (Setup) both decks change.");
         tips_.add(s.parts, L"The sound's loudness preset and EQ. Edit... sets them apart, and opens their windows.");
         tips_.add(s.processing,

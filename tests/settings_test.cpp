@@ -980,13 +980,20 @@ void sounds(const fs::path& dir) {
         CHECK(Settings::shippedSoundIndex(x.name) >= 0);
     }
     CHECK(s.deck[0].sound == "Lelystad" && s.deck[0].preset == "Medium" && s.deck[0].colour == "Neutral");
-    CHECK(s.findSound("Zwolle")->loudness == "Loud" && s.findSound("Zwolle")->eq == "Bass+");
+    CHECK(s.findSound("Zwolle")->loudness == "Medium" && s.findSound("Zwolle")->eq == "Auto"); // (client, 2026-11-13)
     CHECK(s.findSound("Utrecht")->loudness == "Medium" && s.findSound("Utrecht")->eq == "Auto");
+    CHECK(s.findSound("Groningen")->loudness == "Very Loud" && s.findSound("Groningen")->eq == "Bass+");
+    {   // two sounds with the same two parts: a deck keeps the one it chose
+        Settings same, back2;
+        CHECK(same.chooseSound(0, "Zwolle"));
+        back2.fromText(same.toText());
+        CHECK(back2.deck[0].sound == "Zwolle" && back2.deck[0].preset == "Medium" && back2.deck[0].colour == "Auto");
+    }
     // as shipped, no sound is written
     CHECK(s.toText().find("\n[Sound ") == std::string::npos);
 
     // a deck takes a sound; a sound's part changes and its decks follow; reset
-    CHECK(s.chooseSound(0, "Zwolle") && s.deck[0].preset == "Loud" && s.deck[0].colour == "Bass+");
+    CHECK(s.chooseSound(0, "Zwolle") && s.deck[0].preset == "Medium" && s.deck[0].colour == "Auto");
     CHECK(!s.chooseSound(1, "Amsterdam") && s.deck[1].sound == "Lelystad");
     CHECK(s.chooseSound(1, "Zwolle"));
     s.setSoundPart("Zwolle", PresetKind::Colour, "Warm");
@@ -1003,7 +1010,7 @@ void sounds(const fs::path& dir) {
     CHECK(back.deck[0].sound == "Zwolle" && back.deck[0].colour == "Warm" && back.deck[1].sound == "Zwolle");
     CHECK(back.toText() == text);
     s.resetSound("Zwolle");
-    CHECK(s.findSound("Zwolle")->eq == "Bass+" && s.findSound("Zwolle")->loudness == "Loud" && s.deck[0].colour == "Bass+");
+    CHECK(s.findSound("Zwolle")->eq == "Auto" && s.findSound("Zwolle")->loudness == "Medium" && s.deck[0].colour == "Auto");
     CHECK(s.toText().find("[Sound Zwolle]") == std::string::npos);
 
     // own sounds: save as, saved over, rename, delete; a shipped name is refused
@@ -1049,9 +1056,9 @@ void sounds(const fs::path& dir) {
     CHECK(back.deck[0].sound.empty() && back.deck[0].preset == "Gentle" && back.deck[0].colour == "Bright");
     back.setDeckPart(0, PresetKind::Colour, "Warm"); // now Den Haag's two parts
     CHECK(back.deck[0].sound == "Den Haag");
-    back.fromText("[Decks]\nPresetA=Loud\nColourA=Bass+\nPresetB=Gentle\nColourB=Bright\n"
+    back.fromText("[Decks]\nPresetA=Loud\nColourA=Warm\nPresetB=Gentle\nColourB=Bright\n"
                   "[Plugin]\nLoudness1=Medium\nColour1=Auto\nLoudness2=Light\nColour2=Bright\n");
-    CHECK(back.deck[0].sound == "Zwolle" && back.deck[1].sound.empty() && back.deck[1].preset == "Gentle");
+    CHECK(back.deck[0].sound == "'s-Hertogenbosch" && back.deck[1].sound.empty() && back.deck[1].preset == "Gentle");
     CHECK(back.pluginSlots[1].sound == "Utrecht" && back.pluginSlots[2].sound.empty());
     back.fromText("[Decks]\nSoundA=Zwolle\nPresetA=Gentle\nColourA=Warm\n"); // the file's sound does not hold them
     CHECK(back.deck[0].sound == "Den Haag" && back.deck[0].preset == "Gentle");

@@ -289,10 +289,10 @@ sound"; proposed with Profile, Style, Station and Signature). A sound is a name,
 | Maastricht | Light | Oldies | old recordings |
 | Assen | Web Stream | Less mid | streaming |
 | Utrecht | Medium | Auto | all-round |
+| Zwolle | Medium | Auto | the same two (client, after 0.1.371: "fix Medium with Auto as Zwolle"; it was Loud with Bass+, his first example) |
 | Lelystad | Medium | Neutral | the plain middle; the decks' default (it is what a deck played by default before) |
 | Arnhem | FM Station | Bright | FM radio |
-| Zwolle | Loud | Bass+ | parties (the client's example) |
-| 's-Hertogenbosch | Loud | Warm | parties, warmer |
+| 's-Hertogenbosch | Loud | Warm | parties |
 | Groningen | Very Loud | Bass+ | clubs |
 
 Managed like the presets: a change of a part is saved at once and heard on every deck that plays the sound
@@ -313,6 +313,9 @@ preset would load its values again); the host still sees and automates the two l
 The main window's strip: Sound, Edit... (the Sound window, `soundwnd.*`), and the two parts as text; the Sound window:
 the sound with Save as, Rename, Delete, Reset sound, and its Loudness and EQ lists, each with an Edit button that opens
 the loudness or EQ window on that preset, and the preset's description.
+Two sounds may hold the same two parts (Utrecht and Zwolle): a deck keeps the one it chose (`SoundA` names it and it
+holds the two); only a deck without a named sound gets the first that holds them. A deck that played 0.1.371's Zwolle
+(Loud with Bass+) keeps playing that after the change and shows "(Loud, Bass+)": no shipped sound holds those two now.
 
 ## 4. True-peak detection in the limiter
 
