@@ -774,8 +774,9 @@ with the music of the deck the window was opened from in them. Every value is se
   its left, or an edge of the band, up and down.
 - The graph's legend, in its top line, lists these four with their values; turn the mouse wheel over one of them
   for one step (0.5 LU, 0.1, 0.5 dB, 0.5 dB).
-- **Attack**, **Release** and the **Side-chain high-pass** are set in their own graphs: drag the mark, or turn the
-  mouse wheel over the graph for one step (1 ms, 10 ms, 5 Hz).
+- **Attack**, **Release** and the **Side-chain high-pass** are set in their own graphs: drag the mark or its dashed
+  upright line anywhere along it (the pointer turns into a left-right arrow over it), or turn the mouse wheel over the
+  graph for one step (1 ms, 10 ms, 5 Hz).
 - Each of the seven has a small arrow as its **reset** button - behind its value in the legend, and in the corner of
   the Attack, the Release and the Side-chain high-pass graph. It is lit when the value differs from its reset value;
   a click sets it back (its tooltip names that value).
@@ -851,7 +852,7 @@ in which every value is set, with the music of the deck in them.
   - Every line's name carries its value ("Down above 3.0 dB"); in a small graph where both do not fit beside the
     line, the name stands alone. The legend lists the four values too; the mouse wheel over one of them is one step.
 - **Attack** and **Release** - as on the Compressor tab: how fast a band is turned down by a hit, and how fast it
-  comes back. Drag the mark, or turn the mouse wheel over the graph (1 ms, 10 ms).
+  comes back. Drag the mark or its dashed line, or turn the mouse wheel over the graph (1 ms, 10 ms).
 
 Reset: Attack, Release, the number of bands and the curve's four values each have a small arrow, lit when the value
 differs from its reset value. A split or a band gain that was changed gets that arrow beside its value in the graph.
@@ -894,8 +895,8 @@ them.
   1.33 dB over it (4:1), never more than the **Maximum** - the dashed line; drag it or its mark up or down. The white
   dot is this moment, the faint ones the last half second.
 - **Frequency** - the music's spectrum from 1 kHz, the part of it the de-esser listens to (coloured: above its
-  frequency) and the high shelf it turns the highs down with - dashed at the maximum, solid now. Drag the mark left
-  or right.
+  frequency) and the high shelf it turns the highs down with - dashed at the maximum, solid now. Drag the mark or
+  the dotted upright line left or right.
 
 The legend in the first graph's top line names the three values; the mouse wheel over one of them steps it (1 LU,
 0.5 dB, 100 Hz), and so does the wheel over the Reduction or the Frequency graph. The arrow behind a value sets it
@@ -953,8 +954,8 @@ The Limiter tab has no sliders: only the stage's switch, and under it three grap
   off - the peaks going in are what came out plus what it took (the number is the most it turned down). The
   **Ceiling** is the dashed line: drag it or its mark up or down, or turn the mouse wheel over its name in the legend
   (0.1 dB).
-- **Release** - the gain after a peak the limiter turned down 6 dB: drag the mark, or turn the mouse wheel over the
-  graph (5 ms). The arrow in its corner sets it back.
+- **Release** - the gain after a peak the limiter turned down 6 dB: drag the mark or its dashed line, or turn the
+  mouse wheel over the graph (5 ms). The arrow in its corner sets it back.
 - **Peaks in -> out** - under the ceiling the limiter does nothing; a peak above it comes out at the ceiling. The
   mark where the line bends is the ceiling too. The white dot is the newest peak.
 
@@ -1049,7 +1050,7 @@ tone's corrections of this moment. The spectrum window drags the same points.
   has less there): a slope, steeper with more **Amount**, cut off at the maximum (dotted: on without it). Drag the
   mark up or down; the dots are the four sections now.
 - **Time** - how fast the correction follows when the song's balance changes: after the **Time** it has come 63 % of
-  the way. Drag the mark left or right.
+  the way. Drag the mark or its dashed line left or right.
 - **Correction now** - the auto tone's correction of this moment as an EQ curve, what it adds to the Tone tab's.
 
 The legend names the three values; the mouse wheel over one steps it (5 %, 0.5 dB, 1 s), and so does the wheel over

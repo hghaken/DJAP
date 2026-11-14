@@ -439,6 +439,12 @@ void GraphStrip::lineAround(Gdiplus::Graphics& g, const Gdiplus::Pen& pen, bool 
     stretch(from, to);
 }
 
+int GraphStrip::uprightAt(POINT p, const Plot& q, int m) const {
+    if (m < 0 || m >= static_cast<int>(mark_.size())) return -1;
+    if (p.x < q.l - 2 || p.x > q.r + 2 || p.y < q.t - 2 || p.y > q.b + 2) return -1;
+    return std::labs(p.x - mark_[static_cast<size_t>(m)].x) <= px(5) ? m : -1;
+}
+
 // GdiAlphaBlend: gdi32's own.
 void GraphStrip::blendLayer(HDC dc, const RECT& r) {
     if (!layer_) return;

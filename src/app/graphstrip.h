@@ -186,6 +186,10 @@ protected:
     void lineAround(Gdiplus::Graphics& g, const Gdiplus::Pen& pen, bool upright, double at, double from, double to,
                     const std::vector<RECT>& names) const;
     void blendLayer(HDC dc, const RECT& r); // the layer's part `r` over what is there
+    // An upright line through mark `m` in plot `q` (an attack's, a release's, a frequency's), taken anywhere along it
+    // like the mark (client, 2026-11-14: the cursor did not change over the line): `m` when `pt` is within a few
+    // pixels of it, else -1.
+    int uprightAt(POINT pt, const Plot& q, int m) const;
     bool lit(int param) const;              // its value differs from the reset value
     bool litIcon(int param) const;          // that, or its partner's
     bool live() const;                      // the deck plays

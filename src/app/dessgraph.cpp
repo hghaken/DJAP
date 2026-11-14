@@ -356,7 +356,8 @@ void DeEsserGraphs::paintLive(HDC dc) {
     text(dc, qs.X(10000.0) + px(3), qs.b - th - px(2), L"10 k", kText);
 }
 
-// The threshold's line is taken anywhere along it, and so is the maximum's in the reduction graph.
+// The threshold's line is taken anywhere along it, and so are the maximum's in the reduction graph and the
+// frequency's upright line.
 int DeEsserGraphs::lineAt(POINT p) const {
     const long reach = px(5);
     const Plot& q0 = plot_[0];
@@ -365,7 +366,7 @@ int DeEsserGraphs::lineAt(POINT p) const {
     const Plot& q1 = plot_[1];
     if (p.x >= q1.l - 2 && p.x <= q1.r + 2 && p.y >= q1.t - 2 && p.y <= q1.b + 2 && std::labs(p.y - mark_[mMax].y) <= reach)
         return mMax;
-    return -1;
+    return uprightAt(p, plot_[2], mFrequency); // the frequency's upright line
 }
 
 // The wheel: over the reduction graph the maximum, over the frequency graph the frequency, over a legend item or

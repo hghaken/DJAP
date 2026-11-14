@@ -475,6 +475,9 @@ void MbGraphs::paintLive(HDC dc) {
 // few pixels) and else the fixed gain's line of the band under the point; in the curve the two upright lines and
 // the two level lines.
 int MbGraphs::lineAt(POINT p) const {
+    // the attack's and the release's upright lines, anywhere along them
+    for (const int m : {uprightAt(p, plot_[2], mAttack), uprightAt(p, plot_[3], mRelease)})
+        if (m >= 0) return m;
     const long reach = px(5);
     const Plot& q = plot_[0];
     const int n = bands();

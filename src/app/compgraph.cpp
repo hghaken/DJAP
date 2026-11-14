@@ -284,6 +284,24 @@ void CompressorGraphs::renderLayer(Gdiplus::Graphics& g, int w, int h) {
     curveNames_.push_back({static_cast<int>(xRatio - side), static_cast<int>(yRatioName), name[1], kOrange, TA_RIGHT});
     curveNames_.push_back({static_cast<int>(xMakeup + side), static_cast<int>(yMakeup + under), name[3], kOrange, TA_LEFT});
     curveNames_.push_back({static_cast<int>(xKnee + side), static_cast<int>(yKneeName), name[2], kOrange, TA_LEFT});
+    // The side chain's high-pass over the spectrum: its curve, its frequency as a dashed upright line - the same
+    // line as the attack's and the release's (client, 2026-11-14: "the side chain line is coarser than the others,
+    // make it the same"; it was a GDI dash drawn at every refresh) - and its mark.
+    const Plot& qs = plot_[3];
+    const double corner = values_[pCompSideHpf], xCorner = corner > 0.0 ? qs.X(corner) : qs.l;
+    auto filterY = [&](double db) { return qs.t + std::min(1.0, std::max(0.0, -db / kFilterRangeDb)) * (qs.b - qs.t); };
+    std::vector<PointF> filter;
+    for (int i = 0; i <= 80; ++i) {
+        const double hz = kSpecLoHz * std::pow(kSpecHiHz / kSpecLoHz, i / 80.0);
+        filter.push_back(pt(qs.X(hz), filterY(sideChainDb(hz, corner))));
+    }
+    g.SetClip(RectF(static_cast<REAL>(qs.l - 1), static_cast<REAL>(qs.t - 1), static_cast<REAL>(qs.r - qs.l + 2),
+                    static_cast<REAL>(qs.b - qs.t + 2)));
+    if (corner > 0.0) g.DrawLine(&dash, pt(xCorner, qs.t), pt(xCorner, qs.b));
+    Pen filterPen(col(kOrange), 2.0f * lw);
+    g.DrawLines(&filterPen, filter.data(), static_cast<INT>(filter.size()));
+    g.ResetClip();
+    drawMark(g, mSideHpf, xCorner, filterY(corner > 0.0 ? -3.0 : 0.0));
 }
 
 // The parts that move with the audio, on a copy of the still picture: the level and the reduction of the last 4 s
@@ -367,24 +385,17 @@ void CompressorGraphs::paintLive(HDC dc) {
             if (heardLine.size() > 1) polyline(dc, heardLine, kTeal, hair);
         }
         for (double hz : {50.0, 100.0, 200.0, 500.0}) polyline(dc, {ipt(qs.X(hz), qs.t), ipt(qs.X(hz), qs.b)}, kGrid, 1, PS_DOT);
-        if (corner > 0.0) polyline(dc, {ipt(xCorner, qs.t), ipt(xCorner, qs.b)}, kOrange, 1, PS_DASH);
         RestoreDC(dc, saved);
     }
+    // the filter, its dashed line and its mark: the layer's (renderLayer), over the spectrum
+    blendLayer(dc, RECT{static_cast<LONG>(qs.l) - px(9), static_cast<LONG>(qs.t) - px(9), static_cast<LONG>(qs.r) + px(9),
+                        static_cast<LONG>(qs.b) + px(9)});
 
     {
         using namespace Gdiplus;
         Graphics g(dc);
         g.SetSmoothingMode(SmoothingModeAntiAlias);
         const float lw = static_cast<float>(std::max(1.0, dpi_ / 96.0));
-        // the side chain's filter and its mark
-        std::vector<PointF> filter;
-        for (int i = 0; i <= 80; ++i) {
-            const double hz = kSpecLoHz * std::pow(kSpecHiHz / kSpecLoHz, i / 80.0);
-            filter.push_back(pt(qs.X(hz), filterY(sideChainDb(hz, corner))));
-        }
-        Pen filterPen(col(kOrange), 2.0f * lw);
-        g.DrawLines(&filterPen, filter.data(), static_cast<INT>(filter.size()));
-        drawMark(g, mSideHpf, xCorner, filterY(corner > 0.0 ? -3.0 : 0.0));
         // where the level is now, on the curve (which lies over the level: blended in above): the last half second
         // as a trail, the white dot, and the reduction of this moment
         if (have && nowIn >= kLo) {
@@ -429,6 +440,9 @@ void CompressorGraphs::paintLive(HDC dc) {
 // the knee's band - are taken anywhere along them, not only by their marks: the nearest one within a few pixels (in
 // that order where they lie together; a knee of 0 is taken by its mark).
 int CompressorGraphs::lineAt(POINT p) const {
+    // the upright lines of the attack, the release and the side chain's high-pass, anywhere along them
+    for (const int m : {uprightAt(p, plot_[1], mAttack), uprightAt(p, plot_[2], mRelease), uprightAt(p, plot_[3], mSideHpf)})
+        if (m >= 0) return m;
     const Plot& q = plot_[0];
     if (p.x < q.l - 2 || p.x > q.r + 2 || p.y < q.t - 2 || p.y > q.b + 2) return -1;
     const long reach = px(5);

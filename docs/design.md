@@ -938,6 +938,13 @@ audio and the timer like the loudness window, in the program and in the plug-in.
   as a one-pole step response (63 % at the time); the correction now as an EQ curve.
 Nothing in the audio path changed: the new record fields only read state the stages already keep (the deck stays
 bit-exact, `deck_test`).
+Every upright time or frequency line is taken anywhere along it, like its mark, with the left-right cursor (client,
+2026-11-14, on the Compressor tab: "the mouse does not change over the line"): `GraphStrip::uprightAt` in the
+Compressor's attack, release and side-chain graphs, the MB Compressor's attack and release, the De-esser's
+frequency, the Limiter's release and the Auto tone's time (the Leveller and Noise tabs had it). The side chain's
+dashed line was a GDI dash drawn at every refresh, coarser than the attack's and the release's: it is the same GDI+
+line now, in the strip's layer with the filter and its mark ("the side chain line is coarser than the others, make it
+the same").
 
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset

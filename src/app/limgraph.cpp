@@ -214,8 +214,9 @@ void LimiterGraphs::paintLive(HDC dc) {
     else text(dc, (q.l + q.r) / 2, q.b - th - px(4), source_ ? L"no audio on this deck" : L"no deck plays this", kDim, TA_CENTER);
 }
 
-// The ceiling's line in the peaks graph and in in -> out is taken anywhere along it.
+// The ceiling's line in the peaks graph and in in -> out is taken anywhere along it, and so is the release's.
 int LimiterGraphs::lineAt(POINT p) const {
+    if (uprightAt(p, plot_[1], mRelease) >= 0) return mRelease;
     const long reach = px(5);
     const Plot& q0 = plot_[0];
     if (p.x >= q0.l - 2 && p.x <= q0.r + 2 && p.y >= q0.t - 2 && p.y <= q0.b + 2 && std::labs(p.y - mark_[mCeiling].y) <= reach)

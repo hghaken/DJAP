@@ -315,8 +315,9 @@ void AutoToneGraphs::paintLive(HDC dc) {
     }
 }
 
-// The maximum's lines (above and under the middle) are taken anywhere along them.
+// The maximum's lines (above and under the middle) are taken anywhere along them, and so is the time's.
 int AutoToneGraphs::lineAt(POINT p) const {
+    if (uprightAt(p, plot_[2], mTime) >= 0) return mTime;
     const Plot& q = plot_[0];
     if (p.x < q.l - 2 || p.x > q.r + 2 || p.y < q.t - 2 || p.y > q.b + 2) return -1;
     const long reach = px(5), up = std::lround(q.Y(values_[pAutoMax])), down = std::lround(q.Y(-values_[pAutoMax]));
