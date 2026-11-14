@@ -102,12 +102,14 @@ protected:
         RECT rect;
         int param;
     };
-    // A small button that steps a parameter (the number of bands: - and +).
+    // A small button that steps a parameter (the number of bands: - and +). `choice`: one segment of a toggle (the
+    // noise reduction's 1 | 4 bands) - the one whose step gives the value now is drawn chosen, not greyed.
     struct Stepper {
         RECT rect;
         int param;
         int steps;
         const wchar_t* sign;
+        bool choice = false;
     };
     // A few values in a panel's header: name, value, reset icon - on the title's line where that fits, else in
     // columns under the title (as many as fit; two by two rather than three and one, three and two rather than four

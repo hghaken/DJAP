@@ -720,7 +720,8 @@ the music of the deck in them. Every value is a level line (drag it up or down) 
 right), taken anywhere along it or by its round mark; every line's name carries its value.
 
 - **Bands** - the noise reduction's bands over the music's spectrum (grey).
-  - The number of bands: **-** and **+** in the graph's top line - 4, or 1 for the whole sound.
+  - The number of bands: the **1 | 4** toggle in the graph's top line - 4, or 1 for the whole sound; click the
+    other one (the chosen one is orange).
   - The **splits** are the upright dashed lines, each with its frequency: drag a line left or right. As on the MB
     Compressor tab they keep their order and their distance, and a split that was changed gets a small arrow beside
     its value that sets it back.

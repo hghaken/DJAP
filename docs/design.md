@@ -882,7 +882,9 @@ the meter record: `MeterRecord::noiseIn` - each band's detector level at the rec
 bank's `det`, the value the stage compares with its threshold), -120 when the stage does not run - and
 `DeckMeters::noiseIn`, the power mean of the records since the last poll. Nothing in the audio path changed for it;
 the stage's rule moved into `noiseReductionDb` (deck.h) so that the graph draws the same curve (the same arithmetic
-in the same order: the deck stays bit-exact). The number of bands (1 or 4) with - and + in the header, and the legend
+in the same order: the deck stays bit-exact). The number of bands (1 or 4) in the header - with - and + at first, a toggle of two segments 1 | 4 since
+2026-11-14 (client: "make this a toggle 1 / 4 bands, no plus and minus"; `GraphStrip::Stepper::choice`: the segment
+whose step gives the value now is drawn orange) -, and the legend
 of threshold, depth and ratio on that line (in columns under it where it does not fit) - the small curve panel keeps
 its height for the curve. **Curve per band** - the gain (up, -48 .. +6 dB) against a band's level (to the right,
 -90 .. +6 LU): the threshold an upright line through the bend, the depth the floor's level line, the ratio a level line

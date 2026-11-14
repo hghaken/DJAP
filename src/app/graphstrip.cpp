@@ -562,13 +562,13 @@ void GraphStrip::drawControls(HDC dc) {
     SelectObject(dc, font_);
     for (const Stepper& s : steppers_) {
         const double now = values_[static_cast<size_t>(s.param)];
-        const bool can = stepped(s.param, s.steps) != now;
-        HBRUSH fill = CreateSolidBrush(blend(kInput, kPanel, 0.16)), frame = CreateSolidBrush(kGrid);
+        const bool can = stepped(s.param, s.steps) != now, chosen = s.choice && !can;
+        HBRUSH fill = CreateSolidBrush(chosen ? kOrange : blend(kInput, kPanel, 0.16)), frame = CreateSolidBrush(kGrid);
         FillRect(dc, &s.rect, fill);
         FrameRect(dc, &s.rect, frame);
         DeleteObject(fill);
         DeleteObject(frame);
-        SetTextColor(dc, can ? kText : kGrid);
+        SetTextColor(dc, chosen ? kPanel : can ? kText : kGrid);
         RECT r = s.rect;
         DrawTextW(dc, s.sign, 1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX);
     }
@@ -730,7 +730,9 @@ LRESULT GraphStrip::handle(UINT msg, WPARAM wp, LPARAM lp) {
             POINT p;
             GetCursorPos(&p);
             ScreenToClient(hwnd_, &p);
-            if (pressParam_ >= 0 || (drag_ < 0 && (iconAt(p) || stepperAt(p)))) {
+            const Stepper* st = stepperAt(p);
+            const bool stepper = st && stepped(st->param, st->steps) != values_[static_cast<size_t>(st->param)];
+            if (pressParam_ >= 0 || (drag_ < 0 && (iconAt(p) || stepper))) {
                 SetCursor(LoadCursorW(nullptr, IDC_HAND));
                 return TRUE;
             }

@@ -105,7 +105,8 @@ void NoiseGraphs::measure(HDC dc) {
 }
 
 // The bands across the top, the curve, the attack and the hold and release under them (layoutFour). In the bands
-// panel's header: the number of bands behind the title, its - and + and its reset icon, then the legend of the
+// panel's header: the number of bands behind the title as a toggle of two segments, 1 | 4 (client, 2026-11-14: "make
+// this a toggle 1 / 4 bands, no plus and minus" - the chosen one orange), and its reset icon, then the legend of the
 // threshold, the depth and the ratio (on that line where it fits, else in columns under it) - the small curve panel
 // keeps its height for the curve. The hold and the release have a legend in their panel's header; the attack an
 // icon in its corner.
@@ -113,11 +114,11 @@ void NoiseGraphs::layout(int w, int h) {
     layoutFour(w, h, panel_);
     const RECT& p = panel_[0];
     const int rowH = px(18), top = static_cast<int>(p.top) + px(3) - (rowH - textH_) / 2;
-    const int valueX = static_cast<int>(p.left) + px(6) + bandsTitleW_ + px(8);
-    const int minusX = valueX + digitW_ + px(8), plusX = minusX + px(18) + px(4), iconX = plusX + px(18) + px(4);
-    bandsItem_ = {p.left, top, minusX, top + rowH};
-    steppers_.push_back({RECT{minusX, top + px(1), minusX + px(18), top + rowH - px(1)}, pNoiseBands, -1, L"\x2212"});
-    steppers_.push_back({RECT{plusX, top + px(1), plusX + px(18), top + rowH - px(1)}, pNoiseBands, 1, L"+"});
+    const int oneX = static_cast<int>(p.left) + px(6) + bandsTitleW_ + px(8), segW = std::max(px(20), digitW_ + px(10));
+    const int fourX = oneX + segW - 1, iconX = fourX + segW + px(4); // the two segments share their middle edge
+    bandsItem_ = {p.left, top, oneX, top + rowH};
+    steppers_.push_back({RECT{oneX, top + px(1), oneX + segW, top + rowH - px(1)}, pNoiseBands, -1, L"1", true});
+    steppers_.push_back({RECT{fourX, top + px(1), fourX + segW, top + rowH - px(1)}, pNoiseBands, 1, L"4", true});
     icons_.push_back({RECT{iconX, top, iconX + px(22), top + rowH}, pNoiseBands});
     bandsHeaderBottom_ = std::max(static_cast<int>(p.top) + textH_ + px(5), top + rowH);
     icons_.push_back({cornerIcon(panel_[2]), pNoiseAttack});
@@ -133,7 +134,8 @@ void NoiseGraphs::fillTips(std::vector<Tip>& out) {
         L"between the bands: drag one left or right. The dashed level line is the threshold, in LU to the target (the "
         L"dotted line): a band whose level falls under it is turned down - drag it up or down. The thick line in each "
         L"band is its level now; under the threshold, orange shows how far the band is turned down at this moment. "
-        L"The number of bands - 4, or 1 for the whole sound - is set with - and + in the top line.\n\nThe mouse "
+        L"The number of bands - 4, or 1 for the whole sound - is the 1 | 4 toggle in the top line: click the other "
+        L"one (the chosen one is orange).\n\nThe mouse "
         L"wheel steps the split the pointer is on, else the threshold. A small arrow beside a split that was changed "
         L"sets it back.";
     static const wchar_t* const kCurve =
@@ -219,9 +221,7 @@ void NoiseGraphs::renderStill(HDC dc, int w, int h) {
         plot_[0].y0 = kLevelLo;
         plot_[0].y1 = kLevelHi;
         {
-            const RECT& p = panel_[0];
-            const int y = static_cast<int>(bandsItem_.top + (bandsItem_.bottom - bandsItem_.top - th) / 2.0 + 0.5);
-            all.push_back({static_cast<int>(p.left) + px(6) + bandsTitleW_ + px(8), y, std::to_wstring(bands()), kOrange, TA_LEFT});
+            const RECT& p = panel_[0]; // the number of bands is the toggle's chosen segment (drawControls)
             const int leftOfHint = legend_.inLine ? static_cast<int>(legend_.bounds.right) : static_cast<int>(icons_[0].rect.right);
             if (p.right - px(6) - (on ? hintW_ : offW_) > leftOfHint + px(12))
                 all.push_back({static_cast<int>(p.right) - px(6), static_cast<int>(p.top) + px(3), on ? kHint : kOff, kDim, TA_RIGHT});
