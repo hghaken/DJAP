@@ -159,6 +159,7 @@ private:
     Updater updater_;
     ULONGLONG nextCheck_ = 0;   // GetTickCount64() of the next daily update check
     std::string notified_;      // the version the notification-area message was shown for
+    std::wstring title_;        // the title bar's text: the version, and a newer one when GitHub has it
 };
 
 } // namespace ap

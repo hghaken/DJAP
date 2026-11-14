@@ -474,4 +474,16 @@ UpdateView updateViewOf(const Updater& u, bool checkEnabled, bool audioRuns, boo
     return v;
 }
 
+std::wstring updateTitleNote(const Updater& u) {
+    const std::string version = u.release().version;
+    if (version.empty() || compareVersions(version, AP_VERSION_STRING) <= 0) return {};
+    const std::wstring next = fromUtf8(version);
+    switch (u.state()) {
+    case Updater::State::Downloading:
+        return L" - downloading update " + next + L": " + std::to_wstring(u.percent()) + L" %";
+    case Updater::State::Ready: return L" - installing update " + next + L"...";
+    default: return L" - update " + next + L" available (right-click: About DJAP)";
+    }
+}
+
 } // namespace ap

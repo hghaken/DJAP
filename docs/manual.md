@@ -1294,9 +1294,10 @@ web page request contains. GitHub answers its quick way of asking only 60 times 
 behind your router counts); when that is used up DJAP reads the release page itself instead, which GitHub does not
 limit.
 
-When a newer version exists, DJAP tells you once with a message at its notification-area icon, in the status bar and
-in the About window. **Nothing is downloaded or installed until you click Install update** in the About window
-(clicking the message opens it).
+When a newer version exists, DJAP tells you once with a message at its notification-area icon, and shows it in the
+main window's title bar ("DJAP (DJ Audio Processor) 0.1.381 - update 0.1.382 available"), in the status bar and in the
+About window. **Nothing is downloaded or installed until you click Install update** in the About window
+(clicking the message opens it); while the update downloads, the title bar shows how far it is.
 
 Install update:
 

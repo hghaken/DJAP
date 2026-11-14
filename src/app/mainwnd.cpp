@@ -200,10 +200,10 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     wc.hIconSm = static_cast<HICON>(LoadImageW(instance, MAKEINTRESOURCEW(IDI_APP), IMAGE_ICON,
                                                GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0));
     RegisterClassExW(&wc);
-    const std::wstring title = L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING);
+    title_ = L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING); // updateStatus adds a newer version
     // every window remembers its place in the settings, saved at each change (placement.h)
     placement::setStore(&settings_.windows, [this] { save(); });
-    hwnd_ = CreateWindowExW(0, kClass, title.c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+    hwnd_ = CreateWindowExW(0, kClass, title_.c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
                             CW_USEDEFAULT, nullptr, nullptr, instance, this);
     if (!hwnd_) return false;
     // a second start may come from a program at a lower integrity level than this one (this one run as administrator):
@@ -950,6 +950,12 @@ void MainWindow::updateStatus() {
     SendMessageW(status_, SB_SETTEXTW, 0, reinterpret_cast<LPARAM>(line.c_str()));
     SendMessageW(status_, SB_SETTIPTEXTW, 0, reinterpret_cast<LPARAM>(line.c_str())); // shown only when cut off
     updateTrayTip();
+    // the title bar: the version, and a newer one when GitHub has it (client, 2026-11-14)
+    const std::wstring title = L"DJAP (DJ Audio Processor) " + fromUtf8(AP_VERSION_STRING) + updateTitleNote(updater_);
+    if (title != title_) {
+        title_ = title;
+        SetWindowTextW(hwnd_, title_.c_str());
+    }
 }
 
 // The tray icon's tooltip: whether the audio runs and what each deck uses.

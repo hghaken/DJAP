@@ -73,4 +73,9 @@ private:
 // `installHere`: the program installs the update itself - the plug-in (inside DJ software) opens the release's page.
 UpdateView updateViewOf(const Updater& u, bool checkEnabled, bool audioRuns, bool installHere);
 
+// What the main window's title adds of `u` (client, 2026-11-14: "show in the title bar whether there is an update"):
+// " - update 0.1.381 available (right-click: About DJAP)" while a newer version than this one is known - also during
+// the next day's check and after a check or download that failed -, the download's progress, or nothing.
+std::wstring updateTitleNote(const Updater& u);
+
 } // namespace ap

@@ -1062,7 +1062,10 @@ Updates (client, 2026-10-25: "check daily, report, install after one click - not
 switch in Setup"; 2026-10-26: "after the online update, start the audio again automatically"; `src/core/release.*`, `src/app/updater.*`): with `[Updates] CheckUpdates=1` (default; Setup ->
 Updates) the program asks GitHub's API for the latest release of the public repository 15 s after the start and then
 once a day (also Check now in the About window). A newer version (`compareVersions`, numeric parts) is reported once per version
-by a balloon at the notification-area icon (a click opens About), in the status bar and in the About window; nothing
+by a balloon at the notification-area icon (a click opens About), and shown in the main window's title bar (client,
+2026-11-14: "show in the title bar whether there is an update"; `updateTitleNote`: " - update 0.1.382 available
+(right-click: About DJAP)" while the last answer named a newer version - also during the next check and after a failed
+one -, the download's percentage, or nothing), in the status bar and in the About window; nothing
 is downloaded before the user clicks Install update there (client, 2026-10-27: the update buttons moved from Setup to
 About; Setup keeps the daily switch). While the audio runs it asks first (the audio stops during the update); the audio then stops
 with the program's usual fade-out, `StartAudio` stays 1, and the restarted program starts it again (`startSavedAudio`,
