@@ -468,9 +468,9 @@ void EditWindow::show(HWND owner, const std::string& preset, int deck, const std
     SetForegroundWindow(hwnd_);
 }
 
-// The Compressor tab's graphs follow the audio (the owner's timer, 20 times a second).
+// The tabs' graphs follow the audio (the owner's timer, 20 times a second).
 void EditWindow::tick() {
-    if (!hwnd_ || colour() || !IsWindowVisible(hwnd_)) return;
+    if (!hwnd_ || !IsWindowVisible(hwnd_)) return;
     if (GraphStrip* strip = stripOn(tab_)) strip->refresh();
 }
 
@@ -606,8 +606,9 @@ void EditWindow::createControls() {
     metal_.makeTabs(tabs_);
     theme::makeCombo(preset_);
     tips_.create(hwnd_);
-    if (!colour()) { // the tabs with graphs: a dragged mark is a changed value
+    { // the tabs with graphs: a dragged mark is a changed value
         for (GraphStrip* strip : strips()) {
+            if (!stripOfKind(*strip)) continue;
             strip->create(hwnd_, inst, dpi_);
             strip->setLive(live_, deck_);
             strip->onEdit([this](int param, double value, bool save) {
@@ -622,12 +623,14 @@ void EditWindow::createControls() {
         }
     }
     tips_.add(tabs_, colour() ? L"One tab per part: every value of the part as a slider, with its value (type one "
-                                L"in and press Enter), its unit, a reset button and what it does. An orange tab holds "
+                                L"in and press Enter), its unit, a reset button and what it does. The Tone and Auto "
+                                L"tone tabs have graphs instead: their values are set in them. An orange tab holds "
                                 L"values that differ from their reset values."
                               : L"One tab per stage: every value of the stage as a slider, with its value (type one "
                                 L"in and press Enter), its unit, a reset button and what it does. The Leveller, "
-                                L"Noise, Compressor and MB Compressor tabs have graphs instead: their values are set "
-                                L"in them. An orange tab holds values that differ from their reset values.");
+                                L"Noise, Compressor, MB Compressor, De-esser, Stereo width and Limiter tabs have "
+                                L"graphs instead: their values are set in them. An orange tab holds values that "
+                                L"differ from their reset values.");
     if (colour()) {
         tips_.add(preset_, L"The EQ preset shown in this window (opened on the deck's own): tone, auto tone, sub "
                            L"bass, loudness. Every change is saved at once and heard on every deck that uses it.");
@@ -987,8 +990,16 @@ GraphStrip* EditWindow::stripOn(const std::string& stage) {
 // Compressor tab had no slider left; then the MB Compressor: "no sliders, everything in the graph"; then "make the
 // same for the leveller").
 bool EditWindow::inGraphs(int param) const {
-    return (levGraphs_.hwnd() && levGraphs_.owns(param)) || (noiseGraphs_.hwnd() && noiseGraphs_.owns(param)) ||
-           (compGraphs_.hwnd() && compGraphs_.owns(param)) || (mbGraphs_.hwnd() && mbGraphs_.owns(param));
+    for (const GraphStrip* strip : strips())
+        if (strip->hwnd() && strip->owns(param)) return true;
+    return false;
+}
+
+// A strip belongs to the loudness window or to the EQ window: where the parameters of its tab are.
+bool EditWindow::stripOfKind(const GraphStrip& s) const {
+    for (int i = 0; i < kParamCount; ++i)
+        if (s.stage() == std::string(paramInfo(i).stage)) return (i >= kFirstColourParam) == colour();
+    return false;
 }
 
 // The graph strips: the values they draw, what their reset icons go back to, and the tooltips that name a value -

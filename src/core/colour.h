@@ -48,6 +48,9 @@ public:
     void process(const ColourConfig& c, double& l, double& r);
     bool finite() const;
     double correctionDb(int s) const { return s >= 0 && s < 4 ? corr_[s] : 0.0; } // auto tone, sections 0..3
+    // The auto tone's correction at 100 % without its maximum - the reference minus the song's balance - for the
+    // EQ window's Auto tone tab (0 while it does not measure).
+    double wantDb(int s) const { return s >= 0 && s < 4 ? want_[s] : 0.0; }
     double sectionDb(int s) const { return gainS_[s]; }                            // fixed tone + auto tone now
 
 private:
@@ -69,6 +72,7 @@ private:
     double acc_[kToneBands] = {}, power_[kToneBands] = {};
     int accN_ = 0;
     double corr_[4] = {}; // dB on sections 0..3
+    double want_[4] = {}; // the same at 100 % and without the maximum (wantDb)
     // sub bass (its gain and filters reached the same way)
     double subGainS_ = 0.0, subHzS_ = 80.0, env_ = 0.0, flip_ = 1.0, envAtt_ = 0.0, envRel_ = 0.0;
     double subGainNow_ = 0.0, subGainStep_ = 0.0;

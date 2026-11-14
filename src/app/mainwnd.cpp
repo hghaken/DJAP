@@ -134,7 +134,8 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
                           soundWindow_.refresh();
                       }),
       spectrumWindow_(spectrumSource_) {
-    editor_.setLive(&graphs_); // the Compressor tab's graphs draw the deck's audio
+    editor_.setLive(&graphs_); // the tabs' graphs draw the deck's audio
+    colourEditor_.setLive(&graphs_);
     // a click on a step in the analysis window: that deck's preset (or colour) window on the step's tab
     for (int d = 0; d < 2; ++d) analysisWindow_.setScope(d, settings_.scope[d].input, settings_.scope[d].ms);
     analysisWindow_.onScopeChanged([this](int d, bool input, int ms) {
@@ -467,7 +468,8 @@ LRESULT MainWindow::handle(UINT msg, WPARAM wp, LPARAM lp) {
             updateMeters();
             analysisWindow_.refresh();
             spectrumWindow_.refresh();
-            editor_.tick(); // the Compressor tab's graphs
+            editor_.tick(); // the tabs' graphs
+            colourEditor_.tick();
             sampleHealth();
             if (ticks_++ % 10 == 0) {
                 measureCpu();

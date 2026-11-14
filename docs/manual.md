@@ -614,8 +614,8 @@ values are all at their reset values is grey. The EQ window's tabs work the same
   as the decimal sign), the unit, a small **reset** button (back to the reset value; only enabled when the value
   differs, and its tooltip names the reset value) and a short explanation. A value in **bold** differs from its reset
   value: the shipped value of a shipped loudness preset, the value an own one was saved with. The row's tooltip has
-  the full explanation and the range. (The Leveller, Noise, Compressor and MB Compressor tabs have no rows but their
-  switch: their values are set in graphs, see below.)
+  the full explanation and the range. (The Leveller, Noise, Compressor, MB Compressor, De-esser, Stereo width and
+  Limiter tabs have no rows but their switch: their values are set in graphs, see below.)
 - Under the rows, what the stage does to the sound and what more or less of its values sounds like.
 
 The window can be made as large as you like; it cannot be made smaller than the size that shows every row of the
@@ -880,6 +880,26 @@ differs from its reset value. A split or a band gain that was changed gets that 
 | Threshold | LU | -30 .. 0 | -10 | Relative to the target: sibilance louder than this is reduced (4:1). Lower acts more often. |
 | Maximum reduction | dB | 0 .. 12 | 6 | The largest reduction. Too much makes voices lisp and sound dull. |
 
+![The De-esser tab: the stage's switch and, under it, the three graphs](images/deesser.jpg)
+
+The De-esser tab has no sliders: only the stage's switch, and under it three graphs with the music of the deck in
+them.
+
+- **High band and reduction** - the last 4 seconds: the level of the highs above the de-esser's frequency as its
+  detector hears them (grey, in LU to the target) and, from the top, how much the highs are turned down (orange; the
+  number is the largest reduction). Sharp 's' and 'sh' sounds are the peaks of the grey. The **Threshold** is the
+  dashed line across it: highs above it are turned down. Drag the line or its mark up or down.
+- **Reduction** - how much the highs are turned down against how far they are over the threshold: 1 dB for every
+  1.33 dB over it (4:1), never more than the **Maximum** - the dashed line; drag it or its mark up or down. The white
+  dot is this moment, the faint ones the last half second.
+- **Frequency** - the music's spectrum from 1 kHz, the part of it the de-esser listens to (coloured: above its
+  frequency) and the high shelf it turns the highs down with - dashed at the maximum, solid now. Drag the mark left
+  or right.
+
+The legend in the first graph's top line names the three values; the mouse wheel over one of them steps it (1 LU,
+0.5 dB, 100 Hz), and so does the wheel over the Reduction or the Frequency graph. The arrow behind a value sets it
+back.
+
 **Stereo width**
 
 | Value | Unit | Range | Default | What it does |
@@ -888,6 +908,26 @@ differs from its reset value. A split or a band gain that was changed gets that 
 | Width | % | 0 .. 200 | 100 | 100 % = as recorded, 0 % = mono, above 100 % wider (can sound hollow and loses power in mono). |
 | Bass width | % | 0 .. 100 | 100 | Width of the bass below the split; 0 % = bass in mono. |
 | Bass split | Hz | 40 .. 400 | 150 | Where the bass width starts. |
+
+![The Stereo width tab: the stage's switch and, under it, the four graphs](images/width.jpg)
+
+The Stereo width tab has no sliders: only the stage's switch, and under it four graphs.
+
+- **Width over frequency** - the stage's width from the deepest bass to the highest highs, in % of the recording's
+  own width (the dotted line: as recorded): the **Bass width** under the split, the **Width** over it and the
+  crossover between them - the thick line. The three values are dashed lines: drag the Width's line (at the right)
+  or the Bass width's line (at the left) up or down, the **Split**'s upright line left or right, or their marks. The
+  mouse wheel over the left or the right part steps the bass width or the width (5 %). Behind it, faint, the deck's
+  spectrum shows where its bass is.
+- **Stereo picture** - a goniometer: every dot is a moment of the sound, upright when both channels are the same
+  (mono), lying when they are opposite. Grey is the input, coloured the output: a wider setting spreads the coloured
+  cloud sideways.
+- **Side / mid, last 60 s** - how much of the sound differs between the channels, the input grey and the output
+  coloured. 0 % is mono; most music is between 20 and 60 %.
+- **Correlation, last 60 s** - +1 is mono, 0 unrelated channels; under 0 the channels work against each other, and
+  such sound gets weaker played in mono (a phone, one speaker). Too much width pulls it down.
+
+The legend names the three values with their reset arrows.
 
 **Soft clipper**
 
@@ -903,6 +943,21 @@ differs from its reset value. A split or a band gain that was changed gets that 
 | On | | | on | |
 | Ceiling | dBTP | -6 .. 0 | -1.0 | The highest true-peak level of the output. Lower leaves more room for converters and lossy encoders. |
 | Release | ms | 10 .. 500 | 80 | Short recovers fast (louder, can distort the bass); long is cleaner but can duck the sound after a peak. |
+
+![The Limiter tab: the stage's switch and, under it, the three graphs](images/limiter.jpg)
+
+The Limiter tab has no sliders: only the stage's switch, and under it three graphs.
+
+- **Peaks in and out** - the last 4 seconds: the true peaks coming out (the line) and, orange, what the limiter cut
+  off - the peaks going in are what came out plus what it took (the number is the most it turned down). The
+  **Ceiling** is the dashed line: drag it or its mark up or down, or turn the mouse wheel over its name in the legend
+  (0.1 dB).
+- **Release** - the gain after a peak the limiter turned down 6 dB: drag the mark, or turn the mouse wheel over the
+  graph (5 ms). The arrow in its corner sets it back.
+- **Peaks in -> out** - under the ceiling the limiter does nothing; a peak above it comes out at the ceiling. The
+  mark where the line bends is the ceiling too. The white dot is the newest peak.
+
+How early the limiter sees a peak coming - its look-ahead - is set in the Setup window (chapter 5).
 
 Switching the limiter off removes the true-peak guarantee; the output is still clamped at full scale. With the
 soft clipper on, it then holds the ceiling as a sample peak itself and clips about 1.5 dB under it (that keeps the
@@ -945,11 +1000,11 @@ volume.
 
 ### 7.2 The EQ window
 
-![The EQ window](images/colour.jpg)
+![The EQ window on the Tone tab](images/colour.jpg)
 
 In the Sound window (4.6), click **Edit...** next to the EQ. It works like the loudness window (6.2): Save as, Rename,
 Delete (own EQs; deleting moves its decks and sounds to Neutral), Reset EQ, and a tab per part. The EQ window has no on / off
-switches: a part with all its amounts at 0 is off.
+switches: a part with all its amounts at 0 is off. The Tone and Auto tone tabs have graphs instead of sliders (7.3).
 
 ### 7.3 All EQ values
 
@@ -971,6 +1026,30 @@ switches: a part with all its amounts at 0 is off.
 | Contour | Amount | % | 0 .. 100 | 0 | Equal-loudness contour for quiet listening: up to +9 dB deep bass and +4 dB highs. Leave it off at normal volume. |
 
 The auto tone holds still during breakdowns and fades, so a quiet part does not change the sound.
+
+**The Tone tab** has no sliders: one graph, the EQ curve over the deck's spectrum (grey: going in; the line: coming
+out). Each of the four sections - the bass shelf, the low-mid bell, the presence bell and the treble shelf - is a thin
+line in its own colour with a point; together they make the thick yellow line (with the contour, grey, when it is on;
+the sub bass's range is shaded under the 0 dB line). Drag a point: left or right moves its frequency, up or down its
+gain. The legend names each point's gain and frequency; the mouse wheel over a point or over its legend item steps its
+gain (0.5 dB), and the arrow behind it sets the point back - gain and frequency. Dashed: the curve with the auto
+tone's corrections of this moment. The spectrum window drags the same points.
+
+![The Auto tone tab: four graphs](images/autotone.jpg)
+
+**The Auto tone tab** has no sliders: four graphs, the sections in the Tone tab's colours.
+
+- **Corrections, last 60 s** - a line per section: how much the auto tone lifts (up) or lowers (down) it. The
+  **Maximum** is the two dashed lines (the treble's, half as far, dotted green): drag either line or the mark.
+- **Amount** - the correction against how far the song is from the reference in a section (to the right: the song
+  has less there): a slope, steeper with more **Amount**, cut off at the maximum (dotted: on without it). Drag the
+  mark up or down; the dots are the four sections now.
+- **Time** - how fast the correction follows when the song's balance changes: after the **Time** it has come 63 % of
+  the way. Drag the mark left or right.
+- **Correction now** - the auto tone's correction of this moment as an EQ curve, what it adds to the Tone tab's.
+
+The legend names the three values; the mouse wheel over one steps it (5 %, 0.5 dB, 1 s), and so does the wheel over
+the Amount or the Time graph; the arrows set them back.
 
 ## 8. The analysis, spectrum and Health windows
 

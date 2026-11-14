@@ -79,10 +79,11 @@ window its two parts are chosen and edited, and own sounds are saved, renamed an
   MB Compressor bands with their gains, the deck's loudness preset and EQ, the four bass sliders - bass level,
   enhancer, width and frequency - and how long the spectrum is averaged), an analysis window (compressor curve, loudness and gain over the last minute,
   goniometer, correlation and stereo width), a loudness window with the stage switches and every parameter (the
-  Leveller, Noise, Compressor and MB Compressor tabs are all graphs - the leveller's gain over the level of the live
-  audio, the noise reduction's bands with their levels against its threshold, the compressor's curve, the bands over
-  the spectrum, attack, release - in which their values are set by dragging), a
-  EQ window, tooltips on every control (they can be switched off), windows that open where they were left, and
+  Leveller, Noise, Compressor, MB Compressor, De-esser, Stereo width and Limiter tabs are all graphs - the leveller's
+  gain over the level of the live audio, the noise reduction's bands with their levels against its threshold, the
+  compressor's curve, the bands over the spectrum, the highs the de-esser hears, the width over the frequency, the
+  peaks the limiter cuts, attack, release - in which their values are set by dragging), an EQ window (the tone as a
+  curve with four points to drag, the auto tone's corrections over the last minute), tooltips on every control (they can be switched off), windows that open where they were left, and
   the Setup window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
   decks the same loudness preset, start / stop, a lamp per device that shows whether it is there, a fallback output

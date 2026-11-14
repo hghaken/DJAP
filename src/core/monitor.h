@@ -32,6 +32,8 @@ struct DeckMeters {
     double densityDb[kMaxBands] = {};
     int bands = 0;
     double autoToneDb[4] = {};            // the auto tone's corrections now (bass, low-mid, presence, treble)
+    double autoToneWant[4] = {};          // the same at 100 % without the maximum (MeterRecord::autoToneWant)
+    double deEsserIn = kFloorDb;          // de-esser detector level (the scale of its threshold)
     uint8_t flags = 0;                    // MeterFlag bits of the newest record
     double seconds = 0;                   // measured since the last reset
     double compressorIn = kFloorDb;       // compressor detector level (same scale as its threshold)
@@ -80,6 +82,9 @@ struct DeckAnalysis {
         float inM = static_cast<float>(kFloorDb), outM = static_cast<float>(kFloorDb); // LUFS
         float leveller = 0, compressor = 0, density = 0;                                 // dB (compressor <= 0)
         float noise = 0; // the noise reduction's most reduced band, dB (<= 0; client, 2026-10-29)
+        float autoTone[4] = {}; // the auto tone's corrections, dB (bass, low-mid, presence, treble)
+        float widthIn = 0, widthOut = 0;   // side / mid in % (StereoAnalyzer::widthPercent)
+        float corrIn = 0, corrOut = 0;     // stereo correlation, -1 .. +1
         bool live = false;
     };
     SpectrumAnalyzer specIn, specOut;
@@ -89,12 +94,16 @@ struct DeckAnalysis {
     WaveScope scopeIn, scopeOut;
     // the history oldest first
     const Point& at(int i) const { return history[static_cast<size_t>((historyPos + i) % kHistory)]; }
-    // The compressor of the last 5 s, a point per meter record (10 ms): its detector's level (the scale of its
-    // threshold) and its reduction - what the loudness window's Compressor tab draws behind its graphs (client,
-    // 2026-11-13: "maybe show the live audio in the background"). The 0.1 s history above is too coarse for that.
+    // The compressor, the de-esser and the limiter of the last 5 s, a point per meter record (10 ms): the compressor's
+    // detector level (the scale of its threshold) and its reduction - what the loudness window's Compressor tab draws
+    // behind its graphs (client, 2026-11-13: "maybe show the live audio in the background"; the 0.1 s history above is
+    // too coarse for that) -, the de-esser's the same way, and the output's true peak with the limiter's reduction
+    // (the De-esser and Limiter tabs, 2026-11-14).
     static constexpr int kComp = 512;
     struct CompPoint {
         float in = static_cast<float>(kFloorDb), reduction = 0.0f; // LUFS scale; dB >= 0
+        float dessIn = static_cast<float>(kFloorDb), dessReduction = 0.0f; // the de-esser's, the same scales
+        float peak = static_cast<float>(kFloorDb), limiter = 0.0f; // output true peak (dBTP); limiter reduction (dB >= 0)
     };
     std::vector<CompPoint> comp = std::vector<CompPoint>(kComp); // ring
     int compPos = 0;

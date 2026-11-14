@@ -165,6 +165,11 @@ bool GraphStrip::lit(int param) const {
     return std::fabs(values_[p] - resetValues_[p]) > 1e-9;
 }
 
+bool GraphStrip::litIcon(int param) const {
+    const int other = partner(param);
+    return lit(param) || (other >= 0 && lit(other));
+}
+
 bool GraphStrip::live() const { return source_ && source_->audioActive() && source_->meters(deck_).live; }
 
 const DeckAnalysis* GraphStrip::analysis() const { return source_ ? &source_->analysis(deck_) : nullptr; }
@@ -188,6 +193,24 @@ void GraphStrip::layoutFour(int w, int h, RECT panel[4]) const {
     const double usable = w - 2 * pad - (4 - first - 1) * gap;
     double x = pad;
     for (int i = first; i < 4; ++i) {
+        const double pw = usable * kBeside[i] / sum;
+        panel[i] = {static_cast<LONG>(x + 0.5), top, static_cast<LONG>(x + pw + 0.5), h - pad};
+        x += pw + gap;
+    }
+}
+
+void GraphStrip::layoutThree(int w, int h, RECT panel[3]) const {
+    static const double kBeside[3] = {2.0, 1.0, 1.0};
+    const int gap = px(5), pad = px(5);
+    const int innerH = h - 2 * pad, topH = static_cast<int>((innerH - gap) * 0.58);
+    const bool twoRows = innerH >= 2 * px(130) + gap && (w - 2 * pad) <= 3.6 * topH;
+    const int first = twoRows ? 1 : 0, top = twoRows ? pad + topH + gap : pad;
+    if (twoRows) panel[0] = {pad, pad, w - pad, pad + topH};
+    double sum = 0.0;
+    for (int i = first; i < 3; ++i) sum += kBeside[i];
+    const double usable = w - 2 * pad - (3 - first - 1) * gap;
+    double x = pad;
+    for (int i = first; i < 3; ++i) {
         const double pw = usable * kBeside[i] / sum;
         panel[i] = {static_cast<LONG>(x + 0.5), top, static_cast<LONG>(x + pw + 0.5), h - pad};
         x += pw + gap;
@@ -531,7 +554,7 @@ void GraphStrip::drawControls(HDC dc) {
     HGDIOBJ oldFont = SelectObject(dc, symbol_);
     for (const std::vector<Icon>* list : {&icons_, &moreIcons_}) {
         for (const Icon& icon : *list) {
-            SetTextColor(dc, lit(icon.param) ? kText : kGrid);
+            SetTextColor(dc, litIcon(icon.param) ? kText : kGrid);
             RECT r = icon.rect;
             DrawTextW(dc, L"\x21BA", 1, &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX);
         }
@@ -569,7 +592,7 @@ int GraphStrip::markAt(POINT p) const {
 const GraphStrip::Icon* GraphStrip::iconAt(POINT p) const {
     for (const std::vector<Icon>* list : {&icons_, &moreIcons_})
         for (const Icon& icon : *list)
-            if (PtInRect(&icon.rect, p) && lit(icon.param)) return &icon;
+            if (PtInRect(&icon.rect, p) && litIcon(icon.param)) return &icon;
     return nullptr;
 }
 
@@ -581,13 +604,18 @@ const GraphStrip::Stepper* GraphStrip::stepperAt(POINT p) const {
 
 // The mark being dragged follows the mouse along its own direction; its value goes on one of the slider's positions.
 void GraphStrip::drag(POINT p) {
-    const int param = markParam(drag_);
-    double v = 0.0;
-    if (param < 0 || !dragValue(drag_, p, v)) return;
-    const ParamInfo& in = paramInfo(param);
-    v = std::min(in.max, std::max(in.min, v));
-    const double snapped = paramValueAt(param, paramPositionOf(param, v));
-    if (snapped != values_[static_cast<size_t>(param)]) change(param, snapped, false);
+    auto follow = [&](int param, bool got, double v) {
+        if (param < 0 || !got) return;
+        const ParamInfo& in = paramInfo(param);
+        v = std::min(in.max, std::max(in.min, v));
+        const double snapped = paramValueAt(param, paramPositionOf(param, v));
+        if (snapped != values_[static_cast<size_t>(param)]) change(param, snapped, false);
+    };
+    double v = 0.0, v2 = 0.0;
+    const int param = markParam(drag_), param2 = markParam2(drag_);
+    const bool got = param >= 0 && dragValue(drag_, p, v), got2 = param2 >= 0 && dragValue2(drag_, p, v2);
+    follow(param, got, v);
+    follow(param2, got2, v2);
 }
 
 // A value set in the graph: the picture first, then the owner (heard at once; saved when `save`).
@@ -656,8 +684,11 @@ LRESULT GraphStrip::handle(UINT msg, WPARAM wp, LPARAM lp) {
             if (steps == 0) {
                 const Icon* icon = iconAt(p);
                 if (icon && icon->param == param) {
-                    if (resetTo_) resetTo_(param);
-                    else change(param, resetValues_[static_cast<size_t>(param)], true);
+                    for (int q : {param, partner(param)}) {
+                        if (q < 0) continue;
+                        if (resetTo_) resetTo_(q);
+                        else change(q, resetValues_[static_cast<size_t>(q)], true);
+                    }
                 }
             } else {
                 const Stepper* s = stepperAt(p);
@@ -666,17 +697,19 @@ LRESULT GraphStrip::handle(UINT msg, WPARAM wp, LPARAM lp) {
                     change(param, v, true);
             }
         } else if (drag_ >= 0) {
-            const int param = markParam(drag_);
+            const int param = markParam(drag_), param2 = markParam2(drag_);
             drag_ = -1;
             ReleaseCapture();
-            if (edit_ && param >= 0) edit_(param, values_[static_cast<size_t>(param)], true); // saved now
+            for (int q : {param, param2}) // saved now
+                if (edit_ && q >= 0) edit_(q, values_[static_cast<size_t>(q)], true);
         }
         return 0;
     case WM_CAPTURECHANGED:
         if (drag_ >= 0) { // taken away in the middle of a drag: what is heard is saved
-            const int param = markParam(drag_);
+            const int param = markParam(drag_), param2 = markParam2(drag_);
             drag_ = -1;
-            if (edit_ && param >= 0) edit_(param, values_[static_cast<size_t>(param)], true);
+            for (int q : {param, param2})
+                if (edit_ && q >= 0) edit_(q, values_[static_cast<size_t>(q)], true);
         }
         pressParam_ = -1;
         return 0;
@@ -704,7 +737,7 @@ LRESULT GraphStrip::handle(UINT msg, WPARAM wp, LPARAM lp) {
             int m = drag_ >= 0 ? drag_ : markAt(p);
             if (m < 0) m = lineAt(p);
             if (m >= 0) {
-                SetCursor(LoadCursorW(nullptr, markUpDown(m) ? IDC_SIZENS : IDC_SIZEWE));
+                SetCursor(LoadCursorW(nullptr, markParam2(m) >= 0 ? IDC_SIZEALL : markUpDown(m) ? IDC_SIZENS : IDC_SIZEWE));
                 return TRUE;
             }
         }

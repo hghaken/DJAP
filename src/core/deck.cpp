@@ -1427,7 +1427,11 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             rec_.bands = static_cast<uint8_t>(running_[sDensity] ? bank.bands : 0);
             for (int b = 0; b < kMaxBands; ++b)
                 rec_.densityDb[b] = running_[sDensity] && b < bank.bands ? static_cast<float>(bank.gainDb[b]) : 0.0f;
-            for (int s = 0; s < 4; ++s) rec_.autoToneDb[s] = static_cast<float>(colour_.correctionDb(s));
+            for (int s = 0; s < 4; ++s) {
+                rec_.autoToneDb[s] = static_cast<float>(colour_.correctionDb(s));
+                rec_.autoToneWant[s] = static_cast<float>(colour_.wantDb(s));
+            }
+            rec_.deEsserIn = static_cast<float>(running_[sDeEsser] ? fastPowerToLufs(dessDet_) : kFloorDb);
             rec_.clipperDb = static_cast<float>(linToDb(recClipRatio_));
             rec_.limiterDb = static_cast<float>(-linToDb(limiter_.takeMinGain()));
             rec_.flags = static_cast<uint8_t>((quiet_ ? mfQuiet : 0) | (c.freeze ? mfFrozen : 0) |

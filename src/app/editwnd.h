@@ -6,10 +6,15 @@
 // window, owned by the main window; the same window edits colour presets (tabs Tone, Auto tone, Sub bass, Contour).
 #pragma once
 
+#include "autograph.h"
 #include "compgraph.h"
+#include "dessgraph.h"
 #include "levgraph.h"
+#include "limgraph.h"
 #include "mbgraph.h"
 #include "noisegraph.h"
+#include "tonegraph.h"
+#include "widthgraph.h"
 #include "settings.h"
 #include "stages.h"
 #include "theme.h"
@@ -37,9 +42,9 @@ public:
     void show(HWND owner, const std::string& preset, int deck, const std::string& tab = {});
     // Values or presets changed elsewhere (the main window's bass sliders).
     void refresh();
-    // The graphs of the Leveller, Noise, Compressor and MB Compressor tabs (levgraph.h, noisegraph.h, compgraph.h,
-    // mbgraph.h) draw the
-    // audio of the deck the window was opened from behind their curves: where it comes from (the analysis window's source; null: no live audio), and the owner's timer.
+    // The tabs with graphs (levgraph.h, noisegraph.h, compgraph.h, mbgraph.h, dessgraph.h, widthgraph.h, limgraph.h;
+    // in the EQ window tonegraph.h, autograph.h) draw the audio of the deck the window was opened from behind their
+    // curves: where it comes from (the analysis window's source; null: no live audio), and the owner's timer.
     void setLive(const AnalysisSource* source) {
         live_ = source;
         for (GraphStrip* s : strips()) s->setLive(source, deck_);
@@ -130,7 +135,17 @@ private:
     CompressorGraphs compGraphs_;
     MbGraphs mbGraphs_;
     NoiseGraphs noiseGraphs_;
-    std::vector<GraphStrip*> strips() { return {&levGraphs_, &noiseGraphs_, &compGraphs_, &mbGraphs_}; }
+    DeEsserGraphs dessGraphs_;
+    WidthGraphs widthGraphs_;
+    LimiterGraphs limGraphs_;
+    ToneGraphs toneGraphs_;
+    AutoToneGraphs autoGraphs_;
+    std::vector<GraphStrip*> strips() const {
+        auto* self = const_cast<EditWindow*>(this);
+        return {&self->levGraphs_, &self->noiseGraphs_,  &self->compGraphs_, &self->mbGraphs_,  &self->dessGraphs_,
+                &self->widthGraphs_, &self->limGraphs_, &self->toneGraphs_, &self->autoGraphs_};
+    }
+    bool stripOfKind(const GraphStrip& s) const; // its tab is in this window (a loudness or an EQ tab)
     GraphStrip* stripOn(const std::string& stage); // the strip of that tab (created), or null
     bool inGraphs(int param) const;                // set in a strip alone: no row on its tab
     const AnalysisSource* live_ = nullptr;

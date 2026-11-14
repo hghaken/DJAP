@@ -895,6 +895,40 @@ for the hold, then a one-pole down by the depth; the axis logarithmic in (ms + 2
 the edge. Both upright lines are taken anywhere; the wheel steps the one nearer the pointer; a legend of the two in
 the header. Names carry their values throughout. 22 tooltip rectangles.
 
+Five more tabs followed (client, 2026-11-14: "make these graphical too", after a review that named the De-esser,
+Stereo width and Limiter tabs and the EQ window's Tone and Auto tone as the ones where a graph helps; General, Bass
+enhancer, Exciter, Soft clipper, Sub bass and Contour keep their sliders - one or two plain values). `GraphStrip` got
+`layoutThree` (as `layoutFour`, weights 2 : 1 : 1), marks dragged both ways (`markParam2` / `dragValue2`: an EQ point,
+frequency left / right and gain up / down) and a reset icon for two values (`partner`). The EQ window creates the
+strips of its own tabs (`EditWindow::stripOfKind`: where a strip's stage's parameters are) and gets the deck's live
+audio and the timer like the loudness window, in the program and in the plug-in.
+- **De-esser** (`dessgraph.*`, three panels): the high band of the last 4 s - the de-esser's detector level, new in
+  the record (`MeterRecord::deEsserIn`, `fastPowerToLufs(dessDet_)`, the scale of its threshold) and in
+  `DeckAnalysis::CompPoint` with its reduction - on a -42 .. +6 LU scale with the threshold as a level line and the
+  reduction from the top; the reduction curve (4:1 over the threshold, cut off at the maximum, the maximum a level
+  line); the frequency: the input spectrum from 1 kHz, what the detector hears (its 4th-order high-pass), the shelf at
+  the maximum (dashed) and now (solid), the frequency's mark on the dashed shelf.
+- **Stereo width** (`widthgraph.*`, four panels): the width over the frequency - (bass width + width r^4) / (1 + r^4)
+  with r = f / split, the deck's in-phase Linkwitz-Riley pair - with the three values as dashed lines (the width right
+  of the split, the bass width left of it, the split upright) over the faint input spectrum; the goniometer of input
+  and output; side / mid and the correlation of the last 60 s, input and output - new in the 0.1 s history
+  (`DeckAnalysis::Point::widthIn / widthOut / corrIn / corrOut`, from the stereo analysers at each point).
+- **Limiter** (`limgraph.*`, three panels): the output's true peak per 10 ms and the limiter's reduction
+  (`CompPoint::peak`, `limiter`) - the peaks going in drawn as out + reduction, so what was cut shows orange - with the
+  ceiling as a level line; the release (`drawRelease`, a 6 dB example); peaks in -> out with the ceiling's second mark
+  where the line bends. The look-ahead stays in the Setup window.
+- **Tone** (`tonegraph.*`, one panel): the EQ curve over the input (area) and output (line) spectrum - each section
+  with `colourSectionDb`, the total thick, the contour grey, the sub bass's range shaded as in the spectrum window, the
+  curve with the auto tone's corrections now dashed; four points in the spectrum window's colours dragged both ways; a
+  legend of four (name, gain and frequency) whose arrows set a point's gain and frequency back.
+- **Auto tone** (`autograph.*`, four panels): the corrections of the last 60 s per section (`Point::autoTone`) with the
+  maximum as level lines (the treble's half dotted); the amount - correction against the song's difference from the
+  reference, a slope cut off at the maximum, the mark on its dotted continuation 10 dB out - with the four sections now
+  as dots (`MeterRecord::autoToneWant`: the reference minus the song's balance, `ColourProcessor::wantDb`); the time
+  as a one-pole step response (63 % at the time); the correction now as an EQ curve.
+Nothing in the audio path changed: the new record fields only read state the stages already keep (the deck stays
+bit-exact, `deck_test`).
+
 Linked presets (client, 2026-10-25): a switch in the Audio window, "Deck A and deck B use the same preset". When
 on, deck B takes deck A's preset at once, the main window shows one set of preset controls (deck A's preset
 choice, Edit, Bypass; deck B's strip shows only its

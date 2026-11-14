@@ -30,6 +30,11 @@ smtg_add_vst3plugin(DJAPPlugin PACKAGE_NAME "DJAP" SOURCES_LIST
     ${CMAKE_SOURCE_DIR}/src/app/levgraph.cpp
     ${CMAKE_SOURCE_DIR}/src/app/noisegraph.cpp
     ${CMAKE_SOURCE_DIR}/src/app/mbgraph.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/dessgraph.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/widthgraph.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/limgraph.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/tonegraph.cpp
+    ${CMAKE_SOURCE_DIR}/src/app/autograph.cpp
     ${CMAKE_SOURCE_DIR}/src/app/placement.cpp
     ${CMAKE_SOURCE_DIR}/src/app/appstate.cpp
     # the About window with the update check (client, 2026-10-28: a plug-in installed on its own got no update notice)

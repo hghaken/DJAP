@@ -28,7 +28,9 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
             pin[0] = std::max(pin[0], r.peakIn[0]);
             pin[1] = std::max(pin[1], r.peakIn[1]);
             comp = std::max(comp, static_cast<double>(r.compressorDb));
-            a_.comp[static_cast<size_t>(a_.compPos)] = {r.compressorIn, r.compressorDb};
+            a_.comp[static_cast<size_t>(a_.compPos)] = {
+                r.compressorIn, r.compressorDb, r.deEsserIn, r.deEsserDb,
+                static_cast<float>(linToDb(std::max(r.tpOut[0], r.tpOut[1]))), r.limiterDb};
             a_.compPos = (a_.compPos + 1) % DeckAnalysis::kComp;
             ++a_.compCount;
             dess = std::max(dess, static_cast<double>(r.deEsserDb));
@@ -41,9 +43,13 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
             ++noiseInCount;
             m.levellerDb = r.levellerDb;
             m.compressorIn = r.compressorIn;
+            m.deEsserIn = r.deEsserIn;
             m.bands = r.bands;
             for (int b = 0; b < kMaxBands; ++b) m.densityDb[b] = r.densityDb[b];
-            for (int k = 0; k < 4; ++k) m.autoToneDb[k] = r.autoToneDb[k];
+            for (int k = 0; k < 4; ++k) {
+                m.autoToneDb[k] = r.autoToneDb[k];
+                m.autoToneWant[k] = r.autoToneWant[k];
+            }
             m.flags = r.flags;
             m.seconds += r.frames / std::max(1.0, fs);
             // the signal-chain bars: each point's level, a 0.4 s one-pole over the records
@@ -85,7 +91,7 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
         m.tpNow[0] = m.tpNow[1] = kFloorDb;
         m.inPeak[0] = m.inPeak[1] = kFloorDb;
         m.levellerDb = m.compressorDb = m.deEsserDb = m.clipperDb = m.limiterDb = 0;
-        m.compressorIn = kFloorDb;
+        m.compressorIn = m.deEsserIn = kFloorDb;
         for (double& x : m.densityDb) x = 0;
         for (double& x : m.noiseDb) x = 0;
         for (double& x : m.noiseIn) x = kFloorDb;
@@ -107,6 +113,13 @@ void DeckMonitor::poll(DeckProcessor& deck, double fs, double dt) {
         for (int b = 0; b < m.bands; ++b) dens += m.densityDb[b];
         p.density = static_cast<float>(m.bands > 0 ? dens / m.bands : 0.0);
         p.noise = static_cast<float>(-m.noiseMaxDb());
+        for (int k = 0; k < 4; ++k) p.autoTone[k] = static_cast<float>(m.autoToneDb[k]);
+        if (m.live) {
+            p.widthIn = static_cast<float>(a_.stereoIn.widthPercent());
+            p.widthOut = static_cast<float>(a_.stereoOut.widthPercent());
+            p.corrIn = static_cast<float>(a_.stereoIn.correlation());
+            p.corrOut = static_cast<float>(a_.stereoOut.correlation());
+        }
         a_.history[static_cast<size_t>(a_.historyPos)] = p;
         a_.historyPos = (a_.historyPos + 1) % DeckAnalysis::kHistory;
     }

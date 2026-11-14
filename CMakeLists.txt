@@ -116,6 +116,11 @@ add_executable(DJAP WIN32
     src/app/levgraph.cpp
     src/app/noisegraph.cpp
     src/app/mbgraph.cpp
+    src/app/dessgraph.cpp
+    src/app/widthgraph.cpp
+    src/app/limgraph.cpp
+    src/app/tonegraph.cpp
+    src/app/autograph.cpp
     src/app/audiodlg.cpp
     src/app/meterview.cpp
     src/app/bassctl.cpp

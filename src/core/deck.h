@@ -190,7 +190,10 @@ struct MeterRecord {
                                                            // scale of the noise threshold; -120: not running)
     float densityDb[kMaxBands] = {};   // density band gains (dynamic part)
     float autoToneDb[4] = {};          // the auto tone's corrections now: bass, low-mid, presence, treble
+    float autoToneWant[4] = {};        // what they would be at 100 % and no maximum: the reference - the song's balance
     float deEsserDb = 0;               // largest de-esser reduction
+    float deEsserIn = -120;            // de-esser detector level at the record's end (the scale of its threshold;
+                                       // -120: not running)
     float clipperDb = 0;               // largest clipper reduction
     float limiterDb = 0;               // largest limiter reduction
     uint8_t bands = 1;

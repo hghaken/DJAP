@@ -93,6 +93,7 @@ void ColourProcessor::reset(const ColourConfig& c) {
     havePower_ = false;
     measuring_ = c.autoAmount > 0.0;
     for (double& x : corr_) x = 0.0;
+    for (double& x : want_) x = 0.0;
     subGainS_ = subGainNow_ = c.subGain;
     subHzS_ = c.subHz;
     envAtt_ = onePoleCoeff(0.002, fs_);
@@ -150,12 +151,14 @@ void ColourProcessor::control(const ColourConfig& c, bool hold, bool learn) {
                 const double rel = 10.0 * std::log10(std::max(power_[b], 1e-20) / power_[2]);
                 // treble at most half: the top of an old recording is often its hiss
                 const double max = s == 3 ? 0.5 * c.autoMax : c.autoMax;
-                corr_[s] = clampd((kToneReference[b] - rel) * c.autoAmount, -max, max);
+                want_[s] = kToneReference[b] - rel;
+                corr_[s] = clampd(want_[s] * c.autoAmount, -max, max);
             }
         }
     } else {
         measuring_ = false;
         for (double& x : corr_) x = 0.0; // the sections glide back to the fixed tone
+        for (double& x : want_) x = 0.0;
     }
     for (int b = 0; b < kToneBands; ++b) acc_[b] = 0.0;
     accN_ = 0;

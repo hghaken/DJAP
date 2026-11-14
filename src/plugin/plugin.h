@@ -103,14 +103,16 @@ public:
     void chooseSound(int index);
     // The Sound window for this plug-in (the Edit button beside its Sound list).
     void openSoundWindow(HWND owner);
-    // The loudness window's Compressor graphs: whose audio they draw (the plug-in's window, while it is open) and
-    // that window's timer.
+    // The loudness and EQ windows' graphs: whose audio they draw (the plug-in's window, while it is open) and that
+    // window's timer.
     void setEditorLive(const AnalysisSource* source) {
         editorLive_ = source;
         if (editor_) editor_->setLive(source);
+        if (colourEditor_) colourEditor_->setLive(source);
     }
     void tickEditors() {
         if (editor_) editor_->tick();
+        if (colourEditor_) colourEditor_->tick();
     }
     void viewClosed(PluginView* view);
     static ParamValue normalizedOf(int p, double plain);

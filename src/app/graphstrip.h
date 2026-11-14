@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// A strip of graphs on a tab of the loudness window in which the tab's values are set - by dragging marks and
+// A strip of graphs on a tab of the loudness or EQ window in which the tab's values are set - by dragging marks and
 // lines, with the mouse wheel, by small reset icons - with the deck's audio drawn in them. The base of the
-// Leveller tab's graphs (levgraph.h), the Compressor tab's (compgraph.h) and the MB Compressor tab's (mbgraph.h):
+// Leveller, Noise, Compressor, MB Compressor, De-esser, Stereo width and Limiter tabs' graphs (levgraph.h,
+// noisegraph.h, compgraph.h, mbgraph.h, dessgraph.h, widthgraph.h, limgraph.h) and the EQ window's Tone and Auto tone
+// (tonegraph.h, autograph.h):
 // the window, the fonts, the bitmaps
 // (what does not move with the audio is drawn once; a layer with transparency for still things that lie over
 // moving ones), the marks, the reset icons, the steppers, the mouse and the wheel. A strip draws its panels and
@@ -127,6 +129,11 @@ protected:
     virtual int markCount() const = 0;
     virtual int markParam(int mark) const = 0;
     virtual bool markUpDown(int mark) const = 0; // dragged up / down (else left / right): the cursor
+    // A mark dragged both ways - an EQ point: left / right its frequency (markParam), up / down its gain (this one).
+    virtual int markParam2(int mark) const { (void)mark; return -1; }
+    virtual bool dragValue2(int mark, POINT pt, double& value) const { (void)mark, (void)pt, (void)value; return false; }
+    // A reset icon that sets two values back (an EQ point's gain and frequency): the other one, or -1.
+    virtual int partner(int param) const { (void)param; return -1; }
     virtual void measure(HDC dc) { (void)dc; }    // text widths in the small font (selected)
     virtual void layout(int w, int h) = 0;        // panels, legends, icons_, steppers_
     virtual void fillTips(std::vector<Tip>& out) = 0;
@@ -148,6 +155,8 @@ protected:
     // equally wide under it; all four side by side, the first by far the widest, in a strip too low for two rows or
     // so wide that the top panel would be a ribbon.
     void layoutFour(int w, int h, RECT panel[4]) const;
+    // The same for three panels: the first across the top with the other two under it, or all three side by side.
+    void layoutThree(int w, int h, RECT panel[3]) const;
     RECT cornerIcon(const RECT& panel) const; // a reset icon in a panel's title line, at the right
     void measureLegend(HDC dc, Legend& lg) const;
     // The legend's items and icons (appended to icons_) in `panel`'s header: between `titleW` at the left and
@@ -176,6 +185,7 @@ protected:
                     const std::vector<RECT>& names) const;
     void blendLayer(HDC dc, const RECT& r); // the layer's part `r` over what is there
     bool lit(int param) const;              // its value differs from the reset value
+    bool litIcon(int param) const;          // that, or its partner's
     bool live() const;                      // the deck plays
     const DeckAnalysis* analysis() const;
     const DeckMeters* meters() const;
