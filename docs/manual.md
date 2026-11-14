@@ -356,7 +356,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 
 ## 4. The main window
 
-![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), deck B on Groningen (Very Loud with Bass+), no music yet](images/main.jpg)
+![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), deck B on Groningen (Very Loud with Bass+) without input yet](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
 no menu bar: **right-click anywhere in it** for *Setup...*, *Health...* (what runs, the counters and their graphs:
@@ -450,22 +450,27 @@ and its meters.
 ![The Sound window: Zwolle with its loudness preset and EQ](images/sound.jpg)
 
 A **sound** is a loudness preset and an EQ together under one name: what a deck plays. Twelve are shipped, named
-after the provincial capitals of the Netherlands, from the quietest loudness to the loudest:
+after the provincial capitals of the Netherlands, from the quietest loudness to the loudest. The output is the
+loudness preset's target (6.1); the EQ changes the tone, not the loudness (7.1):
 
-| Sound | Loudness preset | EQ | For |
-|---|---|---|---|
-| **Leeuwarden** | DAB+ | Neutral | broadcast the EBU R 128 way: wide dynamics |
-| **Den Haag** | Gentle | Warm | background music, dinner |
-| **Middelburg** | Gentle | Quiet | a low volume: the contour keeps it full |
-| **Haarlem** | Light | Vocal | speech and singing in front |
-| **Maastricht** | Light | Oldies | old recordings |
-| **Assen** | Web Stream | Less mid | streaming, MP3 / AAC |
-| **Zwolle** | Medium | Auto | all-round: each song's tone evened out |
-| **Lelystad** | Medium | Neutral | the plain middle (the start) |
-| **Arnhem** | FM Station | Bright | the sound of FM radio |
-| **Utrecht** | Loud | Bass+ | parties |
-| **'s-Hertogenbosch** | Loud | Warm | parties, warmer |
-| **Groningen** | Very Loud | Bass+ | clubs |
+| Sound | Loudness preset | EQ | Output | What you hear, and when |
+|---|---|---|---|---|
+| **Leeuwarden** | DAB+ | Neutral | -23 LUFS | Broadcast the EBU R 128 way: every song keeps its dynamics and its own tone, only moved to the target slowly. For music that must stay natural. Quiet next to the others: turn the amplifier up. |
+| **Den Haag** | Gentle | Warm | -18 LUFS | Background music and dinner: calm, gentle levelling, most of the dynamics kept, and a fuller, softer tone that does not tire. |
+| **Middelburg** | Gentle | Quiet | -18 LUFS | Den Haag's calm levelling for music played softly (a shop, a restaurant, late at night): deep bass and highs are added so the music stays full when turned down. At a normal volume that is too much bass - choose Den Haag. |
+| **Haarlem** | Light | Vocal | -16 LUFS | Speech and singing in front - announcements, karaoke, vocal music: a little more even than Gentle, still natural, with the de-esser on and the voices lifted out of the mix. |
+| **Maastricht** | Light | Oldies | -16 LUFS | Old recordings of the 60s and 70s: Light's natural dynamics, and each song's thin or flat tone filled out (the auto tone, a little sub bass). |
+| **Assen** | Web Stream | Less mid | -16 LUFS | An internet stream, or a recording that will become an MP3 / AAC file: no clipping and the ceiling at -2 dBTP, so the coding does not distort; a cleaner, less boxy middle. |
+| **Zwolle** | Medium | Auto | -14 LUFS | All-round, for a playlist of mixed origin: the loudness of the streaming services, even and full, and each song's tone pulled towards a well-balanced production - a thin record gets more bass, a dull one more highs. |
+| **Lelystad** | Medium | Neutral | -14 LUFS | The plain middle, and what a new deck plays: Medium's loudness and density with each song's own tone untouched. For well-produced music, and the start for a sound of your own. |
+| **Arnhem** | FM Station | Bright | about -13 LUFS | The sound of an FM station: dense and fast, a full low end and a bright, open top. It sounds like FM; it is not a signal for a transmitter. |
+| **Utrecht** | Loud | Bass+ | -12 LUFS | Parties and noisy rooms: dense and punchy, harder compression and more clipping, with 5 dB more bass. |
+| **'s-Hertogenbosch** | Loud | Warm | -12 LUFS | Parties, warmer: as loud and dense as Utrecht, but fuller and softer instead of only more bass - for bright or thin mixes and a long night. |
+| **Groningen** | Very Loud | Bass+ | -10 LUFS | Clubs and loud venues: close to modern club masters, very dense with little dynamics left, and 5 dB more bass. On long listening it can tire. |
+
+Two decks on sounds of different output play at different loudness: from Zwolle (-14 LUFS) to Groningen (-10 LUFS)
+the mix jumps 4 dB. For a mix from deck to deck, give both decks sounds of the same output (or turn one channel's
+fader to match).
 
 Your own sounds follow in the list. A deck's **Edit...** button opens the Sound window on its sound:
 
