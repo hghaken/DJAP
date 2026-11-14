@@ -279,20 +279,22 @@ LRESULT CALLBACK tabProc(HWND h, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD
                     Gdiplus::RectF f(static_cast<float>(r.left) + 0.5f, static_cast<float>(r.top) + (chosen ? 0.5f : 2.5f) * scale,
                                      static_cast<float>(r.right - r.left) - 1.0f, 0.0f);
                     f.Height = bottom - (chosen ? 0.0f : lineH) - f.Y + 4.0f * scale; // runs under the line
+                    wchar_t text[64] = {};
+                    TCITEMW it{};
+                    it.mask = TCIF_TEXT | TCIF_PARAM;
+                    it.pszText = text;
+                    it.cchTextMax = 64;
+                    TabCtrl_GetItem(h, i, &it);
+                    const bool marked = it.lParam != 0; // setTabMarked: values that differ from their reset values
                     Gdiplus::GraphicsPath p;
                     rounded(p, f, 4.0f * scale);
-                    Gdiplus::SolidBrush fill(chosen ? gc(226, 225, 221) : gc(196, 195, 190));
+                    Gdiplus::SolidBrush fill(marked ? (chosen ? gc(250, 206, 150) : gc(232, 170, 104))
+                                                    : (chosen ? gc(226, 225, 221) : gc(196, 195, 190)));
                     g.FillPath(&fill, &p);
                     Gdiplus::Pen border(gc(112, 111, 107), 1.0f);
                     g.SetClip(Gdiplus::RectF(f.X - 1.0f, f.Y - 1.0f, f.Width + 2.0f, bottom - lineH - f.Y + (chosen ? lineH : 1.0f)));
                     g.DrawPath(&border, &p);
                     g.ResetClip();
-                    wchar_t text[64] = {};
-                    TCITEMW it{};
-                    it.mask = TCIF_TEXT;
-                    it.pszText = text;
-                    it.cchTextMax = 64;
-                    TabCtrl_GetItem(h, i, &it);
                     SetTextColor(dc, kText);
                     RECT tr{r.left, static_cast<LONG>(f.Y), r.right, static_cast<LONG>(bottom - lineH)};
                     DrawTextW(dc, text, -1, &tr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
@@ -530,6 +532,18 @@ void Metal::makeTabs(HWND tabs) {
 
 void makeCombo(HWND combo) {
     if (combo) SetWindowSubclass(combo, comboProc, 1, 0);
+}
+
+void setTabMarked(HWND tabs, int index, bool marked) {
+    if (!tabs) return;
+    TCITEMW it{};
+    it.mask = TCIF_PARAM;
+    if (!TabCtrl_GetItem(tabs, index, &it)) return;
+    const LPARAM want = marked ? 1 : 0;
+    if (it.lParam == want) return;
+    it.lParam = want;
+    TabCtrl_SetItem(tabs, index, &it);
+    InvalidateRect(tabs, nullptr, FALSE);
 }
 
 void setChecked(HWND button, bool on) {

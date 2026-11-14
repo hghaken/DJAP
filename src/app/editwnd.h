@@ -76,6 +76,7 @@ private:
     void fit();                                                      // grow to the minimum size if smaller
     void fillPresets();
     void fillTabs();       // tab labels (a stage that is off says so)
+    void markTabs();       // a tab whose stage has a value that differs from its reset value: orange (theme::setTabMarked)
     void showRows();       // the current tab's rows (the band count decides which density rows exist), laid out
     void updateRows();
     void updateRow(size_t r, bool moveSlider = true);

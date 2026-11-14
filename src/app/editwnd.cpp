@@ -621,12 +621,13 @@ void EditWindow::createControls() {
                 tips_.addRect(strip->hwnd(), static_cast<UINT_PTR>(i + 1), all[i].text ? all[i].text : L"");
         }
     }
-    tips_.add(tabs_, colour() ? L"One tab per stage: every value of the stage as a slider, with its value (type one "
-                                L"in and press Enter), its unit, a reset button and what it does."
+    tips_.add(tabs_, colour() ? L"One tab per part: every value of the part as a slider, with its value (type one "
+                                L"in and press Enter), its unit, a reset button and what it does. An orange tab holds "
+                                L"values that differ from their reset values."
                               : L"One tab per stage: every value of the stage as a slider, with its value (type one "
                                 L"in and press Enter), its unit, a reset button and what it does. The Leveller, "
                                 L"Noise, Compressor and MB Compressor tabs have graphs instead: their values are set "
-                                L"in them.");
+                                L"in them. An orange tab holds values that differ from their reset values.");
     if (colour()) {
         tips_.add(preset_, L"The EQ preset shown in this window (opened on the deck's own): tone, auto tone, sub "
                            L"bass, loudness. Every change is saved at once and heard on every deck that uses it.");
@@ -905,6 +906,23 @@ void EditWindow::fillTabs() {
         TabCtrl_SetItem(tabs_, static_cast<int>(t), &it);
         if (tabStages_[t] == tab_) TabCtrl_SetCurSel(tabs_, static_cast<int>(t));
     }
+    markTabs();
+}
+
+// A tab in orange: a value of its stage differs from its reset value - the bold of its row, or a lit reset icon in
+// its graphs (client, 2026-11-14: "give a tab whose settings are not the default ones another colour, in loudness
+// and EQ"). Only the values the tab shows count: not the splits and band gains of bands not in use.
+void EditWindow::markTabs() {
+    const Preset* p = settings_.find(current_, kind_);
+    if (!p || !tabs_) return;
+    const PresetValues ref = referenceValues(settings_, current_, p->values, kind_);
+    for (size_t t = 0; t < tabStages_.size(); ++t) {
+        bool changed = false;
+        for (int i = 0; i < kParamCount && !changed; ++i)
+            changed = tabStages_[t] == paramInfo(i).stage && visible(i, p->values, kind_) &&
+                      std::fabs(p->values[static_cast<size_t>(i)] - ref[static_cast<size_t>(i)]) > 1e-9;
+        theme::setTabMarked(tabs_, static_cast<int>(t), changed);
+    }
 }
 
 bool EditWindow::shown(size_t r) const { return shownOn(r, tab_); }
@@ -953,6 +971,7 @@ void EditWindow::select(const std::string& preset) {
 void EditWindow::updateRows() {
     for (size_t r = 0; r < rows_.size(); ++r) updateRow(r);
     updateGraphs();
+    markTabs();
 }
 
 // The strip of a tab whose values are set in graphs (the Leveller, the Compressor, the MB Compressor), when it
@@ -1074,7 +1093,7 @@ void EditWindow::updateButtons() {
     std::wstring note = own ? L"Own " + what + L"." : L"Shipped " + what + L": values can be changed and reset; it cannot "
                                                                          L"be renamed or deleted.";
     note += users.empty() ? L" Not used by a deck right now." : L" Changes are heard at once on " + users + L".";
-    note += L"  Bold = differs from its reset value; \x21BA sets it back.";
+    note += L"  Bold = differs from its reset value; \x21BA sets it back; an orange tab holds such values.";
     noteText_ = note;
     SetWindowTextW(note_, note.c_str());
     // a new line count of either text lays the window out again
@@ -1105,6 +1124,7 @@ bool EditWindow::setValue(int param, double value, bool save) {
     if (param == pDensBands || param == pNoiseBands) showRows(); // split and band-gain rows appear or go
     if (isStageSwitch(param)) fillTabs();
     updateGraphs(); // a slider moved: the Compressor tab's graphs follow it
+    markTabs();     // its tab turns orange, or grey again
     return true;
 }
 

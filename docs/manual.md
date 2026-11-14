@@ -395,7 +395,7 @@ Page Up / Page Down step the slider that has the focus.
 
 ### 4.3 The meter panel
 
-The dark panel under the Loudness and EQ lists shows what the deck is doing.
+The dark panel under the Sound list shows what the deck is doing.
 
 **LED bars, left.** *In L / R* is the input level (sample peak in dBFS, including the loudness preset's input gain); *Out L /
 R* is the output level (true peak in dBTP). Lit segments show the level; the zone colours show amber and red near the
@@ -605,7 +605,9 @@ In the Sound window (4.6), click **Edit...** next to the loudness preset. At the
   the values it was saved with.
 - Under it, what the loudness preset does to the sound, and "Some values are changed" when they differ from the shipped ones.
 
-Below that, a **tab per stage**. A stage that is switched off says "(off)" on its tab. On each tab:
+Below that, a **tab per stage**. A stage that is switched off says "(off)" on its tab. A tab in **orange** holds
+values that differ from their reset values (the bold values below, or a lit reset arrow in its graphs); a tab whose
+values are all at their reset values is grey. The EQ window's tabs work the same way. On each tab:
 
 - The stage's **On** check box first.
 - A row per value: name, **slider**, the **value** (it can be typed - press Enter or leave the field; a comma counts

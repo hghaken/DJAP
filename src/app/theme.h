@@ -51,6 +51,10 @@ void makeButton(HWND button);
 // A drop-down list (CBS_DROPDOWNLIST) with its field in light grey instead of white; the list itself is grey through
 // WM_CTLCOLORLISTBOX.
 void makeCombo(HWND combo);
+// A tab of a tab control made by Metal::makeTabs drawn in orange instead of grey: its values differ from their reset
+// values (client, 2026-11-14: "give a tab whose settings are not the default ones another colour"). Kept in the
+// tab's item data (TCIF_PARAM); redrawn only when it changes.
+void setTabMarked(HWND tabs, int index, bool marked);
 // A toggle button (About with an update): checked = lit green.
 void setChecked(HWND button, bool on);
 bool isChecked(HWND button);

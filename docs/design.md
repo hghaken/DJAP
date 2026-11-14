@@ -670,6 +670,11 @@ the unit, a small reset button (back to the reset value; enabled only when the v
 the reset value) and what it does (the full text and the range in the row's tooltip). Switches (the stage's own,
 catch-up) are check boxes with a reset button too. Under a tab's rows a short text says what the stage does to
 the sound and what more or less of its values sounds like (client, 2026-10-25; `kStageSound` in `editwnd.cpp`).
+A tab whose stage holds a value that differs from its reset value is drawn in orange instead of grey (client,
+2026-11-14: "give a tab whose settings are not the default ones another colour, in loudness and EQ"): the same test
+as a row's bold (`referenceValues`), over the values the tab shows (`visible`: not the splits and band gains of bands
+not in use), also those set in its graphs; `EditWindow::markTabs` after every change, the mark in the tab's item data
+(`theme::setTabMarked`, TCIF_PARAM), drawn by the tab control's own paint.
 Every text wraps (client, 2026-10-26: "make all text lines wrappable" - the note was cut off with "..."): the
 description and the note under the choice, each row's name and what it does (a row grows with its longest text),
 the stage's effect on the sound. Smallest size (client, 2026-10-26, as for the main window): 800 px wide at 96 DPI,
