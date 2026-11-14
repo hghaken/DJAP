@@ -1032,8 +1032,11 @@ The auto tone holds still during breakdowns and fades, so a quiet part does not 
 out). Each of the four sections - the bass shelf, the low-mid bell, the presence bell and the treble shelf - is a thin
 line in its own colour with a point; together they make the thick yellow line (with the contour, grey, when it is on;
 the sub bass's range is shaded under the 0 dB line). Drag a point: left or right moves its frequency, up or down its
-gain. The legend names each point's gain and frequency; the mouse wheel over a point or over its legend item steps its
-gain (0.5 dB), and the arrow behind it sets the point back - gain and frequency. Dashed: the curve with the auto
+gain. Through each point run two dashed lines in its colour: drag the upright one anywhere along it to move the
+frequency alone, the level one to move the gain alone. Each point's name carries its gain and frequency ("Bass
++3.0 dB 100 Hz"), and so does the legend; the mouse wheel over a point, its level line or its legend item steps its
+gain (0.5 dB), over its upright line its frequency, and the arrow behind a legend item sets the point back - gain and
+frequency. Dashed: the curve with the auto
 tone's corrections of this moment. The spectrum window drags the same points.
 
 ![The Auto tone tab: four graphs](images/autotone.jpg)

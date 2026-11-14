@@ -88,7 +88,8 @@ private:
     void updateGraphs(); // the graph strips: values, reset values, the tooltips that name them
     void resetParam(int param); // a value back to its reset value (a row's reset button, a strip's reset icon)
     void updateButtons();
-    void updateAbout(); // the description under the choice
+    void updateAbout(bool relayout = true); // the description under the choice (relayout: its line count may move the rows)
+    void relayoutTexts(); // the description's or the note's line count changed: layout() and fit()
     int textHeight(HWND h, const std::wstring& text, int width) const; // wrapped, in the window's font
     void select(const std::string& preset);
     void selectTab(const std::string& stage);
@@ -114,6 +115,7 @@ private:
     HWND soundTitle_ = nullptr, sound_ = nullptr; // under the rows: what the stage does to the sound
     HWND about_ = nullptr;                         // under the choice: what the chosen preset or colour does
     std::wstring aboutText_, noteText_;
+    std::wstring aboutMeasure_; // what the description's height is measured with: a shipped one with room for "Some values are changed"
     int aboutH_ = 0, noteH_ = 0;
     static constexpr int kMinClientWidth = 800; // at 96 DPI: the buttons beside the choice, the rows' columns
     // the line above it, painted by the window itself (an etched static control left old pixels in its rect)

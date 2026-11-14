@@ -31,7 +31,10 @@ bool ToneGraphs::owns(int param) const {
     return false;
 }
 
-int ToneGraphs::markParam(int mark) const { return mark >= 0 && mark < 4 ? kFreq[mark] : -1; }
+int ToneGraphs::markParam(int mark) const {
+    if (mark >= 0 && mark < 8) return kFreq[mark % 4];
+    return mark >= 8 && mark < 12 ? kGain[mark - 8] : -1;
+}
 
 int ToneGraphs::markParam2(int mark) const { return mark >= 0 && mark < 4 ? kGain[mark] : -1; }
 
@@ -68,9 +71,11 @@ void ToneGraphs::fillTips(std::vector<Tip>& out) {
         L"The EQ's tone: four sections - the bass shelf, the low-mid bell, the presence bell and the treble shelf - "
         L"each a thin line in its colour, together the thick yellow line (with the contour when that is on, grey). "
         L"Behind: the deck's spectrum, grey going in, the line coming out. Dashed: the curve with the auto tone's "
-        L"corrections of this moment.\n\nDrag a point: left or right moves its frequency, up or down its gain. The "
-        L"mouse wheel over a point, or over its name in the legend, steps its gain by 0.5 dB. The arrow behind a "
-        L"value sets the point back - its gain and its frequency.";
+        L"corrections of this moment.\n\nDrag a point: left or right moves its frequency, up or down its gain. Or "
+        L"drag one of its dashed lines: the upright one anywhere along it for the frequency alone, the level one for "
+        L"the gain alone. Each point's name carries its gain and frequency. The mouse wheel over a point, its level "
+        L"line or its name in the legend steps its gain by 0.5 dB, over its upright line its frequency. The arrow "
+        L"behind a value in the legend sets the point back - its gain and its frequency.";
     legendTips(legend_, panel_, kCurveTip, out);
     for (int j = 0; j < legend_.count; ++j) out.push_back({legend_.item[j], nullptr, legend_.param[j], -1});
     for (const Icon& icon : icons_) out.push_back({icon.rect, nullptr, -1, icon.param});
@@ -162,20 +167,84 @@ void ToneGraphs::renderLayer(Gdiplus::Graphics& g, int w, int h) {
     curve.SetLineJoin(LineJoinRound);
     g.DrawLines(&curve, total.data(), static_cast<INT>(total.size()));
     g.ResetClip();
-    // the points: in their own colours, a ring of the panel's colour around them
+    // Each point's name with its gain and frequency (client, 2026-11-14: "add the values"), over the point - under
+    // it where the plot's top is in the way, or the name of the point before it; kept inside the plot.
     const double mr = px(55) / 10.0;
+    double x[4], y[4];
+    std::vector<RECT> names;
     for (int s = 0; s < 4; ++s) {
-        const double x = q.X(values_[kFreq[s]]), y = q.Y(values_[kGain[s]]);
-        SolidBrush ring(col(kPanel)), fill(col(kNode[s]));
-        g.FillEllipse(&ring, static_cast<REAL>(x - mr - 2 * lw), static_cast<REAL>(y - mr - 2 * lw),
-                      static_cast<REAL>(2 * (mr + 2 * lw)), static_cast<REAL>(2 * (mr + 2 * lw)));
-        g.FillEllipse(&fill, static_cast<REAL>(x - mr), static_cast<REAL>(y - mr), static_cast<REAL>(2 * mr),
-                      static_cast<REAL>(2 * mr));
-        mark_[static_cast<size_t>(s)] = {static_cast<LONG>(x + 0.5), static_cast<LONG>(y + 0.5)};
-        const bool under = y - mr - th - px(3) < q.t;
-        layerNames_.push_back({static_cast<int>(x), static_cast<int>(under ? y + mr + px(3) : y - mr - th - px(3)), kName[s],
-                               kNode[s], TA_CENTER});
+        x[s] = q.X(values_[kFreq[s]]);
+        y[s] = q.Y(values_[kGain[s]]);
+        const std::wstring text = std::wstring(kName[s]) + L" " + valueText(s);
+        const int tw = textWidth(text);
+        auto place = [&](bool under) {
+            const double top = under ? y[s] + mr + px(3) : y[s] - mr - th - px(3);
+            double left = std::min(q.r - tw, std::max(q.l, x[s] - tw / 2.0));
+            return RECT{static_cast<LONG>(left), static_cast<LONG>(top), static_cast<LONG>(left + tw), static_cast<LONG>(top + th)};
+        };
+        bool under = y[s] - mr - th - px(3) < q.t;
+        RECT r = place(under), both;
+        if (!names.empty() && IntersectRect(&both, &r, &names.back())) {
+            under = !under;
+            r = place(under);
+        }
+        names.push_back(r);
+        layerNames_.push_back({static_cast<int>(r.left), static_cast<int>(r.top), text, kNode[s], TA_LEFT});
     }
+    // Through each point the lines it is dragged by (client, the same day: "add horizontal and vertical drag lines"):
+    // upright over the whole height - its frequency -, level over at most half the way to the nearest other point -
+    // its gain; dashed in its colour, giving way to the names.
+    for (int s = 0; s < 4; ++s) {
+        double half = px(90);
+        for (int o = 0; o < 4; ++o)
+            if (o != s) half = std::min(half, std::fabs(x[o] - x[s]) / 2.0);
+        half = std::max(half, static_cast<double>(px(18)));
+        lineX_[s] = row(x[s]);
+        lineY_[s] = row(y[s]);
+        lineL_[s] = std::max(q.l, x[s] - half);
+        lineR_[s] = std::min(q.r, x[s] + half);
+        Pen dash(col(kNode[s], 170), lw);
+        dash.SetDashStyle(DashStyleDash);
+        lineAround(g, dash, true, lineX_[s], q.t, q.b, names);
+        lineAround(g, dash, false, lineY_[s], lineL_[s], lineR_[s], names);
+    }
+    // the points: in their own colours, a ring of the panel's colour around them
+    for (int s = 0; s < 4; ++s) {
+        SolidBrush ring(col(kPanel)), fill(col(kNode[s]));
+        g.FillEllipse(&ring, static_cast<REAL>(x[s] - mr - 2 * lw), static_cast<REAL>(y[s] - mr - 2 * lw),
+                      static_cast<REAL>(2 * (mr + 2 * lw)), static_cast<REAL>(2 * (mr + 2 * lw)));
+        g.FillEllipse(&fill, static_cast<REAL>(x[s] - mr), static_cast<REAL>(y[s] - mr), static_cast<REAL>(2 * mr),
+                      static_cast<REAL>(2 * mr));
+        mark_[static_cast<size_t>(s)] = {static_cast<LONG>(x[s] + 0.5), static_cast<LONG>(y[s] + 0.5)};
+    }
+    for (size_t m = 4; m < mark_.size(); ++m) mark_[m] = {-10000, -10000}; // the lines are taken by lineAt
+}
+
+// An upright line is taken anywhere along it (the frequency), a level line anywhere along it (the gain) - the
+// nearest within a few pixels; the points themselves (markAt) come first.
+int ToneGraphs::lineAt(POINT p) const {
+    const Plot& q = plot_;
+    if (p.x < q.l - 2 || p.x > q.r + 2 || p.y < q.t - 2 || p.y > q.b + 2) return -1;
+    const double reach = px(5);
+    int best = -1;
+    double bestD = reach + 1;
+    for (int s = 0; s < 4; ++s) {
+        const double d = std::fabs(p.x - lineX_[s]);
+        if (d < bestD) {
+            bestD = d;
+            best = 4 + s;
+        }
+    }
+    if (best >= 0) return best;
+    for (int s = 0; s < 4; ++s) {
+        if (p.x < lineL_[s] || p.x > lineR_[s]) continue;
+        const double d = std::fabs(p.y - lineY_[s]);
+        if (d < bestD) {
+            bestD = d;
+            best = 8 + s;
+        }
+    }
+    return best;
 }
 
 // The spectrum behind (input area, output line), the layer over it, the curve with the auto tone now (dashed).
@@ -228,8 +297,8 @@ void ToneGraphs::paintLive(HDC dc) {
 }
 
 bool ToneGraphs::dragValue(int mark, POINT p, double& v) const {
-    if (mark < 0 || mark >= 4) return false;
-    v = plot_.fromX(p.x);
+    if (mark < 0 || mark >= 12) return false;
+    v = mark < 8 ? plot_.fromX(p.x) : plot_.fromY(p.y); // a point or an upright line: the frequency; a level line: the gain
     return true;
 }
 
@@ -239,7 +308,8 @@ bool ToneGraphs::dragValue2(int mark, POINT p, double& v) const {
     return true;
 }
 
-// The wheel steps a point's gain: over the point, or over its name and value in the legend (or its icon).
+// The wheel steps a point's gain: over the point, its level line, or its name and value in the legend (or its
+// icon); over its upright line, its frequency.
 int ToneGraphs::wheelParam(POINT p) const {
     for (int j = 0; j < legend_.count; ++j)
         if (PtInRect(&legend_.item[j], p)) return kGain[j];
@@ -250,7 +320,8 @@ int ToneGraphs::wheelParam(POINT p) const {
         const long dx = p.x - mark_[static_cast<size_t>(s)].x, dy = p.y - mark_[static_cast<size_t>(s)].y;
         if (dx * dx + dy * dy <= reach * reach) return kGain[s];
     }
-    return -1;
+    const int line = lineAt(p);
+    return line >= 0 ? markParam(line) : -1;
 }
 
 } // namespace ap

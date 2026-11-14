@@ -760,7 +760,7 @@ int EditWindow::place(int cw, int ch, const std::string& stage, bool move) {
         }
     }
     // under the choice: what the chosen preset or colour does, then the note
-    const int aboutH = textHeight(about_, aboutText_, W), noteH = textHeight(note_, noteText_, W);
+    const int aboutH = textHeight(about_, aboutMeasure_, W), noteH = textHeight(note_, noteText_, W);
     int y = m + h + g;
     if (move) {
         aboutH_ = aboutH;
@@ -1082,11 +1082,30 @@ int EditWindow::textHeight(HWND h, const std::wstring& text, int width) const {
     return static_cast<int>(r.bottom);
 }
 
-// The description under the choice; a new line count lays the window out again.
-void EditWindow::updateAbout() {
+// The description under the choice; a new line count lays the window out again. A shipped preset's line gets
+// "Some values are changed (bold)." with its first changed value - its height is measured with that sentence from
+// the start, so a drag in a graph or a slider never moves the window's rows under the mouse (the sentence's second
+// line was cut off until the next resize); an own preset's summary is laid out again when a drag ends (`relayout`).
+void EditWindow::updateAbout(bool relayout) {
     const Preset* p = settings_.find(current_, kind_);
     aboutText_ = p ? describe(*p, kind_) : L"";
+    static const wchar_t* const kChanged = L" Some values are changed (bold).";
+    aboutMeasure_ = aboutText_;
+    if (p && p->shipped && aboutText_.find(kChanged) == std::wstring::npos) aboutMeasure_ += kChanged;
     SetWindowTextW(about_, aboutText_.c_str());
+    if (relayout) relayoutTexts();
+}
+
+// The description's or the note's line count changed: the rows and graphs move.
+void EditWindow::relayoutTexts() {
+    if (!hwnd_ || aboutH_ == 0) return; // not laid out yet: layout() measures them
+    RECT rc;
+    GetClientRect(hwnd_, &rc);
+    const int W = rc.right - px(24);
+    if (textHeight(about_, aboutMeasure_, W) != aboutH_ || textHeight(note_, noteText_, W) != noteH_) {
+        layout();
+        fit();
+    }
 }
 
 void EditWindow::updateButtons() {
@@ -1107,14 +1126,7 @@ void EditWindow::updateButtons() {
     note += L"  Bold = differs from its reset value; \x21BA sets it back; an orange tab holds such values.";
     noteText_ = note;
     SetWindowTextW(note_, note.c_str());
-    // a new line count of either text lays the window out again
-    RECT rc;
-    GetClientRect(hwnd_, &rc);
-    const int W = rc.right - px(24);
-    if (textHeight(about_, aboutText_, W) != aboutH_ || textHeight(note_, noteText_, W) != noteH_) {
-        layout();
-        fit();
-    }
+    relayoutTexts(); // a new line count of either text lays the window out again
 }
 
 bool EditWindow::setValue(int param, double value, bool save) {
@@ -1131,7 +1143,7 @@ bool EditWindow::setValue(int param, double value, bool save) {
     if (param >= pNoiseSplit1 && param <= pNoiseSplit3) enforceNoiseSplits(v, param - pNoiseSplit1);
     normaliseValues(v);
     onChange_(false, save);
-    updateAbout(); // "some values are changed"
+    updateAbout(save); // "some values are changed" (laid out again when the drag ends)
     if (param == pDensBands || param == pNoiseBands) showRows(); // split and band-gain rows appear or go
     if (isStageSwitch(param)) fillTabs();
     updateGraphs(); // a slider moved: the Compressor tab's graphs follow it

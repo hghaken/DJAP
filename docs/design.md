@@ -922,7 +922,15 @@ audio and the timer like the loudness window, in the program and in the plug-in.
 - **Tone** (`tonegraph.*`, one panel): the EQ curve over the input (area) and output (line) spectrum - each section
   with `colourSectionDb`, the total thick, the contour grey, the sub bass's range shaded as in the spectrum window, the
   curve with the auto tone's corrections now dashed; four points in the spectrum window's colours dragged both ways; a
-  legend of four (name, gain and frequency) whose arrows set a point's gain and frequency back.
+  legend of four (name, gain and frequency) whose arrows set a point's gain and frequency back. Then (client, the same
+  day, with a picture of the points: "add horizontal and vertical drag lines, and add the values"): through each point
+  an upright dashed line over the whole height (marks 4..7: the frequency alone) and a level one over at most half the
+  way to the nearest other point (marks 8..11: the gain alone), taken anywhere along them (`lineAt`), giving way to
+  the names; each name carries "+3.0 dB 100 Hz", over its point - under it where the top or the name before it is in
+  the way. Found with it: a changed value adds "Some values are changed (bold)." to a shipped preset's description,
+  whose second line was cut off until the next resize - its height is now measured with that sentence from the start
+  (`EditWindow::aboutMeasure_`), so a drag never moves the rows, and an own preset's summary is laid out again when
+  the drag ends.
 - **Auto tone** (`autograph.*`, four panels): the corrections of the last 60 s per section (`Point::autoTone`) with the
   maximum as level lines (the treble's half dotted); the amount - correction against the song's difference from the
   reference, a slope cut off at the maximum, the mark on its dotted continuation 10 dB out - with the four sections now
