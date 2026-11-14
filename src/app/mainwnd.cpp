@@ -97,7 +97,12 @@ MainWindow::MainWindow(Settings& settings, std::filesystem::path iniFile, AudioI
       editor_(settings, [this](bool listChanged, bool save) { presetsChanged(listChanged, save); }),
       colourEditor_(settings, [this](bool listChanged, bool save) { presetsChanged(listChanged, save); },
                     PresetKind::Colour),
-      soundWindow_(settings, [this](bool listChanged) { presetsChanged(listChanged, true); },
+      soundWindow_(settings,
+                   [this](bool listChanged) {
+                       presetsChanged(listChanged, true);
+                       editor_.refresh(); // the loudness and EQ windows: who uses the preset shown, the lists
+                       colourEditor_.refresh();
+                   },
                    [this](PresetKind kind, const std::string& preset, int d) {
                        if (kind == PresetKind::Colour) colourEditor_.show(hwnd_, preset, d);
                        else editor_.show(hwnd_, preset, d);

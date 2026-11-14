@@ -700,6 +700,9 @@ void Plugin::soundEdited(bool listChanged) {
     rememberChoice(false);
     saveSettings();
     if (view_) view_->listsChanged();
+    // the loudness and EQ windows follow (the note of who uses the preset shown; a part the sound took)
+    if (editor_) editor_->refresh();
+    if (colourEditor_) colourEditor_->refresh();
     (void)listChanged;
 }
 
@@ -794,6 +797,8 @@ void Plugin::listsChanged() {
     loading_ = false;
     if (componentHandler) componentHandler->restartComponent(kParamTitlesChanged | kParamValuesChanged);
     if (view_) view_->listsChanged();
+    if (soundWindow_) soundWindow_->refresh(); // its loudness and EQ lists (client, 2026-11-14: a preset saved in the
+                                               // loudness window was missing in the open Sound window)
 }
 
 bool Plugin::saveSettings() {
@@ -849,6 +854,8 @@ void Plugin::edited(bool listChanged, bool save) {
     if (save || kept) saveSettings();
     if (!changed.empty() || listChanged || kept) shareState();
     if (view_) view_->refresh();
+    // the open Sound window: the sound's part that "Save as" moved, the lists (as the program's presetsChanged)
+    if (soundWindow_ && (listChanged || kept)) soundWindow_->refresh();
 }
 
 void Plugin::openEditor(bool colour, HWND owner, const std::string& tab, const std::string& preset) {
