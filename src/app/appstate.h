@@ -19,6 +19,15 @@ std::filesystem::path settingsFile();
 // the same place, once, when there is no DJAP.ini yet; the old files stay. (Not the command line: it writes nothing.)
 void adoptOldSettings();
 
+// The plug-in's own settings file (client, 2026-11-14: "make the Windows and VST settings independent of each
+// other"): %APPDATA%\DJAP\DJAP-Plugin.ini - its presets, EQs and sounds, each instance's choices, its windows' places,
+// its tooltips and update check. The first time there is none it starts as a copy of the program's settings file in
+// %APPDATA%\DJAP\ (startPluginSettings), so the own presets, EQs and sounds made so far are in both; from then on the
+// program and the plug-in each change only their own. Empty when Windows names no AppData folder.
+std::filesystem::path pluginSettingsFile();
+// That start: copies `program` to `plugin` when `plugin` does not exist and `program` does. True when it copied.
+bool startPluginSettings(const std::filesystem::path& plugin, const std::filesystem::path& program);
+
 // Start with Windows (docs/design.md section 8): the value "DJAP" under HKCU\Software\Microsoft\Windows\
 // CurrentVersion\Run starts the program with --autostart when the user logs on. On = the value is there, names this
 // program (the setup writes the same) and is not switched off in Windows' list of startup apps.

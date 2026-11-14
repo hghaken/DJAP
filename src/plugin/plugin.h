@@ -2,9 +2,10 @@
 // The plug-in for DJ software (docs/design.md section 10): one deck - stereo in, stereo out - with the same chain,
 // presets and colours as the program. Processor and controller in one object (SingleComponentEffect), so the
 // window reads the deck's meters directly. Every chain value is a parameter the host can show and automate; the
-// preset and colour lists are the program's settings file's, %APPDATA%\DJAP\DJAP.ini, which the plug-in's preset
-// window also saves to (merged: Settings::saveMerged); a project stores the values themselves, so it plays the
-// same on a computer without that preset.
+// preset and colour lists are the plug-in's own settings file's, %APPDATA%\DJAP\DJAP-Plugin.ini (since 0.1.390; it
+// started as a copy of the program's DJAP.ini), which the plug-in's preset window saves to (merged with the other
+// instances: Settings::saveMerged); a project stores the values themselves, so it plays the same on a computer
+// without that preset.
 #pragma once
 
 #include "deck.h"

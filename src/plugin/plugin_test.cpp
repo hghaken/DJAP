@@ -166,7 +166,21 @@ int differences(const std::vector<float>& a, const std::vector<float>& b, size_t
 
 } // namespace
 
+// The plug-in's settings file for the whole run: a scratch file in %TEMP%, never the user's DJAP-Plugin.ini in
+// AppData (which the plug-in would otherwise make as a copy of the program's DJAP.ini); a part that needs a file
+// of its own sets DJAP_PLUGIN_INI and puts this one back afterwards.
+static std::filesystem::path g_scratchIni;
+static void scratchIni() { SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", g_scratchIni.wstring().c_str()); }
+
 int main(int argc, char** argv) {
+    {
+        std::error_code ec;
+        const std::filesystem::path dir =
+            std::filesystem::temp_directory_path() / ("djap-plugin-test-" + std::to_string(GetCurrentProcessId()));
+        std::filesystem::create_directories(dir, ec);
+        g_scratchIni = dir / "DJAP-Plugin.ini";
+        scratchIni();
+    }
     // the bundle the build made next to this program (tools\run_tests.ps1 runs it without arguments)
     std::string path;
     bool hostFrames = false;
@@ -627,7 +641,7 @@ int main(int argc, char** argv) {
             CHECK(r3.values[ap::pNoiseOn] == 1.0 && r3.values[ap::pLimCeiling] == -2.0);
             s3.close();
         }
-        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
+        scratchIni();
         std::filesystem::remove(ini, ec);
         a.close();
         b.close();
@@ -769,7 +783,7 @@ int main(int argc, char** argv) {
             a.close();
         }
         SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", nullptr);
-        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
+        scratchIni();
         std::filesystem::remove(ini, ec);
     }
 
@@ -829,7 +843,7 @@ int main(int argc, char** argv) {
             b.close();
         }
         SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", nullptr);
-        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
+        scratchIni();
         std::filesystem::remove(ini, ec);
     }
 
@@ -1015,9 +1029,13 @@ int main(int argc, char** argv) {
             b.close();
         }
         SetEnvironmentVariableW(L"DJAP_NO_UPDATE_CHECK", nullptr);
-        SetEnvironmentVariableW(L"DJAP_PLUGIN_INI", nullptr);
+        scratchIni();
         std::filesystem::remove(ini, ec);
     }
 
+    {
+        std::error_code ec;
+        std::filesystem::remove_all(g_scratchIni.parent_path(), ec);
+    }
     return test::finish("plugin_test");
 }

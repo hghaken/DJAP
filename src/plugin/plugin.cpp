@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "plugin.h"
 
+#include "appstate.h"
 #include "pluginids.h"
 #include "pluginview.h"
 #include "settingslock.h"
@@ -12,7 +13,6 @@
 #include "public.sdk/source/vst/utility/stringconvert.h"
 
 #include <windows.h>
-#include <shlobj.h>
 
 #include <algorithm>
 #include <cmath>
@@ -63,19 +63,18 @@ UnitID unitOf(int p) {
 
 void ascii(String128 out, const char* text) { UString(out, 128).fromAscii(text); }
 
-// The program's settings file, where the user's own presets and colours are (also those saved from a plug-in). A
-// portable program (DJAP.ini next to DJAP.exe) is not seen.
+// The plug-in's own settings file, %APPDATA%\DJAP\DJAP-Plugin.ini (client, 2026-11-14: "make the Windows and VST
+// settings independent of each other"; until 0.1.387 the plug-ins saved into the program's DJAP.ini as guests): its
+// presets, EQs and sounds, the instances' choices, the windows' places, tooltips and the update check. Started once
+// as a copy of the program's file (appstate.h, pluginSettingsFile). The plug-ins of one or more DJ programs share it,
+// merged (Settings::saveMerged).
 std::filesystem::path settingsFile() {
     // a test with editorhost that writes (the windows' places, a Setup switch) points it at a scratch copy, never at
     // the user's own file
     wchar_t test[MAX_PATH] = {};
     if (GetEnvironmentVariableW(L"DJAP_PLUGIN_INI", test, MAX_PATH) > 0) return std::filesystem::path(test);
-    PWSTR roaming = nullptr;
-    std::filesystem::path p;
-    if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming)))
-        p = std::filesystem::path(roaming) / L"DJAP" / L"DJAP.ini";
-    CoTaskMemFree(roaming);
-    return p;
+    const SettingsLock lock; // the copy of the program's file at the first start: not while the program saves it
+    return pluginSettingsFile();
 }
 
 // One chain value as a parameter: the program's slider positions are the host's steps (params.h), so a value set
@@ -808,13 +807,13 @@ bool Plugin::saveSettings() {
         return n;
     };
     const std::vector<std::string> before = names();
-    // as a guest: only the plug-in's preset and colour changes; the program's other settings stay as they are
+    // as a guest: only this instance's preset and colour changes; what the other instances saved stays
     bool ok = false;
     {
         const SettingsLock lock; // the program or another instance saving at the same moment waits (settingslock.h)
         ok = settings_.saveMerged(ini_, base_, Settings::SaveRole::Guest);
     }
-    if (names() != before) listsChanged(); // another plug-in's or the program's presets came in
+    if (names() != before) listsChanged(); // another plug-in's presets came in
     return ok;
 }
 

@@ -959,13 +959,15 @@ buffers.
   processor never reads the loudness preset lists, which change on the GUI thread. The controller keeps the exact values of
   a loudness preset or a project, so a stored project holds 800 Hz and not the 810 Hz of the nearest log step; a value the
   host sets is that step's value.
-- **Shared loudness presets and sounds.** The plug-in's loudness, EQ and Sound windows are the program's (`editwnd.*`,
-  `soundwnd.*`). Program and plug-ins save into
-  one settings file, each with a three-way merge (`Settings::saveMerged`): the file is read again, the writer's own
-  changes since it last read or wrote the file (its "base") are applied to it - additions, changed values,
-  renames, deletions - and everything else stays. Two writers therefore never lose each other's loudness presets or
-  sounds; when both changed the same one, the later save wins. A plug-in writes only the loudness preset, EQ and sound
-  lists and its own choices, never the program's other settings, and nothing when it has nothing new. A sound (a
+- **The plug-in's own loudness presets and sounds.** The plug-in's loudness, EQ and Sound windows are the program's
+  (`editwnd.*`, `soundwnd.*`), but its settings are its own: `%APPDATA%\DJAP\DJAP-Plugin.ini` (from 0.1.390 on;
+  before that the plug-ins saved into the program's `DJAP.ini`). The first load makes it as a copy of the program's
+  file, and from then on neither changes the other. The plug-ins (deck 1, deck 2, a second DJ program) save into
+  their file each with a three-way merge (`Settings::saveMerged`): the file is read again, the writer's own changes
+  since it last read or wrote the file (its "base") are applied to it - additions, changed values, renames,
+  deletions - and everything else stays. Two writers therefore never lose each other's loudness presets or sounds;
+  when both changed the same one, the later save wins. A plug-in writes only the loudness preset, EQ and sound lists,
+  its own choices and switches, and nothing when it has nothing new. A sound (a
   loudness preset with an EQ under one name) is a choice, not a value: the plug-in's host still sees the loudness
   preset and the EQ as two list parameters. Each writer saves through a temporary file of its
   own name and renames it over the file, so a reader never sees half a file.

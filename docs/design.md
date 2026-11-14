@@ -1180,7 +1180,7 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   (`paramPositions` / `paramValueAt` / `paramPositionOf` in `params.*`: the same log scale for times and
   frequencies, "auto" / "off" at the left end), grouped by stage (14 units). Ids are a hash of the ini key (`pluginids.h`), so
   values can be added or reordered without breaking a host's project. Four more: the preset list and the colour list
-  (the presets and colours of `%APPDATA%\DJAP\DJAP.ini`, or the shipped ones; a last entry "(other values)"; they
+  (the presets and colours of the plug-in's `%APPDATA%\DJAP\DJAP-Plugin.ini`, or the shipped ones; a last entry "(other values)"; they
   grow and shrink with the preset window, announced with `restartComponent(kParamTitlesChanged)`), Bypass (the
   host's bypass flag: the input delayed by the look-ahead) and the look-ahead (a list of the window's choices 0, 1.5,
   2, 3, 5 ms - so the host shows what runs; an old project's 0.5 or 1.0 ms runs as 1.5 - and the latency reported
@@ -1197,11 +1197,19 @@ the logo"). Steinberg's plug-in SDK (v3.8.1, MIT since 3.8) in `third_party/vst3
   A change of the chosen preset's or colour's values reaches the plug-in's parameters (only the values that changed
   in the preset: a bass slider or the host's automation of another value stays) and the processing. Saving is a merge
   (`Settings::saveMerged`): the file is read again, this writer's own additions, changes, renames and deletions since
-  its last read or write are applied to it, everything else in it stays - so the program and any number of plug-ins
-  keep each other's presets. The plug-in saves as a guest: only the preset and colour lists; the program's other
-  settings (devices, window, ...) are never written by it. A preset a deck of the writer uses is kept even when the
-  other side deleted it. Nothing new = nothing written (opening the window only reads). Each writer writes through
-  a temporary file of its own and renames it.
+  its last read or write are applied to it, everything else in it stays - so any number of plug-ins keep each other's
+  presets. The plug-in saves as a guest: only the preset, colour and sound lists, its instances' choices, its
+  windows' places and its two switches. A preset a deck of the writer uses is kept even when the other side deleted
+  it. Nothing new = nothing written (opening the window only reads). Each writer writes through a temporary file of
+  its own and renames it.
+- **Its own settings file** (client, 2026-11-14: "make the Windows and VST settings independent of each other"; until
+  0.1.387 the plug-ins saved into the program's `DJAP.ini` as guests, so a preset, sound, tooltip or update switch
+  changed in one changed the other): `%APPDATA%\DJAP\DJAP-Plugin.ini` (`appstate.*` `pluginSettingsFile`). Where it
+  does not exist yet, it is made as a copy of the program's `%APPDATA%\DJAP\DJAP.ini` (`startPluginSettings`, under
+  the settings lock), so the own presets, EQs and sounds and the plug-ins' kept choices and window places of before
+  are in both; from then on neither reads the other's file. A portable program's `DJAP.ini` (next to the exe) is not
+  copied, as it was never read. `DJAP_PLUGIN_INI` still points a test at a scratch file; `plugin_test` sets one for
+  the whole run (`appstate_test` tests the copy).
 - **Edits reach the processing directly** (client's DJ program, 2026-10-26: the plug-in processed, but no edit in
   its window changed the sound - the program never passes a parameter change to `process()` for a plug-in whose
   controller and processor are one object; found with a temporary log of the host's calls): every edit in the window

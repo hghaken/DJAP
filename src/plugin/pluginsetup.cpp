@@ -121,8 +121,8 @@ void SetupWindow::create() {
     updates_ = make(L"BUTTON", L"Look for a newer DJAP each time the DJ software loads the plug-in", BS_AUTOCHECKBOX | WS_TABSTOP,
                     idUpdates, 14, 164, 440, 24);
     make(L"STATIC",
-         L"The audio devices are the DJ software's: it chooses this plug-in's input and output. Tooltips and the update "
-         L"check are shared with the DJAP program (its settings file).",
+         L"The audio devices are the DJ software's. These settings, sounds and presets are the plug-in's own, apart "
+         L"from the DJAP program's.",
          SS_LEFT, 0, 14, 196, 442, 44);
     close_ = make(L"BUTTON", L"Close", BS_OWNERDRAW | WS_TABSTOP, idClose, 370, 246, 86, 28);
     theme::makeButton(close_);
@@ -156,10 +156,11 @@ void SetupWindow::create() {
                      L"Switched on, deck 2 takes deck 1's; after that a change in either plug-in's windows sets both. "
                      L"Bypass stays each deck's own. As \"Deck A and deck B use the same loudness preset and EQ\" in "
                      L"the program's Setup window.");
-    tips_.add(tooltips_, L"The explanations that appear when the mouse rests on a control, in the plug-in and in the "
-                         L"program (one switch for both: the settings file).");
-    tips_.add(updates_, L"Asks GitHub for a newer DJAP each time the DJ software loads the plug-in (the program asks once "
-                        L"a day; one switch for both). A newer version lights the About button as \"Update\".");
+    tips_.add(tooltips_, L"The explanations that appear when the mouse rests on a control of the plug-in's windows. "
+                         L"The DJAP program has its own switch.");
+    tips_.add(updates_, L"Asks GitHub for a newer DJAP each time the DJ software loads the plug-in (the program has its "
+                        L"own switch and asks once a day). A newer version is named on the plug-in's version line; "
+                        L"About DJAP has the details.");
 }
 
 void SetupWindow::refresh() {

@@ -478,7 +478,7 @@ Your own sounds follow in the list. A deck's **Edit...** button opens the Sound 
   sound's reset is in bold.
 
 A change is heard at once on every deck that uses the sound, and saved at once - the sounds are kept in the settings
-file with the presets (13), shared with the plug-in. A settings file of a version before the sounds keeps what each
+file with the presets (13). The plug-in has its own sounds and presets (9.3). A settings file of a version before the sounds keeps what each
 deck played: the deck shows the sound that holds its loudness preset and EQ, or - when none does - the two in
 brackets, for example "(Gentle, Bright)"; Save as makes a sound of them.
 
@@ -1227,7 +1227,7 @@ The window is one deck strip of the program:
   in the program.
 - **Bypass Off / Bypass On** - green "Bypass Off": the channel is processed; red "Bypass On": the input goes out
   unchanged, delayed by the same look-ahead.
-- **Sound** - the program's sounds (see 9.3 and 4.6) with its **Edit...** button: the same Sound window as in the
+- **Sound** - the plug-in's sounds (see 9.3 and 4.6) with its **Edit...** button: the same Sound window as in the
   program, with the loudness preset and EQ lists and their Edit buttons (the loudness and EQ windows, chapters 6 and
   7, with every value, Save as, Rename, Delete and Reset). Beside it the sound's two parts.
 - **The meter panel** - LED bars, the gain of each stage and the spectrum with the MB Compressor bands and the EQ curve, as in the main
@@ -1245,8 +1245,8 @@ The window is one deck strip of the program:
     open in the DJ software (deck 1 is the first one opened) keep the same loudness preset, EQ, every value,
     look-ahead, oversampling and Mono: switched on, deck 2 takes deck 1's, and after that a change in either plug-in
     sets both (as "Deck A and deck B use the same loudness preset and EQ" in the program, 5.2); Bypass stays each
-    deck's own; **Show tooltips** and the **update check** - these two are shared with the program (the same settings
-    file). There are no audio devices: the DJ software chooses the plug-in's input and output.
+    deck's own; **Show tooltips** and the **update check** - the plug-in's own; the program has its own two. There
+    are no audio devices: the DJ software chooses the plug-in's input and output.
   - **About DJAP** - the version, the settings file in use, the copyright and licences, the update check (9.4), a
     Disclaimer button and a link to DJAP's GitHub page.
 
@@ -1255,15 +1255,19 @@ the spectrum window, the Setup window and the right-click menu now.
 
 ### 9.3 Loudness presets, EQs and values
 
-- The sounds, loudness presets and EQs come from the program's settings file (`%APPDATA%\DJAP\DJAP.ini`): the
-  shipped ones and your own. Without the program the plug-in has the shipped ones, and works just the same.
+- **The plug-in's settings are its own**, apart from the program's: its sounds, loudness presets and EQs, each
+  plug-in's choices, its windows' places, its tooltips and update check are in `%APPDATA%\DJAP\DJAP-Plugin.ini`; the
+  program keeps its own in `DJAP.ini`. A change in the one never changes the other. The first time a version from
+  0.1.390 on loads the plug-in, that file starts as a copy of the program's settings, so the sounds and presets you
+  made before are in both; after that each keeps its own. Without the program the plug-in starts with the shipped
+  ones, and works just the same.
 - Choosing a sound chooses its loudness preset and EQ (only the one that changes is loaded). Each plug-in remembers
   its sound, as its other choices. "(other)" in the sound list: a loudness preset and EQ no sound holds, or values
   that match no loudness preset.
-- Loudness presets and EQs made or changed in the plug-in's loudness window are saved in that same file, so the program
-  and every plug-in share them. Program and plug-ins never overwrite each other's loudness presets: each saves only its own
-  changes into the file as it is at that moment. The plug-in never changes the program's other settings. A loudness preset
-  made in the program appears in the plug-in when its loudness window is opened (or when it is loaded).
+- Loudness presets, EQs and sounds made or changed in the plug-in's windows are saved in the plug-in's file, which
+  every plug-in shares (deck 1 and deck 2, and a second DJ program). The plug-ins never overwrite each other's: each
+  saves only its own changes into the file as it is at that moment. A loudness preset made in one plug-in appears in
+  the other when its loudness window is opened (or when it is loaded).
 - Choosing a loudness preset or EQ loads its values. Choosing the one that is already chosen loads its values again -
   back to the loudness preset after changes. "(other values)" means the values match no loudness preset in the list (for example a
   project made on another computer).
@@ -1272,14 +1276,14 @@ the spectrum window, the Setup window and the right-click menu now.
   and the look-ahead. They move in the same steps as the program's sliders.
 - A **project** (or a preset of the DJ software) stores the values themselves, not only the loudness preset's name: it
   sounds the same on a computer where that loudness preset does not exist.
-- When the project is loaded again and its loudness preset or EQ **was changed since** (in the program or in
-  another plug-in), the plug-in follows the change: it takes the preset's values now (Noise switched on in the
+- When the project is loaded again and its loudness preset or EQ **was changed since** (in another plug-in), the
+  plug-in follows the change: it takes the preset's values now (Noise switched on in the
   preset, a wider stereo width, ...). As long as the preset did not change, a value changed in the project itself -
   a bass slider, a point dragged in the spectrum window, automation - stays as the project has it. DJ software that
   keeps the plug-in's parameter values for its set (instead of the plug-in's own project data) gets this too; a set
   saved with a version before 0.1.253 takes its loudness preset's and EQ's values once when it is opened.
 - **Each plug-in remembers its own choices.** The loudness preset, EQ, look-ahead, oversampling and Mono chosen in
-  the plug-in's window (or its Setup window) are kept in the settings file for that plug-in - the first one open in the
+  the plug-in's window (or its Setup window) are kept in the plug-in's settings file for that plug-in - the first one open in the
   DJ software, the second, and so on (deck 1 and deck 2) - and come back when the DJ software starts again, also in DJ
   software that keeps nothing of a plug-in between sessions. A project of the DJ software that stores the plug-in's
   own data still wins. A loudness preset or EQ deleted since: Medium and Neutral.
@@ -1296,8 +1300,8 @@ during an update, the setup never closes the DJ software: the new plug-in takes 
 Windows starts.
 
 The plug-in looks for a new version itself too, so an installation without the program is not left behind: once each
-time the DJ software loads it (the first time its window opens), when "Check GitHub for a new version once a day" is
-on in the program's settings file (on by default, also without the program). **Check now** in its About window asks
+time the DJ software loads it (the first time its window opens), when its own update check is on (its Setup
+window; on by default). **Check now** in its About window asks
 at once. When a newer version exists, the version line at the top of the plug-in's window says so (right-click the
 window for About DJAP); the About window's **Download** button opens
 the release's page on GitHub, where the setup can be downloaded. The plug-in never installs anything itself: close
@@ -1452,7 +1456,7 @@ The About window shows which file is in use. DJAP saves it after every change. I
 |---|---|
 | `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume, oversampling, `Mono` |
 | `[Decks]` | Each deck's sound (empty: none holds its two parts), loudness preset, EQ and processing switch, linked presets |
-| `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options. The plug-in's windows have lines of their own (`PluginSpectrum`, `PluginSetup`, ...) |
+| `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |
 | `[Preset <name>]` | The values of a loudness preset that differ from its shipped values (own loudness presets: all values, and `<key>.Saved` for a value that was changed since the preset was saved - its reset value) |
 | `[Colour <name>]` | The same for an EQ |
@@ -1463,6 +1467,12 @@ window. Back the file up to keep your own loudness presets.
 
 Settings of versions up to 0.1.57 (which had another program name) are copied once at the first start of DJAP; the
 old file stays.
+
+**The plug-in has a file of its own**, `%APPDATA%\DJAP\DJAP-Plugin.ini` (from 0.1.390 on), in the same form: its
+sounds, loudness presets and EQs, `[Plugin]` with each plug-in's choices and the link of deck 1 and deck 2, its
+windows' places (`PluginSpectrum`, `PluginSetup`, ...), its tooltips and update check. It starts once as a copy of
+the program's `%APPDATA%\DJAP\DJAP.ini`; after that the program and the plug-in never change each other's file.
+Edit it only while the DJ software is closed.
 
 ## 14. Troubleshooting
 
@@ -1486,7 +1496,7 @@ old file stays.
 | **DJAP does not start with Windows** | Check the option in the Setup window and Windows' startup apps list. |
 | **The update failed** | The Setup window says why; `%TEMP%\DJAP-update\setup.log` has the setup's log. The setup can always be downloaded from the GitHub page and run by hand. |
 | **The DJ software does not list the plug-in** | Was "VST® plug-in for DJ software" chosen in the setup, in an installation for all users? Is `C:\Program Files\Common Files\VST3\DJAP\DJAP.vst3` there? Let the DJ software scan its plug-ins again and restart it. The DJ software must be 64-bit. |
-| **The plug-in's sound list lacks my own sounds or presets** | The plug-in reads the program's settings in `%APPDATA%\DJAP\DJAP.ini` when it is loaded and when its Sound window is opened: click Edit... once, or load the plug-in again. A portable program (settings next to `DJAP.exe`) is not seen. |
+| **The plug-in's sound list lacks my own sounds or presets** | The plug-in has its own settings (`%APPDATA%\DJAP\DJAP-Plugin.ini`, from 0.1.390 on): sounds and presets made in the program after that are not in it - make them in the plug-in's Sound window too. Another plug-in's new ones appear when the Sound window is opened (click Edit... once) or the plug-in is loaded again. |
 | **DJAP closed unexpectedly** | Start `DJAP.exe --diag <file.txt>` from a command prompt; when it happens again, the file holds a report that helps to find the cause. |
 
 ## 15. Glossary

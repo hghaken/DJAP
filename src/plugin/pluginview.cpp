@@ -47,8 +47,8 @@ int g_views = 0; // open windows of this DLL: the classes and GDI+ live while on
 std::unique_ptr<Updater> g_updater;
 bool g_checked = false;
 // The places of the DLL's windows (client, 2026-10-29: "the plug-in does not remember the windows' places and
-// sizes"): one store for every window of the DLL while one is open, in the shared settings file under "Plugin..."
-// names, saved as a guest (Settings::saveMerged writes the windows it moved and keeps the program's)
+// sizes"): one store for every window of the DLL while one is open, in the plug-in's settings file under "Plugin..."
+// names, saved as a guest (Settings::saveMerged writes the windows it moved and keeps the rest)
 std::unique_ptr<Settings> g_places, g_placesBase;
 std::filesystem::path g_placesFile;
 
@@ -411,20 +411,20 @@ void PluginView::create() {
     fillLists();
 
     tips_.create(hwnd_);
-    tips_.add(version_, L"DJAP processes this channel like one deck of the program, with the same presets and "
-                        L"EQs. Every value is also a parameter in the host's own list, and can be automated.\n\n"
+    tips_.add(version_, L"DJAP processes this channel like one deck of the program, with the same stages and "
+                        L"shipped presets. Every value is also a parameter in the host's own list, and can be automated.\n\n"
                         L"Right-click anywhere on the window: Setup (look-ahead, oversampling, tooltips, the update "
                         L"check) and About DJAP. When a newer version exists it says so here (About DJAP has the details).");
     tips_.add(sound_, L"The sound: a loudness preset (the target loudness and every stage's values) with an EQ, under "
                       L"one name - the twelve shipped ones are named after the provincial capitals, your own follow "
-                      L"(from the settings file the program and the plug-in share). The project keeps the values "
+                      L"(the plug-in's own, apart from the program's). The project keeps the values "
                       L"themselves, so it sounds the same on a computer without that sound; \"(other)\" = a loudness "
                       L"preset and EQ no sound holds, or values that match no preset.");
     tips_.add(parts_, L"The sound's loudness preset and EQ. Edit... sets them apart, and opens their windows.");
     tips_.add(edit_, L"Opens the Sound window: the sound's loudness preset and EQ, each with its list and an Edit button "
                      L"(the loudness window: the stage switches and every value; the EQ window); Save as, Rename, "
-                     L"Delete and Reset of the sound. Your sounds and presets are saved in the settings file the program "
-                     L"uses too.");
+                     L"Delete and Reset of the sound. Your sounds and presets are saved in the plug-in's own settings "
+                     L"file; the DJAP program keeps its own.");
     tips_.add(graphs_, L"Opens the analysis window of this channel: the signal chain step by step (a click on a step "
                        L"opens its settings), the compressor's curve, loudness and gains of the last 60 s, the scope "
                        L"(right-click: input or output) and the goniometer with correlation and stereo width.");

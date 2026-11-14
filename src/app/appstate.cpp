@@ -14,6 +14,7 @@ namespace fs = std::filesystem;
 namespace {
 
 const wchar_t* const kIniName = L"DJAP.ini";
+const wchar_t* const kPluginIniName = L"DJAP-Plugin.ini"; // the plug-in's own (pluginSettingsFile)
 // the program was called AudioProcessor up to version 0.1.57: its settings are taken over
 const wchar_t* const kOldIniName = L"AudioProcessor.ini";
 const wchar_t* const kOldFolder = L"AudioProcessor";
@@ -73,6 +74,21 @@ void adoptOldSettings() {
         fs::create_directories(roaming, ec);
         fs::copy_file(old / kOldIniName, roaming / kIniName, ec);
     }
+}
+
+bool startPluginSettings(const fs::path& plugin, const fs::path& program) {
+    if (plugin.empty() || present(plugin) || !present(program)) return false;
+    std::error_code ec;
+    fs::create_directories(plugin.parent_path(), ec);
+    return fs::copy_file(program, plugin, ec) && !ec;
+}
+
+fs::path pluginSettingsFile() {
+    const fs::path roaming = appDataDir();
+    if (roaming.empty()) return {};
+    const fs::path plugin = roaming / kPluginIniName;
+    startPluginSettings(plugin, roaming / kIniName);
+    return plugin;
 }
 
 fs::path settingsFile() {

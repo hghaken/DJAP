@@ -327,7 +327,7 @@ void AudioWindow::createControls() {
                         L"the audio of the last session (it retries for 2 minutes while the devices come up). "
                         L"Saved in Windows' list of startup programs, not in the settings file.");
     tips_.add(tooltips_, L"On: every control of DJAP explains itself when the mouse rests on it (as this one). Off: no "
-                         L"tooltips in any window. The plug-in follows the next time it is loaded.");
+                         L"tooltips in any window. The plug-in has its own switch (its Setup window).");
     tips_.add(checkUpdates_, L"On: once a day (and a little after the program starts) DJAP asks GitHub whether a newer "
                              L"version has been published, and tells you (a message at the icon in the notification "
                              L"area, and in the About window). Nothing is downloaded or installed until you click "
