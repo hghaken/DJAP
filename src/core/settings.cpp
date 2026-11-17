@@ -526,7 +526,15 @@ std::string Settings::toText() const {
     o << "; EQ of each deck (tone, auto tone, sub bass, contour; the keys keep their old name Colour)\nColourA=" << deck[0].colour
       << "\nColourB=" << deck[1].colour << "\n";
     o << "; 1 = both decks use the same loudness preset and EQ (deck B follows deck A)\nLinkPresets=" << (linkPresets ? 1 : 0)
-      << "\n\n";
+      << "\n";
+    o << "; Volume of each deck after the limiter, per channel (dB, -15 .. 0: the main window's L and R faders), and\n"
+         "; 1 = the two faders move together\n";
+    for (int d = 0; d < 2; ++d) {
+        const char x = d == 0 ? 'A' : 'B';
+        o << "GainL" << x << "=" << compact(deck[d].gainL) << "\nGainR" << x << "=" << compact(deck[d].gainR)
+          << "\nGainLink" << x << "=" << (deck[d].gainLink ? 1 : 0) << "\n";
+    }
+    o << "\n";
     o << "[Window]\n; Where each window was last: x, y, width, height (screen pixels), 1 = maximised; a window without a\n"
          "; line opens centred on the screen\n";
     for (const auto& [name, p] : windows)
@@ -549,13 +557,14 @@ std::string Settings::toText() const {
         o << "\n[Plugin]\n; 1 = the plug-ins keep the same settings (the first one open leads)\nLink=" << (pluginLink ? 1 : 0)
           << "\n";
         o << "; What each plug-in instance last chose - 1 = the first one open (deck 1 in a DJ program), 2 = the\n"
-             "; second, ...: sound (empty: none), loudness preset, EQ (Colour), look-ahead (ms), oversampling, 1 = mono;\n"
-             "; taken at its next start\n";
+             "; second, ...: sound (empty: none), loudness preset, EQ (Colour), look-ahead (ms), oversampling, 1 = mono,\n"
+             "; its L and R faders (dB) and 1 = they move together; taken at its next start\n";
         for (const auto& [n, c] : pluginSlots)
             o << "Sound" << n << "=" << c.sound << "\nLoudness" << n << "=" << c.preset << "\nColour" << n << "=" << c.colour
               << "\nLookAhead" << n << "="
               << compact(c.lookAheadMs) << "\nOversampling" << n << "=" << c.oversampling << "\nMono" << n << "="
-              << (c.mono ? 1 : 0) << "\n";
+              << (c.mono ? 1 : 0) << "\nGainL" << n << "=" << compact(c.gainL) << "\nGainR" << n << "="
+              << compact(c.gainR) << "\nGainLink" << n << "=" << (c.gainLink ? 1 : 0) << "\n";
     }
 
     for (const Preset& p : presets) {
@@ -761,6 +770,9 @@ void Settings::fromText(const std::string& text) {
         else if (what == "LookAhead" && parseDouble(value, d)) c.lookAheadMs = std::min(5.0, std::max(0.0, d));
         else if (what == "Oversampling") c.oversampling = toInt(value, 4) >= 6 ? 8 : toInt(value, 4) >= 3 ? 4 : 2;
         else if (what == "Mono") c.mono = toInt(value, 0) != 0;
+        else if (what == "GainL" && parseDouble(value, d)) c.gainL = clampGain(d);
+        else if (what == "GainR" && parseDouble(value, d)) c.gainR = clampGain(d);
+        else if (what == "GainLink") c.gainLink = toInt(value, 1) != 0;
     }
 
     const std::string prefix = kPresetPrefix;
@@ -861,6 +873,12 @@ void Settings::fromText(const std::string& text) {
         if (auto v = get("Decks", ok)) deck[d].processing = toInt(*v, 1) != 0;
         if (auto v = get("Decks", d == 0 ? "ColourA" : "ColourB"))
             if (find(*v, PresetKind::Colour)) deck[d].colour = *v;
+        double g = 0;
+        if (auto v = get("Decks", d == 0 ? "GainLA" : "GainLB"))
+            if (parseDouble(*v, g)) deck[d].gainL = clampGain(g);
+        if (auto v = get("Decks", d == 0 ? "GainRA" : "GainRB"))
+            if (parseDouble(*v, g)) deck[d].gainR = clampGain(g);
+        if (auto v = get("Decks", d == 0 ? "GainLinkA" : "GainLinkB")) deck[d].gainLink = toInt(*v, 1) != 0;
     }
     // the sounds: a shipped one's parts as the file has them, an own one as it was saved
     const std::string soundPrefix = kSoundPrefix;

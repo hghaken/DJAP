@@ -102,6 +102,14 @@ public:
     std::string soundName() const; // "" for "(other)"
     // The window chose a sound: its preset and its colour, as two choices of the lists.
     void chooseSound(int index);
+    // The window's L and R faders (client, 2026-11-17): this instance's volume per channel after the limiter (dB,
+    // kGainFloorDb .. 0) and whether they move together - its own (not the sound's, not shared with linked
+    // instances: as Bypass), kept in [Plugin] of its settings file (Settings::pluginSlots), not host parameters.
+    double faderL() const { return faderL_; }
+    double faderR() const { return faderR_; }
+    bool faderLink() const { return faderLink_; }
+    void setFaders(double left, double right, bool keep); // keep: the drag's end - remembered
+    void setFaderLink(bool on);
     // The Sound window for this plug-in (the Edit button beside its Sound list).
     void openSoundWindow(HWND owner);
     // The loudness and EQ windows' graphs: whose audio they draw (the plug-in's window, while it is open) and that
@@ -126,6 +134,7 @@ private:
         bool bypass;
         int oversampling;
         bool mono;
+        double gainL, gainR; // the window's faders
     };
 
     void addParameters();
@@ -170,12 +179,15 @@ private:
     double lookMs_ = 1.5;
     int oversampling_ = kOversamplingDefault;
     bool mono_ = false;
+    double gainL_ = 0.0, gainR_ = 0.0; // the faders (DeckControl::gainL)
     bool bypass_ = false, dirty_ = true;
     SeqLockSlot<Snapshot> incoming_;
     std::atomic<Steinberg::uint32> latency_{0};
     std::atomic<bool> hostRoutes_{false}; // the host has delivered parameter changes to process()
 
     // controller side
+    double faderL_ = 0.0, faderR_ = 0.0; // the window's L and R faders, dB
+    bool faderLink_ = true;
     bool loading_ = false; // setState / a preset load in progress: no preset reloads from setParamNormalized
     // A preset or colour chosen in the window: the values it changes are told to the host too (tellHost)
     bool fromWindow_ = false;

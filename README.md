@@ -74,8 +74,8 @@ window its two parts are chosen and edited, and own sounds are saved, renamed an
 
 - `DJAP.exe` - the GUI: two deck strips (the sound, with the Sound window for its loudness preset and EQ - one choice
   when both decks share them -, processing /
-  bypass, meters for input and output loudness, true peak, the gain of every stage and the spectrum of input and
-  output), a spectrum window (a click on a deck's spectrum: the EQ as a curve with points to drag, the
+  bypass, an L and an R volume fader with a Link box, meters for input and output loudness, true peak, the gain of
+  every stage and the spectrum of input and output), a spectrum window (a click on a deck's spectrum: the EQ as a curve with points to drag, the
   MB Compressor bands with their gains, the deck's loudness preset and EQ, the four bass sliders - bass level,
   enhancer, width and frequency - and how long the spectrum is averaged), an analysis window (compressor curve, loudness and gain over the last minute,
   goniometer, correlation and stereo width), a loudness window with the stage switches and every parameter (the
@@ -115,7 +115,8 @@ window its two parts are chosen and edited, and own sounds are saved, renamed an
   Windows decodes (MP3, M4A, WMA, FLAC; mono plays on both channels); the output is WAV.
 - `DJAP.vst3` - the plug-in for DJ software: one deck (stereo in, stereo out) with the same chain, the same sounds,
   loudness presets and EQs (read from the program's settings file) and a window like a deck strip of the program: the
-  sound (with the Sound window), look-ahead, Bypass, the four bass sliders and the meter panel. Every value is a parameter the host can
+  sound (with the Sound window), look-ahead, Bypass, the four bass sliders and the meter panel with its L and R
+  faders. Every value is a parameter the host can
   show and automate; a project stores the values themselves. The host is told the latency (the look-ahead).
 
 ## Building

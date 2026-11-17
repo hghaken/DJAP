@@ -143,7 +143,9 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.on[sClipper] = on(pClipOn);
     c.on[sLimiter] = on(pLimOn);
     c.inputGain = dbToLin(v[pInputGain]);
-    c.outputGain = dbToLin(v[pOutputGain]);
+    auto down = [](double db) { return db < 0.0 ? std::max(-60.0, db) : 0.0; }; // (NaN: 0)
+    c.outputGainL = dbToLin(v[pOutputGain] + down(ctl.gainL));
+    c.outputGainR = dbToLin(v[pOutputGain] + down(ctl.gainR));
     c.switchStep = 1.0 / (0.020 * fs); // 20 ms switch ramps
     c.gainSmooth = onePoleCoeff(0.005, fs);
     const double ctrlRate = fs / kControlBlock;
@@ -660,7 +662,8 @@ void DeckProcessor::applyConfig(const DeckConfig& c) {
         masterMix_ = c.processing ? 1.0 : 0.0;
         monoMix_ = c.mono ? 1.0 : 0.0;
         inGain_ = c.inputGain;
-        outGain_ = c.outputGain;
+        outGainL_ = c.outputGainL;
+        outGainR_ = c.outputGainR;
         compMakeupS_ = c.compMakeup;
         bassGainS_ = c.bassGain;
         // the clipper's drive and bend too: resetStates ran before this configuration (cfg_ still the old one), and
@@ -1148,9 +1151,10 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             }
             masterMix_ = moveToward(masterMix_, c.processing ? 1.0 : 0.0, c.switchStep);
             inGain_ = toward(inGain_, c.inputGain, c.gainSmooth);
-            outGain_ = toward(outGain_, c.outputGain, c.gainSmooth);
+            outGainL_ = toward(outGainL_, c.outputGainL, c.gainSmooth);
+            outGainR_ = toward(outGainR_, c.outputGainR, c.gainSmooth);
             settled_ = done && running_[sLeveller] == c.on[sLeveller] && masterMix_ == (c.processing ? 1.0 : 0.0) &&
-                       inGain_ == c.inputGain && outGain_ == c.outputGain;
+                       inGain_ == c.inputGain && outGainL_ == c.outputGainL && outGainR_ == c.outputGainR;
         }
 
         if (ctrlPos_ == 0) controlUpdate();
@@ -1363,9 +1367,10 @@ void DeckProcessor::process(float* left, float* right, int frames) {
         limiter_.process(l, r);
         tap(ctLimiter, l, r);
 
-        // output gain (only down), bypass crossfade, look-ahead reconfiguration fade, clip guard
-        l *= outGain_;
-        r *= outGain_;
+        // output gain with the deck's L / R volume (only down), bypass crossfade, look-ahead reconfiguration fade,
+        // clip guard
+        l *= outGainL_;
+        r *= outGainR_;
         float ol, orr;
         if (masterMix_ >= 1.0) {
             ol = static_cast<float>(l);

@@ -657,6 +657,51 @@ void mono() {
     CHECK(exact == b.l.size() - static_cast<size_t>(lat));
 }
 
+// The L and R faders (DeckControl::gainL / gainR, client 2026-11-17): after the limiter, each channel on its own - the
+// right one at 0 dB stays bit-exact, the left one at -6 dB is the same signal times 10^(-6/20); bypassed, the input.
+void channelGains() {
+    std::printf("-- channel gains: the L and R faders after the limiter\n");
+    const Buffer l = music(4, 43, 0.5), r = music(4, 44, 0.5);
+    const PresetValues v = shippedPresetValues(3); // Loud
+    DeckControl c;
+    const Stereo s = runLive(v, c, l, r, {});
+    c.gainL = -6.0;
+    const Stereo g = runLive(v, c, l, r, {});
+    size_t sameR = 0, checked = 0;
+    double worst = 0.0;
+    const double want = dbToLin(-6.0);
+    for (size_t i = 0; i < s.l.size(); ++i) {
+        sameR += g.r[i] == s.r[i];
+        if (std::fabs(s.l[i]) > 1e-3) {
+            ++checked;
+            worst = std::max(worst, std::fabs(g.l[i] / s.l[i] - want));
+        }
+    }
+    std::printf("   L at -6 dB: %zu frames, largest ratio error %.2g; R at 0 dB: %zu of %zu frames the same\n", checked,
+                worst, sameR, s.r.size());
+    CHECK(checked > s.l.size() / 2);
+    CHECK(worst < 1e-5);
+    CHECK(sameR == s.r.size());
+    // under the ceiling: only down (a value above 0 counts as 0)
+    DeckControl up;
+    up.gainL = up.gainR = 6.0;
+    const Stereo u = runLive(v, up, l, r, {});
+    size_t sameUp = 0;
+    for (size_t i = 0; i < s.l.size(); ++i) sameUp += u.l[i] == s.l[i] && u.r[i] == s.r[i];
+    std::printf("   +6 dB asked: %zu of %zu frames as at 0 dB\n", sameUp, s.l.size());
+    CHECK(sameUp == s.l.size());
+    // bypassed: the input, unchanged, delayed by the look-ahead
+    c.processing = false;
+    const Stereo b = runLive(v, c, l, r, {});
+    const int lat = lookFrames(c.lookMs, fs);
+    size_t exact = 0;
+    for (size_t i = static_cast<size_t>(lat); i < b.l.size(); ++i)
+        exact += b.l[i] == l[i - static_cast<size_t>(lat)] && b.r[i] == r[i - static_cast<size_t>(lat)];
+    std::printf("   bypassed with the faders down: %zu of %zu frames the input\n", exact,
+                b.l.size() - static_cast<size_t>(lat));
+    CHECK(exact == b.l.size() - static_cast<size_t>(lat));
+}
+
 void noAllocations() {
     std::printf("-- no allocation in process(), with changes published\n");
     DeckProcessor d;
@@ -890,6 +935,14 @@ void clicks() {
     monoOn.mono = true;
     ratio = clickRatio(base, ctl, {{frames(3.0), base, monoOn}, {frames(3.5), base, ctl}}, 3.0, 4.0, l, r);
     std::printf("   mono on -> off: %.2f\n", ratio);
+    CHECK(ratio < 1.5);
+
+    // the L and R faders: L to -15 dB and R to -6, then both back (a 5 ms ramp, as the output gain)
+    DeckControl faders = ctl;
+    faders.gainL = -15.0;
+    faders.gainR = -6.0;
+    ratio = clickRatio(base, ctl, {{frames(3.0), base, faders}, {frames(3.5), base, ctl}}, 3.0, 4.0, l, r);
+    std::printf("   faders L -15, R -6 dB -> 0: %.2f\n", ratio);
     CHECK(ratio < 1.5);
 
     // oversampling 4x -> 8x -> back to 4x within the fade: the change is called off and the stages fade straight back
@@ -1289,6 +1342,7 @@ int main(int argc, char** argv) {
         badInput();
         mxcsrRestored();
         mono();
+        channelGains();
         noAllocations();
         chainMeters();
     }

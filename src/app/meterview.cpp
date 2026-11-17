@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "meterview.h"
 
+#include "settings.h"
 #include "spectrumdraw.h"
 #include "tooltips.h"
 
@@ -27,8 +28,8 @@ constexpr double kSpecTop = 0.0, kSpecBottom = -90.0; // spectrum scale (dB)
 constexpr double kTop = 3.0, kBottom = -40.0; // vertical bar scale (LUFS / dBTP)
 constexpr int kShownRows = kMeterRows - 1;     // stage rows drawn: the density row's place went to the spectrum
 
-// Tooltip parts: the four bars, the seven stage rows, the spectrum.
-enum TipPart { tInL, tInR, tOutL, tOutR, tRow0, tSpectrum = tRow0 + kMeterRows, kTipParts };
+// Tooltip parts: the four bars, the seven stage rows, the spectrum, the Gain fader.
+enum TipPart { tInL, tInR, tOutL, tOutR, tRow0, tSpectrum = tRow0 + kMeterRows, tGain, kTipParts };
 const wchar_t* const kTips[kTipParts] = {
     L"Input, left channel, after the loudness preset's input gain (what enters the processing): its sample peak (dBFS, held, "
     L"falling 20 dB/s) as LEDs - amber from -6 dBFS, red from "
@@ -62,6 +63,11 @@ const wchar_t* const kTips[kTipParts] = {
     L"line lies above the orange one the processing lifts that range. Purple: the MB Compressor's bands (dashed: "
     L"their splits, with the band numbers) and a line per band at its gain now, +-12 dB over the height - blue = "
     L"lifted, red = turned down.",
+    L"Gain: the deck's volume, the left (L) and the right (R) channel, 0 to -15 dB after the limiter (only down, so "
+    L"the ceiling holds; the Out bars show the result). Drag a fader, click in its slot, or turn the mouse wheel over "
+    L"it (0.5 dB a step); double-click: back to 0 dB. Link on: the two move together, each by as much (a difference "
+    L"between them stays); off: each on its own. The deck's own setting - another sound leaves it as it is. Grey: the "
+    L"deck is bypassed, and nothing is applied.",
 };
 
 void line(HDC dc, int x0, int y0, int x1, int y1, COLORREF c, int style = PS_SOLID, int width = 1) {
@@ -81,6 +87,15 @@ struct View {
     RECT tipRect[kTipParts] = {};
     double hold[4] = {kFloorDb, kFloorDb, kFloorDb, kFloorDb}; // peak-hold LED of each vertical bar
     ULONGLONG holdAt[4] = {};                                  // when it was set (GetTickCount64)
+    // the Gain faders as last painted: each one's column (empty: not drawn) and cap, the Link box, the y of the
+    // range's top (0 dB) and bottom - a cap's centre; a drag's state
+    RECT fader[2] = {}, cap[2] = {}, link = {};
+    int gainTop = 0, gainBottom = 1;
+    int dragging = -1;          // the fader being dragged (0 L, 1 R), -1 none
+    int grab = 0;               // the cap's centre minus the mouse's y where the drag began (0: the slot was clicked)
+    double start[2] = {};       // both values where the drag began
+    double gain[2] = {};        // the values of the last message to the parent (drawn while dragging)
+    int wheel = 0;              // the mouse wheel's part of a step not yet used
 };
 
 constexpr ULONGLONG kHoldMs = 1500; // the peak-hold LED stays this long, then follows the bar down
@@ -140,6 +155,114 @@ void ensureFonts(HWND hwnd, View& v) {
     lf.lfHeight = lf.lfHeight * 85 / 100;
     v.small = CreateFontIndirectW(&lf);
     v.fontDpi = dpi;
+}
+
+// A fader cap of brushed metal (as the window's background): light at the top, darker below, its channel's letter
+// above and grip ridges under the dark centre line that the scale is read at; rounded, with a dark frame and a shadow.
+void paintCap(HDC dc, const RECT& c, bool on, double s, const char* letter, int th) {
+    auto px = [s](double x) { return static_cast<int>(x * s + 0.5); };
+    fill(dc, c.left + px(1), c.bottom, c.right + px(1), c.bottom + px(2), RGB(12, 13, 15)); // shadow
+    const int round = std::max(4, px(6));
+    HRGN rgn = CreateRoundRectRgn(c.left, c.top, c.right + 1, c.bottom + 1, round, round);
+    SelectClipRgn(dc, rgn);
+    const int h = std::max(1, static_cast<int>(c.bottom - c.top));
+    for (int y = c.top; y < c.bottom; ++y) {
+        const double f = static_cast<double>(y - c.top) / h;
+        const int g = on ? static_cast<int>(236 - 86 * f) : static_cast<int>(122 - 40 * f);
+        fill(dc, c.left, y, c.right, y + 1, RGB(g, g + 2, g + 5));
+    }
+    fill(dc, c.left, c.top, c.right, c.top + 1, on ? RGB(252, 252, 253) : RGB(140, 142, 146)); // the lit top edge
+    const int cy = (c.top + c.bottom) / 2, pitch = std::max(3, px(4)), inset = std::max(3, px(4));
+    text(dc, (c.left + c.right) / 2, (c.top + cy) / 2 - th / 2, letter, on ? RGB(38, 40, 44) : RGB(54, 56, 60), TA_CENTER);
+    for (int k = 1; k <= 3; ++k) {
+        const int y = cy + k * pitch;
+        fill(dc, c.left + inset, y, c.right - inset, y + 1, on ? RGB(112, 116, 122) : RGB(70, 72, 76));
+        fill(dc, c.left + inset, y + 1, c.right - inset, y + 2, on ? RGB(246, 247, 249) : RGB(130, 132, 136));
+    }
+    fill(dc, c.left, cy - std::max(1, px(1)), c.right, cy + std::max(1, px(1)), on ? RGB(24, 25, 27) : RGB(58, 60, 64));
+    SelectClipRgn(dc, nullptr);
+    HBRUSH frame = CreateSolidBrush(RGB(10, 11, 12));
+    FrameRgn(dc, rgn, frame, 1, 1);
+    DeleteObject(frame);
+    DeleteObject(rgn);
+}
+
+// The Gain faders in the column l .. l + w: the name over both and each one's value in the two header rows, two dark
+// slots with a tick every 3 dB (the labels right of the R one), the caps at the values - joined by a blue line while
+// they are linked - and under them the Link box.
+void paintFaders(HWND hwnd, HDC dc, View& v, int l, int w, int margin, int top, int bottom, int th, double s) {
+    auto px = [s](double x) { return static_cast<int>(x * s + 0.5); };
+    const MeterViewData& d = v.d;
+    const bool on = d.processing;
+    const int capW = px(24), capH = px(34), cx[2] = {l + px(15), l + px(45)};
+    // the Link box's row under the slots
+    SelectObject(dc, v.small);
+    TEXTMETRICW stm;
+    GetTextMetricsW(dc, &stm);
+    const int sth = stm.tmHeight, box = std::max(9, px(11));
+    const int slotBottom = bottom - sth - px(8);
+    v.gainTop = top + capH / 2;
+    v.gainBottom = std::max(v.gainTop + 1, slotBottom - capH / 2);
+    auto yOf = [&](double db) {
+        const double t = -std::min(0.0, std::max(kGainFloorDb, db)) / -kGainFloorDb;
+        return v.gainTop + static_cast<int>(t * (v.gainBottom - v.gainTop) + 0.5);
+    };
+    const double value[2] = {v.dragging >= 0 ? v.gain[0] : d.gainL, v.dragging >= 0 ? v.gain[1] : d.gainR};
+    SelectObject(dc, v.font);
+    text(dc, (cx[0] + cx[1]) / 2, margin, "Gain", on ? kText : kDim, TA_CENTER);
+    SelectObject(dc, v.small);
+    char b[24];
+    const int slotW = std::max(4, px(6));
+    for (int k = 0; k < 2; ++k) {
+        std::snprintf(b, sizeof b, "%.1f", value[k]);
+        text(dc, cx[k], margin + th, b, on ? kText : kDim, TA_CENTER);
+        const int sl = cx[k] - slotW / 2;
+        fill(dc, sl, top, sl + slotW, slotBottom, RGB(8, 9, 10));
+        fill(dc, sl + slotW - 1, top, sl + slotW, slotBottom, RGB(66, 70, 76)); // the lit right edge
+    }
+    for (double db = 0.0; db >= kGainFloorDb - 1e-9; db -= 3.0) { // a tick every 3 dB beside each slot
+        const int y = yOf(db);
+        fill(dc, cx[0] - capW / 2 + px(2), y, cx[0] - slotW / 2 - px(2), y + 1, kDim);
+        fill(dc, cx[0] + slotW / 2 + px(3), y, cx[1] - slotW / 2 - px(2), y + 1, kDim);
+        fill(dc, cx[1] + slotW / 2 + px(3), y, cx[1] + capW / 2 - px(2), y + 1, kDim);
+        std::snprintf(b, sizeof b, "%g", db);
+        text(dc, cx[1] + capW / 2 + px(3), y - sth / 2, b, db == 0.0 ? kText : kDim);
+    }
+    const char* const letters[2] = {"L", "R"};
+    for (int k = 0; k < 2; ++k) {
+        const int yc = yOf(value[k]);
+        v.cap[k] = RECT{cx[k] - capW / 2, yc - capH / 2, cx[k] - capW / 2 + capW, yc - capH / 2 + capH};
+    }
+    if (d.gainLink) { // the two caps' centre lines joined
+        HPEN pen = CreatePen(PS_SOLID, std::max(2, px(2)), on ? kGainLine : kDim);
+        HGDIOBJ old = SelectObject(dc, pen);
+        MoveToEx(dc, v.cap[0].right, (v.cap[0].top + v.cap[0].bottom) / 2, nullptr);
+        LineTo(dc, v.cap[1].left, (v.cap[1].top + v.cap[1].bottom) / 2);
+        SelectObject(dc, old);
+        DeleteObject(pen);
+    }
+    for (int k = 0; k < 2; ++k) paintCap(dc, v.cap[k], on, s, letters[k], sth);
+    // the Link box: a check box of the panel's own, blue with a white tick when on
+    SIZE ts{};
+    GetTextExtentPoint32W(dc, L"Link", 4, &ts);
+    const int lx = (cx[0] + cx[1]) / 2 - (box + px(5) + ts.cx) / 2, ly = slotBottom + px(6) + (sth - box) / 2;
+    fill(dc, lx, ly, lx + box, ly + box, kDim);
+    fill(dc, lx + 1, ly + 1, lx + box - 1, ly + box - 1, d.gainLink ? (on ? kGainLine : kDim) : RGB(16, 17, 19));
+    if (d.gainLink) {
+        HPEN pen = CreatePen(PS_SOLID, std::max(2, px(1.6)), kWhite);
+        HGDIOBJ old = SelectObject(dc, pen);
+        MoveToEx(dc, lx + box * 22 / 100, ly + box * 52 / 100, nullptr);
+        LineTo(dc, lx + box * 42 / 100, ly + box * 72 / 100);
+        LineTo(dc, lx + box * 78 / 100, ly + box * 28 / 100);
+        SelectObject(dc, old);
+        DeleteObject(pen);
+    }
+    text(dc, lx + box + px(5), slotBottom + px(6), "Link", on ? kText : kDim);
+    v.link = RECT{lx - px(3), slotBottom + px(4), lx + box + px(5) + ts.cx + px(3), bottom + px(2)};
+    const int mid = (cx[0] + cx[1]) / 2;
+    v.fader[0] = RECT{l, top - px(4), mid, slotBottom + px(2)};
+    v.fader[1] = RECT{mid, top - px(4), l + w, slotBottom + px(2)};
+    placeTip(hwnd, v, tGain, l, margin, l + w, bottom);
 }
 
 void paint(HWND hwnd, HDC target, View& v) {
@@ -253,8 +376,19 @@ void paint(HWND hwnd, HDC target, View& v) {
         }
     }
 
+    // ---- the Gain faders beside the Out bars (their LUFS scale between them) ----
+    const int faderL = barsRight + scaleW + px(4), faderW = px(82);
+    const bool fader = d.gainFaders && bottom - top > px(140);
+    if (fader) {
+        paintFaders(hwnd, dc, v, faderL, faderW, margin, top, bottom, th, s);
+        SelectObject(dc, v.font);
+    } else if (v.fader[0].right > v.fader[0].left) {
+        v.fader[0] = v.fader[1] = v.link = RECT{};
+        placeTip(hwnd, v, tGain, 0, 0, 0, 0);
+    }
+
     // ---- gain of each stage ----
-    const int gx = barsRight + scaleW + px(8);
+    const int gx = fader ? faderL + faderW + px(10) : barsRight + scaleW + px(8);
     const int nameW = px(78);
     // every bar from barL to the right margin (as the spectrum)
     const int barL = gx + nameW, fullR = W - margin;
@@ -399,6 +533,80 @@ int clickTarget(const View& v, POINT pt) {
     return -1;
 }
 
+// The Gain faders: which one pt is on (0 L, 1 R, -1 none), the value at a cap centre's y (in steps), both values
+// when fader k goes to db (linked: the other by as much, as far as both stay in the range), and values told to the
+// parent - which keeps them and sends them back with the next setMeterView; until then these are drawn.
+int faderAt(const View& v, POINT pt) {
+    if (!v.d.gainFaders) return -1;
+    for (int k = 0; k < 2; ++k)
+        if (PtInRect(&v.fader[k], pt)) return k;
+    return -1;
+}
+
+bool onLink(const View& v, POINT pt) { return v.d.gainFaders && PtInRect(&v.link, pt); }
+
+double snapGain(double db) { return clampGain(std::round(db / kGainStepDb) * kGainStepDb); }
+
+double gainAt(const View& v, int y) {
+    const double t = static_cast<double>(y - v.gainTop) / std::max(1, v.gainBottom - v.gainTop);
+    return snapGain(t * kGainFloorDb);
+}
+
+void moved(const View& v, const double from[2], int k, double db, double out[2]) {
+    out[0] = from[0];
+    out[1] = from[1];
+    if (!v.d.gainLink) {
+        out[k] = snapGain(db);
+        return;
+    }
+    const double lo = kGainFloorDb - std::min(from[0], from[1]), hi = -std::max(from[0], from[1]);
+    const double delta = std::min(hi, std::max(lo, db - from[k]));
+    out[0] = snapGain(from[0] + delta);
+    out[1] = snapGain(from[1] + delta);
+}
+
+void tellGain(HWND hwnd, View& v, const double g[2], int code) {
+    v.gain[0] = v.d.gainL = g[0];
+    v.gain[1] = v.d.gainR = g[1];
+    InvalidateRect(hwnd, nullptr, FALSE);
+    SendMessageW(GetParent(hwnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(hwnd), code), reinterpret_cast<LPARAM>(hwnd));
+}
+
+void endDrag(HWND hwnd, View& v) {
+    v.dragging = -1;
+    if (GetCapture() == hwnd) ReleaseCapture(); // (its WM_CAPTURECHANGED finds no drag)
+    const double g[2] = {v.gain[0], v.gain[1]};
+    tellGain(hwnd, v, g, kMeterGainSet); // kept: saved
+}
+
+// A press of the left button: on a fader a drag begins - from the cap where it was taken, or with the cap jumped to a
+// click in the slot; on the Link box it switches; elsewhere what the place opens.
+void press(HWND hwnd, View& v, POINT pt) {
+    const int k = faderAt(v, pt);
+    if (k >= 0) {
+        v.grab = PtInRect(&v.cap[k], pt) ? (v.cap[k].top + v.cap[k].bottom) / 2 - pt.y : 0;
+        v.start[0] = v.gain[0] = v.d.gainL;
+        v.start[1] = v.gain[1] = v.d.gainR;
+        v.dragging = k;
+        SetCapture(hwnd);
+        double g[2];
+        moved(v, v.start, k, gainAt(v, pt.y + v.grab), g);
+        if (g[0] != v.gain[0] || g[1] != v.gain[1]) tellGain(hwnd, v, g, kMeterGainMoved);
+        return;
+    }
+    if (onLink(v, pt)) {
+        v.d.gainLink = !v.d.gainLink;
+        InvalidateRect(hwnd, nullptr, FALSE);
+        SendMessageW(GetParent(hwnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(hwnd), kMeterGainLink),
+                     reinterpret_cast<LPARAM>(hwnd));
+        return;
+    }
+    const int target = clickTarget(v, pt);
+    if (target >= 0)
+        SendMessageW(GetParent(hwnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(hwnd), kMeterOpenRow + target),
+                     reinterpret_cast<LPARAM>(hwnd));
+}
+
 LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     View* v = reinterpret_cast<View*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
     switch (msg) {
@@ -413,31 +621,81 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                                          (i >= tRow0 && i < tRow0 + kMeterRows ? L" Click: opens its settings."
                                           : i <= tInR ? L" Click: opens the General tab (input gain, target)."
                                           : i <= tOutR ? L" Click: opens the Limiter tab (its ceiling)."
+                                          : i == tGain ? L""
                                                        : L" Click: opens the big spectrum window, with the EQ "
                                                          L"curve and the bass settings.");
                 v->tips.addRect(hwnd, static_cast<UINT_PTR>(i), tip.c_str());
             }
         }
         return 0;
-    case WM_SETCURSOR: // a hand over the stage rows and the LED bars: a click opens their settings
+    case WM_SETCURSOR: // a hand over the stage rows, the LED bars and the Link box; up / down on the Gain faders
         if (v && LOWORD(lp) == HTCLIENT) {
             POINT pt;
             GetCursorPos(&pt);
             ScreenToClient(hwnd, &pt);
-            if (clickTarget(*v, pt) >= 0) {
+            if (v->dragging >= 0 || faderAt(*v, pt) >= 0) {
+                SetCursor(LoadCursorW(nullptr, IDC_SIZENS));
+                return TRUE;
+            }
+            if (onLink(*v, pt) || clickTarget(*v, pt) >= 0) {
                 SetCursor(LoadCursorW(nullptr, IDC_HAND));
                 return TRUE;
             }
         }
         break;
     case WM_LBUTTONDOWN:
+        if (v) press(hwnd, *v, POINT{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))});
+        return 0;
+    case WM_LBUTTONDBLCLK: // on a fader: 0 dB (linked: both); elsewhere a second press
         if (v) {
-            const int target = clickTarget(*v, POINT{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))});
-            if (target >= 0)
-                SendMessageW(GetParent(hwnd), WM_COMMAND, MAKEWPARAM(GetDlgCtrlID(hwnd), kMeterOpenRow + target),
-                             reinterpret_cast<LPARAM>(hwnd));
+            const POINT pt{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+            const int k = faderAt(*v, pt);
+            if (k >= 0) {
+                if (v->dragging >= 0) {
+                    v->dragging = -1;
+                    if (GetCapture() == hwnd) ReleaseCapture();
+                }
+                double g[2] = {v->d.gainL, v->d.gainR};
+                if (v->d.gainLink) g[0] = g[1] = 0.0;
+                else g[k] = 0.0;
+                tellGain(hwnd, *v, g, kMeterGainSet);
+            } else {
+                press(hwnd, *v, pt);
+            }
         }
         return 0;
+    case WM_MOUSEMOVE:
+        if (v && v->dragging >= 0) {
+            double g[2];
+            moved(*v, v->start, v->dragging, gainAt(*v, static_cast<short>(HIWORD(lp)) + v->grab), g);
+            if (g[0] != v->gain[0] || g[1] != v->gain[1]) tellGain(hwnd, *v, g, kMeterGainMoved);
+        }
+        return 0;
+    case WM_LBUTTONUP:
+        if (v && v->dragging >= 0) endDrag(hwnd, *v);
+        return 0;
+    case WM_CAPTURECHANGED: // taken away during a drag (another window, Alt+Tab): the values so far are kept
+        if (v && v->dragging >= 0) endDrag(hwnd, *v);
+        return 0;
+    case WM_MOUSEWHEEL: // over a fader: a step per notch (linked: both); elsewhere to the parent
+        if (v) {
+            POINT pt{static_cast<short>(LOWORD(lp)), static_cast<short>(HIWORD(lp))};
+            ScreenToClient(hwnd, &pt);
+            const int k = faderAt(*v, pt);
+            if (k >= 0 && v->dragging < 0) {
+                v->wheel += GET_WHEEL_DELTA_WPARAM(wp);
+                const int steps = v->wheel / WHEEL_DELTA;
+                v->wheel -= steps * WHEEL_DELTA;
+                if (steps != 0) {
+                    const double now[2] = {v->d.gainL, v->d.gainR};
+                    double g[2];
+                    moved(*v, now, k, now[k] + steps * kGainStepDb, g);
+                    if (g[0] != now[0] || g[1] != now[1]) tellGain(hwnd, *v, g, kMeterGainSet);
+                }
+                return 0;
+            }
+        }
+        break;
     case WM_DPICHANGED_AFTERPARENT:
         if (v) v->tips.setDpi(GetDpiForWindow(hwnd));
         return 0;
@@ -503,6 +761,7 @@ static HINSTANCE g_instance = nullptr; // the module the class is registered for
 void registerMeterView(HINSTANCE instance) {
     g_instance = instance;
     WNDCLASSW wc{};
+    wc.style = CS_DBLCLKS; // the Gain fader's double-click
     wc.lpfnWndProc = proc;
     wc.hInstance = instance;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
@@ -525,6 +784,17 @@ void setMeterView(HWND view, const MeterViewData& data) {
         v->d = data;
         InvalidateRect(view, nullptr, FALSE);
     }
+}
+
+void meterViewGain(HWND view, double& left, double& right) {
+    const View* v = reinterpret_cast<const View*>(GetWindowLongPtrW(view, GWLP_USERDATA));
+    left = v ? v->gain[0] : 0.0;
+    right = v ? v->gain[1] : 0.0;
+}
+
+bool meterViewLink(HWND view) {
+    const View* v = reinterpret_cast<const View*>(GetWindowLongPtrW(view, GWLP_USERDATA));
+    return !v || v->d.gainLink;
 }
 
 } // namespace ap

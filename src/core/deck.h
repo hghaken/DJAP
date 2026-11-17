@@ -86,6 +86,10 @@ struct DeckControl {
     bool mono = false;       // both channels (L + R) / 2 from the input on (client, 2026-10-29: a mono sound system)
     bool processing = true;  // false = bypass (input delayed by the look-ahead, bit-exact)
     bool freeze = false;     // leveller holds its gain
+    // the deck's volume of each channel, dB, after the limiter and the preset's output gain - only down, so the
+    // ceiling holds (client, 2026-11-17: "an L and an R fader on the main page, with a link check box"); the deck's
+    // own, not the preset's (client: "with the deck")
+    double gainL = 0.0, gainR = 0.0;
 };
 
 // Everything the audio thread needs, computed on the GUI thread (no coefficient design on the audio thread except
@@ -97,7 +101,7 @@ struct DeckConfig {
     bool mono = false;
     bool processing = true, freeze = false;
     bool on[kStageCount] = {};
-    double inputGain = 1.0, outputGain = 1.0;
+    double inputGain = 1.0, outputGainL = 1.0, outputGainR = 1.0; // the preset's output gain with the deck's L / R
     double switchStep = 0.0, gainSmooth = 0.0;
     // leveller (control rate)
     double aim = -14.0, levRange = 12.0, levStep = 0.0, levFastStep = 0.0, levFastUpStep = 0.0, holdLufs = -24.0,
@@ -287,7 +291,7 @@ private:
     double masterMix_ = 1.0;
     double monoMix_ = 0.0; // 0 stereo .. 1 mono (DeckControl::mono), a 20 ms ramp
     bool settled_ = false; // no switch ramp, gain smoothing or retune running: the switch loop is skipped
-    double inGain_ = 1.0, outGain_ = 1.0;
+    double inGain_ = 1.0, outGainL_ = 1.0, outGainR_ = 1.0;
 
     // look-ahead reconfiguration (handbook 9.4)
     int curLook_ = 0, wantLook_ = 0, lookState_ = 0, refill_ = 0;

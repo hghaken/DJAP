@@ -137,6 +137,22 @@ void defaults() {
     std::printf("   value lines in untouched shipped presets: %d\n", lines);
     CHECK(lines == 0);
     CHECK(s.deck[0].preset == "Medium" && s.deck[1].preset == "Medium");
+    // each deck's L and R faders and their link (client, 2026-11-17): 0 dB and linked by default, read back as
+    // written, held to -15 .. 0 dB
+    CHECK(s.deck[0].gainL == 0.0 && s.deck[0].gainR == 0.0 && s.deck[0].gainLink);
+    {
+        Settings g = s;
+        g.deck[0].gainL = -4.5;
+        g.deck[1].gainR = -15.0;
+        g.deck[1].gainLink = false;
+        Settings back;
+        back.fromText(g.toText());
+        CHECK(back.deck[0].gainL == -4.5 && back.deck[0].gainR == 0.0 && back.deck[0].gainLink);
+        CHECK(back.deck[1].gainL == 0.0 && back.deck[1].gainR == -15.0 && !back.deck[1].gainLink);
+        Settings odd;
+        odd.fromText("[Decks]\nGainLA=-40\nGainRA=3\nGainLB=x\n");
+        CHECK(odd.deck[0].gainL == -15.0 && odd.deck[0].gainR == 0.0 && odd.deck[1].gainL == 0.0);
+    }
     // first start: no device chosen (the program opens the Audio window); a driver, or a device of another API
     CHECK(!s.audioConfigured() && !s.trayHintShown);
     CHECK(s.fallbackOutput.empty() && s.retryMinutes == 5);
@@ -719,6 +735,9 @@ void merged(const fs::path& dir) {
     one.lookAheadMs = 3.0;
     one.oversampling = 8;
     one.mono = true;
+    one.gainL = -3.5; // its L and R faders (client, 2026-11-17)
+    one.gainR = -15.0;
+    one.gainLink = false;
     plugin.pluginSlots[1] = one;
     plugin.pluginLink = true; // the plug-ins' Setup window: linked
     CHECK(plugin.saveMerged(file, pluginBase, Settings::SaveRole::Guest));

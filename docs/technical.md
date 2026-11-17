@@ -60,7 +60,7 @@ input (stereo)
  -> [leveller detector]                                      (4)
  -> soft clipper                                             (12)
  -> look-ahead true-peak limiter: the only look-ahead         (13)
- -> output gain (only down) -> bypass crossfade -> clip guard -> fades
+ -> output gain with the deck's L / R volume (only down) -> bypass crossfade -> clip guard -> fades
  -> [output meter: K-weighted energy, true peak]
  -> Windows volume (only when followed)                      (14)
 output
@@ -694,7 +694,9 @@ The moving-average accumulator is re-summed exactly every 8192 samples to stop f
 
 ### 14.1 Output gain and clip guard
 
-The output gain (-15..0 dB) only turns down, so the ceiling holds. A clip guard then replaces non-finite values with
+The output gain (-15..0 dB) only turns down, so the ceiling holds. The deck's own volume - the main window's L and R
+faders, -15..0 dB per channel - is added to it in dB, one factor per channel with the same 5 ms glide; it too only
+turns down, and bypass leaves it out. A clip guard then replaces non-finite values with
 0 and clamps to [-1, 1]; it never acts on a valid signal, and it is skipped in full bypass so bypass stays bit-exact.
 
 ### 14.1a Dither

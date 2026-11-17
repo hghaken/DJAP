@@ -171,6 +171,13 @@ void MainWindow::presetsChanged(bool listChanged, bool saveNow) {
     soundWindow_.refresh();
 }
 
+void MainWindow::setDeckGain(int d, double left, double right, bool keep) {
+    settings_.deck[d].gainL = clampGain(left);
+    settings_.deck[d].gainR = clampGain(right);
+    applyDeck(d); // heard at once (a 5 ms ramp in the deck)
+    if (keep) save();
+}
+
 void MainWindow::chooseSound(int d, const std::string& sound) {
     if (!settings_.chooseSound(d, sound)) return;
     if (linked()) settings_.chooseSound(1 - d, sound); // both decks
@@ -726,6 +733,13 @@ void MainWindow::command(int id, int code) {
         spectrumWindow_.show(hwnd_, d);
     } else if (item == iMeter && code >= kMeterOpenRow && code < kMeterOpenRow + kMeterTargets) { // a row or bar clicked
         editor_.show(hwnd_, settings_.deck[d].preset, d, meterStage(code - kMeterOpenRow));
+    } else if (item == iMeter && (code == kMeterGainMoved || code == kMeterGainSet)) { // the L and R faders
+        double left = 0, right = 0;
+        meterViewGain(s.meter, left, right);
+        setDeckGain(d, left, right, code == kMeterGainSet);
+    } else if (item == iMeter && code == kMeterGainLink) { // their Link box
+        settings_.deck[d].gainLink = meterViewLink(s.meter);
+        save();
     } else if (item == iEdit && code == BN_CLICKED) { // the Sound window
         soundWindow_.show(hwnd_, settings_.deck[d].sound, d);
     }
@@ -757,6 +771,8 @@ void MainWindow::applyDeck(int d) {
     c.oversampling = settings_.oversampling;
     c.mono = settings_.mono;
     c.processing = settings_.deck[d].processing;
+    c.gainL = settings_.deck[d].gainL; // the deck's L and R faders
+    c.gainR = settings_.deck[d].gainR;
     audio_.setDeck(d, settings_.deckValues(d), c); // its preset with its colour
     refreshStrip(d);
 }
@@ -815,6 +831,10 @@ void MainWindow::updateMeters() {
         data.ceiling = v[pLimCeiling];
         data.levRange = v[pLevRange];
         data.inputGain = settings_.deck[d].processing ? v[pInputGain] : 0.0; // bypassed: nothing is applied
+        data.gainFaders = true;
+        data.gainL = settings_.deck[d].gainL;
+        data.gainR = settings_.deck[d].gainR;
+        data.gainLink = settings_.deck[d].gainLink;
         if (data.m.bands == 0) data.m.bands = static_cast<int>(v[pDensBands]); // before the first meter record
         for (int k = 0; k < kStageCount; ++k) data.stageOn[k] = v[kStageParam[k]] >= 0.5;
         data.processing = settings_.deck[d].processing;

@@ -4,7 +4,8 @@
 // stage (leveller up / down, noise reduction, compressor, de-esser, clipper, limiter) and under them the spectrum of input and output
 // with the density bands and their gains (spectrumdraw.h; client, 2026-10-26: the density row went into the spectrum,
 // which got its room). No buttons: the R (reset meters) and F (freeze leveller) buttons were
-// removed at the client's request (2026-10-25: "not needed").
+// removed at the client's request (2026-10-25: "not needed"). Between the Out bars and the stage rows the deck's L and
+// R volume faders with their Link box (2026-11-17), drawn and dragged here, kept by the parent.
 // Custom-drawn, double-buffered, sized by the window's DPI.
 #pragma once
 
@@ -32,6 +33,13 @@ struct MeterViewData {
     PresetValues colourValues{};
     double autoDb[4] = {};
     double fs = 48000.0;
+    // the Gain faders beside the Out bars (client, 2026-11-17: "an output gain volume control on the main page, a
+    // graphically nice slider that fits the main page", then "split the fader into a left (L) and a right (R) one,
+    // and a link check box to move them independently or not"): the deck's volume per channel, kGainFloorDb .. 0 dB,
+    // and whether they move together; drawn when the parent handles their messages
+    bool gainFaders = false;
+    double gainL = 0.0, gainR = 0.0;
+    bool gainLink = true;
 };
 
 // A click on a stage row or a LED bar (client, 2026-10-25: "open its settings") tells the parent with WM_COMMAND:
@@ -42,6 +50,14 @@ struct MeterViewData {
 constexpr int kMeterOpenRow = 10;
 constexpr int kMeterRows = 7, kMeterTargets = 10, kMeterSpectrum = 9;
 const char* meterStage(int target); // the preset window's tab of a target ("Leveller", ...)
+
+// The Gain faders tell the parent with WM_COMMAND (its control id): kMeterGainMoved while one is dragged (heard at
+// once, not saved yet), kMeterGainSet for values to keep (the drag's end, a click in a slot, the mouse wheel, a
+// double-click: 0 dB), kMeterGainLink when the Link box was clicked. meterViewGain reads the values of that message
+// (dB, in kGainStepDb steps; linked, a fader moves the other by as much), meterViewLink the box.
+constexpr int kMeterGainMoved = 30, kMeterGainSet = 31, kMeterGainLink = 32;
+void meterViewGain(HWND view, double& left, double& right);
+bool meterViewLink(HWND view);
 
 void registerMeterView(HINSTANCE instance);
 void unregisterMeterView(); // a plug-in DLL, before it is unloaded (the class would point into freed code)

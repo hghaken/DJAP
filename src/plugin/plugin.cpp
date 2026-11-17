@@ -283,6 +283,13 @@ void Plugin::loadLists() {
         oversampling_ = snapOversampling(c.oversampling);
         mono_ = c.mono;
     }
+    // its own faders, linked or not (each deck's volume, as its Bypass)
+    const auto own = settings_.pluginSlots.find(slot_);
+    if (own != settings_.pluginSlots.end()) {
+        gainL_ = faderL_ = own->second.gainL;
+        gainR_ = faderR_ = own->second.gainR;
+        faderLink_ = own->second.gainLink;
+    }
     values_ = settings_.deckValues(0);
     exact_ = values_;
     applied_ = values_;
@@ -395,7 +402,8 @@ tresult PLUGIN_API Plugin::setActive(TBool state) {
         checkStamp(); // a set restored by the host whose preset has changed since: the preset's values now
         Snapshot s;
         if (incoming_.take(s))
-            values_ = s.values, lookMs_ = s.lookMs, bypass_ = s.bypass, oversampling_ = s.oversampling, mono_ = s.mono;
+            values_ = s.values, lookMs_ = s.lookMs, bypass_ = s.bypass, oversampling_ = s.oversampling, mono_ = s.mono,
+            gainL_ = s.gainL, gainR_ = s.gainR;
         deck_.prepare(fs_); // allocates: never while processing (the host stops it first)
         publishConfig();
         deck_.startFadeIn(); // a stream may start in the middle of the music
@@ -412,6 +420,8 @@ void Plugin::publishConfig() {
     ctl.oversampling = oversampling_;
     ctl.mono = mono_;
     ctl.processing = !bypass_;
+    ctl.gainL = gainL_;
+    ctl.gainR = gainR_;
     // the coefficients are designed here, on the audio thread, when the host changed a value: no allocation, a few
     // microseconds (the program designs them on its GUI thread)
     deck_.publish(makeDeckConfig(values_, ctl, fs_));
@@ -426,6 +436,8 @@ tresult PLUGIN_API Plugin::process(ProcessData& data) {
         bypass_ = s.bypass;
         oversampling_ = s.oversampling;
         mono_ = s.mono;
+        gainL_ = s.gainL;
+        gainR_ = s.gainR;
         dirty_ = true;
     }
     if (IParameterChanges* changes = data.inputParameterChanges) {
@@ -615,7 +627,7 @@ tresult PLUGIN_API Plugin::setState(IBStream* state) {
     setLatencyFrom(look);
 
     // the processing (exactly the stored values, not their positions)
-    incoming_.publish(Snapshot{v, look, bypass != 0, oversampling, mono != 0});
+    incoming_.publish(Snapshot{v, look, bypass != 0, oversampling, mono != 0, faderL_, faderR_});
     if (view_) view_->refresh();
     return kResultOk;
 }
@@ -649,6 +661,18 @@ int Plugin::soundIndex() const {
     for (size_t i = 0; i < settings_.sounds.size(); ++i)
         if (settings_.sounds[i].name == name) return static_cast<int>(i);
     return static_cast<int>(settings_.sounds.size());
+}
+
+void Plugin::setFaders(double left, double right, bool keep) {
+    faderL_ = clampGain(left);
+    faderR_ = clampGain(right);
+    publishToProcessor(); // heard at once (a 5 ms ramp in the deck)
+    if (keep) rememberChoice(true);
+}
+
+void Plugin::setFaderLink(bool on) {
+    faderLink_ = on;
+    rememberChoice(true);
 }
 
 void Plugin::chooseSound(int index) {
@@ -907,7 +931,7 @@ tresult PLUGIN_API Plugin::setParamNormalized(ParamID id, ParamValue value) {
 
 void Plugin::publishToProcessor() {
     incoming_.publish(Snapshot{exact_, plainOf(kLookId), plainOf(kBypassId) >= 0.5,
-                               static_cast<int>(plainOf(kOversamplingId)), plainOf(kMonoId) >= 0.5});
+                               static_cast<int>(plainOf(kOversamplingId)), plainOf(kMonoId) >= 0.5, faderL_, faderR_});
 }
 
 void Plugin::edit(ParamID id, ParamValue normalized) {
@@ -978,6 +1002,9 @@ bool Plugin::rememberChoice(bool save) {
     c.lookAheadMs = plainOf(kLookId);
     c.oversampling = static_cast<int>(plainOf(kOversamplingId));
     c.mono = plainOf(kMonoId) >= 0.5;
+    c.gainL = faderL_;
+    c.gainR = faderR_;
+    c.gainLink = faderLink_;
     if (old != settings_.pluginSlots.end() && old->second == c) return false;
     settings_.pluginSlots[slot_] = c;
     if (save) saveSettings();

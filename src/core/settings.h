@@ -49,7 +49,15 @@ struct DeckSettings {
     std::string preset = "Medium";
     std::string colour = "Neutral"; // colour preset (tone, auto tone, sub bass, loudness)
     bool processing = true;
+    // its volume per channel after the limiter, dB (kGainFloorDb .. 0), and whether the L and R faders move together
+    // (client, 2026-11-17: the main page's L and R faders "with a link check box"; the deck's, not the sound's)
+    double gainL = 0.0, gainR = 0.0;
+    bool gainLink = true;
 };
+
+// The range of a deck's L / R volume (the faders): as the preset's output gain, -15 .. 0 dB in 0.5 dB steps.
+constexpr double kGainFloorDb = -15.0, kGainStepDb = 0.5;
+inline double clampGain(double db) { return db < kGainFloorDb ? kGainFloorDb : db > 0.0 ? 0.0 : db; }
 
 // The two kinds of preset: dynamics (loudness, compressor, ...; the colour values unused) and colour (only the
 // colour values used, docs/design.md 3.3). Both hold a whole PresetValues array.
@@ -75,9 +83,12 @@ struct PluginSlot {
     double lookAheadMs = 1.5;
     int oversampling = 4;
     bool mono = false;
+    double gainL = 0.0, gainR = 0.0; // its L / R faders (DeckSettings::gainL)
+    bool gainLink = true;
     bool operator==(const PluginSlot& o) const {
         return sound == o.sound && preset == o.preset && colour == o.colour && lookAheadMs == o.lookAheadMs &&
-               oversampling == o.oversampling && mono == o.mono;
+               oversampling == o.oversampling && mono == o.mono && gainL == o.gainL && gainR == o.gainR &&
+               gainLink == o.gainLink;
     }
 };
 

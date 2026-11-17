@@ -485,7 +485,8 @@ count for both decks; deck B's strip then shows only its route ("linked to deck 
 Smallest size (client, 2026-10-26: "the smallest window (one channel) where the spectrum is still visible, fixed;
 larger is always allowed"): the height that shows the five stage rows of the meter panel in full and a spectrum whose
 dB labels do not touch (`meterViewMinHeight`, from the panel's own layout and fonts at the window's DPI); the width
-600 px (one channel) or 900 px (two decks) at 96 DPI, scaled. Switching between one channel and two decks enlarges the
+600 px (one channel) or 1080 px (two decks; 900 until the L / R faders took their column, 2026-11-17) at 96 DPI,
+scaled. Switching between one channel and two decks enlarges the
 window when it is smaller than the new minimum.
 The bass sliders (client, 2026-10-25; on the strips until 2026-10-26, then only in the spectrum window and the
 plug-in - client: "now that these are in the big spectrum window, they can go here") change the
@@ -493,7 +494,22 @@ colour or the preset, so every deck using it: Bass level (-12..+12 dB, the colou
 (0..100 %; 0 switches the enhancer off, more switches it on), Bass width (0..100 %, 0 = mono bass; switches the
 width stage on), Bass frequency (40..250 Hz: sets the colour's bass corner and, within their ranges, the preset's
 enhancer frequency and width split together). Heard while dragging, saved when let go. The stage switches (ten since the noise reduction) are in
-the preset window (client, 2026-10-25; they were on the strips). The meter panel (client, 2026-10-25: "only IN L/R and OUT L/R, a dB and a LUFS scale; the R button is not
+the preset window (client, 2026-10-25; they were on the strips).
+**The L and R faders** (client, 2026-11-17: "make an output gain volume control on the main page, a graphically nice
+slider that fits the main page", then "split the fader into a left (L) and a right (R) slider, and a link check box to
+move them independently or not"; asked whether they belong with the deck or with the loudness preset: "with the
+deck"): in the meter panel between the Out bars' LUFS scale and the stage rows, two custom-drawn faders - dark slots
+with a tick every 3 dB, caps of brushed metal with their letter, the values above, -15..0 dB in 0.5 dB steps - and
+under them the panel's own Link check box (on by default). Linked, a fader moves the other by as much, as far as both
+stay in the range (a difference stays; a blue line joins the caps); a drag, a click in a slot (the cap jumps there),
+the mouse wheel (a step per notch), a double-click (0 dB; linked: both). The deck's own volume
+(`DeckSettings::gainL` / `gainR` / `gainLink`, `[Decks] GainLA=` ...; `DeckControl::gainL` / `gainR`): added to the
+preset's output gain after the limiter, one factor per channel with the output gain's 5 ms glide, only down; another
+sound leaves it; bypass leaves it out (the deck stays bit-exact). Heard while dragging (`kMeterGainMoved`), saved when
+let go (`kMeterGainSet`). A first version (the same day) was one fader on the preset's Output gain: it moved with the
+sound and changed shipped presets - the client chose the deck. The plug-in's window has the same faders: the
+instance's own (`Plugin::setFaders`, `PluginSlot::gainL` ... in `[Plugin]`, as its other choices; not host parameters,
+not shared with linked instances - as Bypass). The meter panel (client, 2026-10-25: "only IN L/R and OUT L/R, a dB and a LUFS scale; the R button is not
 needed"): LED bars In L / R (sample peak, dBFS, after the preset's input gain - client: "the input slider should move the In bar"; shown by adding the gain to the measurement, which stays the deck's raw input for the offline report) and Out L / R (true peak, dBTP), segments of 5 px lit up to the
 value, unlit ones dark in their zone's colour (input: amber from -6, red from -1 dBFS; output: amber in the last
 3 dB under the ceiling, red over it) and a peak-hold LED for 1.5 s; across each pair the momentary loudness (white)

@@ -517,6 +517,10 @@ void PluginView::meters() {
     data.ceiling = v[pLimCeiling];
     data.levRange = v[pLevRange];
     data.inputGain = processing ? v[pInputGain] : 0.0;
+    data.gainFaders = true;
+    data.gainL = plugin_->faderL();
+    data.gainR = plugin_->faderR();
+    data.gainLink = plugin_->faderLink();
     if (data.m.bands == 0) data.m.bands = static_cast<int>(v[pDensBands]);
     for (int k = 0; k < kStageCount; ++k) data.stageOn[k] = v[kStageParam[k]] >= 0.5;
     data.processing = processing;
@@ -586,6 +590,12 @@ void PluginView::command(int id, int code) {
         spectrumWnd_.show(GetAncestor(hwnd_, GA_ROOT), 0);
     } else if (id == idMeter && code >= kMeterOpenRow && code < kMeterOpenRow + kMeterTargets) { // a row or bar
         plugin_->openEditor(false, GetAncestor(hwnd_, GA_ROOT), meterStage(code - kMeterOpenRow));
+    } else if (id == idMeter && (code == kMeterGainMoved || code == kMeterGainSet)) { // the L and R faders
+        double left = 0, right = 0;
+        meterViewGain(meter_, left, right);
+        plugin_->setFaders(left, right, code == kMeterGainSet);
+    } else if (id == idMeter && code == kMeterGainLink) { // their Link box
+        plugin_->setFaderLink(meterViewLink(meter_));
     }
 }
 

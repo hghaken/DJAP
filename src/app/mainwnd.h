@@ -70,6 +70,9 @@ private:
     void command(int id, int code);
     void fillSounds(int d); // the deck's sound list (and an entry for parts no sound holds)
     void chooseSound(int d, const std::string& sound); // a sound chosen for deck d (both decks when linked)
+    // The meter panel's L and R faders (client, 2026-11-17): deck d's volume per channel - heard at once, saved when
+    // `keep` (the drag's end).
+    void setDeckGain(int d, double left, double right, bool keep);
     void presetsChanged(bool listChanged, bool saveNow); // from a preset or colour window
     void applyDeck(int d);
     void refreshStrip(int d);
@@ -90,7 +93,7 @@ private:
     // spectrum window, client 2026-10-26)
     int meterTop() const { return px(12) + 2 * (px(28) + px(6)); }
     // the smallest client widths at 96 DPI (the height follows from the meter panel: WM_GETMINMAXINFO)
-    static constexpr int kMinWidthOne = 600, kMinWidthTwo = 900;
+    static constexpr int kMinWidthOne = 600, kMinWidthTwo = 1080; // (two decks: 900 until the L / R faders, 2026-11-17)
 
     Settings& settings_;
     std::filesystem::path ini_;
