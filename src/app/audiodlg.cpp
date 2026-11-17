@@ -24,7 +24,7 @@ const wchar_t* const kLedClass = L"APDeviceLed";
 const ULONGLONG kListEveryMs = 3000; // the devices are read again this often while the window shows
 enum Id { idDriver = 10, idOpen, idClose, idPanel, idInA, idOutA, idInB, idOutB, idRate, idBuffer, idStart, idStop,
           idApi, idExclusive, idLink, idInputs, idDecks, idFollow, idLook, idStartup, idOversampling,
-          idCheckUpdates, idTooltips, idDrift, idInPeriod, idSoundPanel, idSoundSettings, idFallback, idRetry };
+          idCheckUpdates, idTooltips, idDrift, idInPeriod, idSoundPanel, idSoundSettings, idFallback, idRetry, idFallback2, idRetry2 };
 
 const double kRates[] = {44100.0, 48000.0, 88200.0, 96000.0};
 // limiter look-ahead choices (ms; 1.5 the default). Nothing between 0 and 1.5: below about 1.3 ms the true-peak
@@ -167,11 +167,11 @@ void AudioWindow::createControls() {
         return CreateWindowExW(0, cls, text, WS_CHILD | WS_VISIBLE | style, 0, 0, 10, 10, hwnd_,
                                reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
     };
-    const wchar_t* labels[16] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
+    const wchar_t* labels[18] = {L"ASIO driver", L"Deck A input", L"Deck A output", L"Deck B input", L"Deck B output",
                                  L"Sample rate", L"Buffer size",  L"Status",        L"Audio API",    L"Deck inputs",
                                  L"Processing",  L"Look-ahead",   L"Updates",       L"Oversampling",
-                                 L"Fallback output", L"Try again for"};
-    for (int i = 0; i < 16; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
+                                 L"Fallback 1 output", L"Try again for", L"Fallback 2 output", L"Try again for"};
+    for (int i = 0; i < 18; ++i) labels_[i] = make(L"STATIC", labels[i], SS_LEFT | SS_CENTERIMAGE, 0);
     const DWORD combo = CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP;
     decks_ = make(WC_COMBOBOXW, L"", combo, idDecks);
     api_ = make(WC_COMBOBOXW, L"", combo, idApi);
@@ -199,6 +199,9 @@ void AudioWindow::createControls() {
     for (HWND& led : led_) led = make(kLedClass, L"", 0, 0);
     retry_ = make(WC_COMBOBOXW, L"", combo, idRetry);
     countdown_ = make(L"STATIC", L"", SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY | SS_NOPREFIX, 0);
+    fallback2_ = make(WC_COMBOBOXW, L"", combo, idFallback2);
+    retry2_ = make(WC_COMBOBOXW, L"", combo, idRetry2);
+    countdown2_ = make(L"STATIC", L"", SS_LEFT | SS_CENTERIMAGE | SS_NOTIFY | SS_NOPREFIX, 0);
     start_ = make(L"BUTTON", L"Start audio", BS_OWNERDRAW | WS_TABSTOP, idStart);
     stop_ = make(L"BUTTON", L"Stop audio", BS_OWNERDRAW | WS_TABSTOP, idStop);
     soundPanel_ = make(L"BUTTON", L"Audio properties", BS_OWNERDRAW | WS_TABSTOP, idSoundPanel);
@@ -222,7 +225,7 @@ void AudioWindow::createControls() {
                  SS_LEFT, 0);
 
     for (HWND b : {open_, close_, panel_, start_, stop_, soundPanel_, soundSettings_}) theme::makeButton(b);
-    for (HWND c : {decks_, api_, inputs_, drift_, inPeriod_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_, fallback_, retry_}) theme::makeCombo(c);
+    for (HWND c : {decks_, api_, inputs_, drift_, inPeriod_, driver_, inA_, outA_, inB_, outB_, rate_, buffer_, look_, oversampling_, fallback_, retry_, fallback2_, retry2_}) theme::makeCombo(c);
     tips_.create(hwnd_);
     tips_.add(decks_, L"Two decks: for DJs - deck A and deck B, each with its own input, output and loudness preset (two "
                       L"players or a mixer's channels).\nOne channel: one stereo processor, for example for everything "
@@ -296,15 +299,25 @@ void AudioWindow::createControls() {
         tips_.add(led, L"Green: the device is there (online). Red: it is not among the devices now (switched off, "
                        L"unplugged, out of reach). Grey: not known - an ASIO driver that is installed but not open. "
                        L"DJAP looks every 3 seconds while this window is open.");
-    tips_.add(fallback_, L"Where the sound goes when a chosen output is gone (a Bluetooth headset switched off) and the "
-                         L"time under Try again for is over. It goes back by itself as soon as the chosen output returns. "
-                         L"(none): no fallback, DJAP goes on trying. Never the virtual cable you use as an input: DJAP "
-                         L"would hear itself, and it refuses that.");
-    tips_.add(countdown_, L"While DJAP tries the chosen devices again: the time left before the sound goes to the fallback "
-                          L"output. \"On fallback\": it plays there now, until the chosen output is back. \"Trying\": "
-                          L"no fallback to go to, DJAP goes on trying. Empty: all runs as chosen.");
+    tips_.add(fallback_, L"Fallback 1: where the sound goes when a chosen output is gone (a Bluetooth headset switched "
+                         L"off) and the time under Try again for, left of it, is over. It goes back by itself as soon as "
+                         L"the chosen output returns. (none): no fallback 1. Never the virtual cable you use as an input: "
+                         L"DJAP would hear itself, and it refuses that.");
+    tips_.add(fallback2_, L"Fallback 2: where the sound goes when fallback 1 cannot play either - not there, or gone too - "
+                          L"and the time under Try again for, left of it, is over. While it plays here, the sound moves "
+                          L"up to fallback 1 as soon as that is there, and back to the chosen output as soon as that "
+                          L"returns. (none): no fallback 2 - with neither, DJAP goes on trying.");
+    tips_.add(countdown_, L"While DJAP tries the chosen devices again: the time left before the sound goes to fallback 1. "
+                          L"\"On fallback\": it plays there now, until the chosen output is back. \"Trying\": "
+                          L"nothing to go to, DJAP goes on trying. Empty: all runs as chosen.");
+    tips_.add(countdown2_, L"While fallback 1 cannot play: the time left before the sound goes to fallback 2. \"On "
+                           L"fallback\": it plays there now, until fallback 1 or the chosen output is back. \"Trying\": "
+                           L"nothing to go to, DJAP goes on trying. Empty: fallback 2 is not needed.");
     tips_.add(retry_, L"How long DJAP keeps trying the chosen devices, every 5 seconds, after one went away or was not "
-                      L"there at the start. Then the sound goes to the fallback output.");
+                      L"there at the start. Then the sound goes to fallback 1, right of it.");
+    tips_.add(retry2_, L"How long DJAP keeps trying - the chosen devices and fallback 1, every 5 seconds - from the "
+                       L"moment fallback 1 cannot play (not there, or gone too). Then the sound goes to fallback 2, right "
+                       L"of it.");
     tips_.add(soundPanel_, L"Opens Windows' Sound window: the playback and recording devices, their levels and formats. "
                            L"Windows' own window: DJAP changes nothing there.");
     tips_.add(soundSettings_, L"Opens Windows' Sound settings: where Windows plays its sound (for example a virtual cable "
@@ -339,7 +352,7 @@ void AudioWindow::setFonts() {
     font_ = CreateFontIndirectW(&ncm.lfMessageFont);
     for (HWND h : labels_) SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
     for (HWND h : {decks_, api_, inputs_, exclusive_, drift_, inPeriod_, link_, follow_, driver_, open_, close_, panel_, info_, inA_, outA_, inB_, outB_, rate_, buffer_,
-                   start_, stop_, soundPanel_, soundSettings_, state_, note_, fallback_, retry_, countdown_, look_, oversampling_, startup_, checkUpdates_, tooltips_})
+                   start_, stop_, soundPanel_, soundSettings_, state_, note_, fallback_, retry_, countdown_, fallback2_, retry2_, countdown2_, look_, oversampling_, startup_, checkUpdates_, tooltips_})
         SendMessageW(h, WM_SETFONT, reinterpret_cast<WPARAM>(font_), TRUE);
 }
 
@@ -382,24 +395,29 @@ void AudioWindow::layout() {
     MoveWindow(info_, m + labelW + g, y, W - labelW - g, 2 * lh, TRUE);
     y += 2 * lh + 2 * g;
     const int colW = (W - g) / 2, cw = colW - labelW - g, ledW = px(14);
-    // deck A's row, deck B's row (two decks only), the fallback row (not with ASIO: the driver is the only output there;
-    // right under the devices - client, 2026-11-05), rate and buffer
+    // deck A's row, deck B's row (two decks only), the two fallback rows (not with ASIO: the driver is the only output
+    // there; right under the devices - client, 2026-11-05; per row the time to try again left, the fallback output
+    // under the outputs - 2026-11-17), rate and buffer
     const bool two = settings_.decks == 2;
     HWND pairs[6] = {inA_, outA_, inB_, outB_, rate_, buffer_};
     const bool fallbackRow = !asio();
-    for (HWND b : {labels_[14], led_[4], fallback_, labels_[15], retry_, countdown_})
+    for (HWND b : {labels_[14], led_[4], fallback_, labels_[15], retry_, countdown_, labels_[16], led_[5], fallback2_,
+                   labels_[17], retry2_, countdown2_})
         ShowWindow(b, fallbackRow ? SW_SHOW : SW_HIDE);
     int row = 0;
     for (int i = 0; i < 6; ++i) {
         if (i == 4 && fallbackRow) {
-            const int cy = y + row * (h + g), cdW = px(78);
-            MoveWindow(labels_[14], m, cy, labelW, h, TRUE);
-            MoveWindow(led_[4], m + labelW + g, cy + (h - ledW) / 2, ledW, ledW, TRUE);
-            MoveWindow(fallback_, m + labelW + g + ledW + g, cy, cw - ledW - g, px(300), TRUE);
-            MoveWindow(labels_[15], m + colW + g, cy, labelW, h, TRUE);
-            MoveWindow(retry_, m + colW + g + labelW + g, cy, cw - cdW - g, px(300), TRUE);
-            MoveWindow(countdown_, m + W - cdW, cy, cdW, h, TRUE);
-            ++row;
+            const int cdW = px(78);
+            for (int k = 0; k < 2; ++k) {
+                const int cy = y + row * (h + g), ox = m + colW + g; // left: Try again for and its countdown
+                MoveWindow(labels_[k == 0 ? 15 : 17], m, cy, labelW, h, TRUE);
+                MoveWindow(k == 0 ? retry_ : retry2_, m + labelW + g + ledW + g, cy, cw - ledW - g - cdW - g, px(300), TRUE);
+                MoveWindow(k == 0 ? countdown_ : countdown2_, m + colW - cdW, cy, cdW, h, TRUE);
+                MoveWindow(labels_[k == 0 ? 14 : 16], ox, cy, labelW, h, TRUE); // right: the fallback, as an output
+                MoveWindow(led_[4 + k], ox + labelW + g, cy + (h - ledW) / 2, ledW, ledW, TRUE);
+                MoveWindow(k == 0 ? fallback_ : fallback2_, ox + labelW + g + ledW + g, cy, cw - ledW - g, px(300), TRUE);
+                ++row;
+            }
         }
         const bool shown = two || (i != 2 && i != 3);
         if (i < 4) ShowWindow(led_[i], shown ? SW_SHOW : SW_HIDE);
@@ -640,11 +658,16 @@ void AudioWindow::fillAll() {
         devices(inB_, sysInputs_, listedIn, settings_.inDevice[1], L"(none)");
         devices(outA_, sysOutputs_, listedOut, settings_.outDevice[0], L"(none)");
         devices(outB_, sysOutputs_, listedOut, settings_.outDevice[1], L"(none)");
-        devices(fallback_, sysOutputs_, listedOut, settings_.fallbackOutput, L"(none)");
-        SendMessageW(retry_, CB_RESETCONTENT, 0, 0);
-        for (const int minutes : {1, 2, 5, 10, 30})
-            addItem(retry_, std::to_wstring(minutes) + (minutes == 1 ? L" minute" : L" minutes") + (minutes == 5 ? L" (default)" : L""), minutes);
-        selectData(retry_, settings_.retryMinutes);
+        devices(fallback_, sysOutputs_, listedOut, settings_.fallbackOutput[0], L"(none)");
+        devices(fallback2_, sysOutputs_, listedOut, settings_.fallbackOutput[1], L"(none)");
+        for (int k = 0; k < 2; ++k) {
+            HWND list = k == 0 ? retry_ : retry2_;
+            const int def = k == 0 ? 5 : 1; // (Settings::retryMinutes)
+            SendMessageW(list, CB_RESETCONTENT, 0, 0);
+            for (const int minutes : {1, 2, 5, 10, 30})
+                addItem(list, std::to_wstring(minutes) + (minutes == 1 ? L" minute" : L" minutes") + (minutes == def ? L" (default)" : L""), minutes);
+            selectData(list, settings_.retryMinutes[k]);
+        }
         bufferSizes_.assign(std::begin(kPeriods), std::end(kPeriods));
         bufferSizes_.insert(bufferSizes_.begin(), 0);
     }
@@ -707,8 +730,10 @@ void AudioWindow::readChoices() {
         settings_.inDevice[1] = name(inB_, sysInputs_);
         settings_.outDevice[0] = name(outA_, sysOutputs_);
         settings_.outDevice[1] = name(outB_, sysOutputs_);
-        settings_.fallbackOutput = name(fallback_, sysOutputs_);
-        settings_.retryMinutes = static_cast<int>(selectedData(retry_, settings_.retryMinutes));
+        settings_.fallbackOutput[0] = name(fallback_, sysOutputs_);
+        settings_.fallbackOutput[1] = name(fallback2_, sysOutputs_);
+        settings_.retryMinutes[0] = static_cast<int>(selectedData(retry_, settings_.retryMinutes[0]));
+        settings_.retryMinutes[1] = static_cast<int>(selectedData(retry2_, settings_.retryMinutes[1]));
     }
     settings_.sampleRate = static_cast<int>(selectedData(rate_, settings_.sampleRate));
     settings_.bufferSize = static_cast<int>(selectedData(buffer_, settings_.bufferSize));
@@ -762,8 +787,8 @@ bool AudioWindow::startAudio(bool askExclusive) {
         }
         SysRoute routes[2];
         sysRoutesFrom(settings_, routes);
-        // a chosen output that is not there (a headset switched off): the fallback at once (client, 2026-11-05) -
-        // and back as soon as it is there (the main window's recovery)
+        // a chosen output that is not there (a headset switched off): the first fallback that can play, at once (client,
+        // 2026-11-05) - and back as soon as it is there (the main window's recovery)
         std::vector<SysDevice> ins, outs;
         std::string listErr;
         if (SysAudio::devices(api, ins, outs, listErr)) fallbackRoutes(settings_, outs, routes);
@@ -865,7 +890,8 @@ void AudioWindow::command(int id, int code) {
         onChange_();
         return;
     }
-    if ((id == idFallback || id == idRetry) && code == CBN_SELCHANGE) { // what runs now does not change
+    if ((id == idFallback || id == idRetry || id == idFallback2 || id == idRetry2) && code == CBN_SELCHANGE) {
+        // what runs now does not change
         if (!filling_) {
             readChoices();
             onChange_();
@@ -1151,7 +1177,7 @@ void AudioWindow::updateLeds() {
             state[2 * d + 1] = device(false, settings_.outDevice[d]);
         }
     }
-    state[4] = current == AudioApi::Asio ? 0 : device(false, settings_.fallbackOutput);
+    for (int k = 0; k < 2; ++k) state[4 + k] = current == AudioApi::Asio ? 0 : device(false, settings_.fallbackOutput[k]);
     for (int i = 0; i < kLeds; ++i)
         if (GetWindowLongPtrW(led_[i], GWLP_USERDATA) != state[i]) {
             SetWindowLongPtrW(led_[i], GWLP_USERDATA, state[i]);
@@ -1162,10 +1188,12 @@ void AudioWindow::updateLeds() {
 void AudioWindow::refresh() {
     if (!hwnd_) return;
     updateLeds();
-    const std::wstring retry = retryStatus_ ? retryStatus_() : std::wstring();
-    if (retry != retryShown_) {
-        retryShown_ = retry;
-        SetWindowTextW(countdown_, retry.c_str());
+    for (int k = 0; k < 2; ++k) {
+        const std::wstring retry = retryStatus_ ? retryStatus_(k + 1) : std::wstring();
+        if (retry != retryShown_[k]) {
+            retryShown_[k] = retry;
+            SetWindowTextW(k == 0 ? countdown_ : countdown2_, retry.c_str());
+        }
     }
     const bool open = audio_.driverOpen(), running = audio_.deviceRunning();
     EnableWindow(close_, asio() && open);

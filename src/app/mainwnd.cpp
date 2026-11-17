@@ -192,7 +192,7 @@ bool MainWindow::create(HINSTANCE instance, bool hidden, bool testRun) {
     testRun_ = testRun;
     Tooltips::setEnabled(settings_.showTooltips); // before the first window makes its tooltips
     audioWindow_.setTestRun(testRun);
-    audioWindow_.setRetryStatus([this] { return retryStatus(); });
+    audioWindow_.setRetryStatus([this](int fallback) { return retryStatus(fallback); });
     if (settings_.latencyProbe) latencyProbe_.start();
     // the spectra's averaging (the spectrum window's list): both decks' meter panels and the spectrum window
     audio_.setSpectrumAverage(settings_.spectrumAverageMs[0] / 1000.0);
@@ -260,8 +260,8 @@ void MainWindow::startSavedAudio() {
     programStart_ = false;
 }
 
-// The chosen devices; with `useFallback` the fallback output in the place of the outputs that are gone.
-bool MainWindow::startChosen(bool useFallback, const std::vector<SysDevice>& outputs) {
+// The chosen devices; with `fallback` 1 or 2 that fallback output in the place of the outputs that are gone.
+bool MainWindow::startChosen(int fallback, const std::vector<SysDevice>& outputs) {
     // the Windows volume first: the decks take it over without a glide when the stream starts (prepare); else the
     // first 50 ms played at 100 % and glided down - a loud blast at program start (client, 2026-10-25)
     updateVolume();
@@ -277,7 +277,7 @@ bool MainWindow::startChosen(bool useFallback, const std::vector<SysDevice>& out
     } else {
         SysRoute routes[2];
         sysRoutesFrom(settings_, routes);
-        if (useFallback) fallbackRoutes(settings_, outputs, routes);
+        if (fallback > 0) fallbackRoutes(settings_, outputs, routes, fallback);
         ok = audio_.startSystem(api, routes, settings_.sampleRate, static_cast<unsigned>(settings_.bufferSize),
                                 settings_.exclusive, settings_.driftCorrection, startError_);
     }
@@ -287,12 +287,15 @@ bool MainWindow::startChosen(bool useFallback, const std::vector<SysDevice>& out
 
 // Every 5 s (and at program start): the audio that should run and does not (client, 2026-11-05). DeviceRecovery says
 // what to do.
-std::wstring MainWindow::retryStatus() const {
+std::wstring MainWindow::retryStatus(int fallback) const {
     if (!settings_.startAudio) return L"";
-    if (onFallback_ && audio_.deviceRunning()) return L"On fallback"; // (also when Start went there at once)
+    if (audio_.deviceRunning()) return onFallback_ == fallback ? L"On fallback" : L""; // (also when Start went there)
     if (!recovery_.trying()) return L"";
-    const int left = static_cast<int>(std::ceil(
-        recovery_.secondsLeft(static_cast<double>(GetTickCount64()) * 1e-3, settings_.retryMinutes * 60.0)));
+    const double times[2] = {settings_.retryMinutes[0] * 60.0, settings_.retryMinutes[1] * 60.0};
+    int next = 0;
+    const int left = static_cast<int>(
+        std::ceil(recovery_.secondsLeft(static_cast<double>(GetTickCount64()) * 1e-3, times, &next)));
+    if (next != fallback) return L"";
     if (left <= 0) return L"Trying";
     wchar_t b[24];
     swprintf(b, 24, L"%d:%02d", left / 60, left % 60);
@@ -312,8 +315,9 @@ void MainWindow::recoverAudio() {
     f.wanted = settings_.startAudio;
     f.running = audio_.deviceRunning();
     f.keepTrying = system;
-    f.retrySeconds = settings_.retryMinutes * 60.0;
+    for (int i = 0; i < 2; ++i) f.retrySeconds[i] = settings_.retryMinutes[i] * 60.0;
     f.atStart = programStart_;
+    f.secondFallback = system && !settings_.fallbackOutput[1].empty();
     SysRoute routes[2];
     sysRoutesFrom(settings_, routes);
     std::vector<SysDevice> inputs, outputs;
@@ -322,7 +326,7 @@ void MainWindow::recoverAudio() {
         for (int d = 0; d < 2; ++d)
             if (f.running && audio_.systemRunning() && audio_.sys().info(d).running &&
                 audio_.sys().info(d).output != routes[d].output)
-                f.onFallback = true;
+                f.onFallback = audio_.sys().info(d).output == settings_.fallbackOutput[1] ? 2 : 1;
         if (!f.running || f.onFallback) { // (not every 5 s while all is well)
             std::string err;
             SysAudio::devices(api, inputs, outputs, err);
@@ -332,54 +336,76 @@ void MainWindow::recoverAudio() {
             for (const SysRoute& r : routes)
                 if (!r.output.empty() && !listed(r.output)) missing = r.output;
             f.chosenOutputsThere = missing.empty();
-            const std::string& fb = settings_.fallbackOutput;
-            bool usable = !fb.empty() && listed(fb) && !missing.empty();
-            for (const SysRoute& r : routes)
-                if (fb == r.input) { // a virtual cable's two ends carry one name: DJAP would hear itself
-                    if (usable) fallbackNote = "; the fallback output is this input's own device: not used";
-                    usable = false;
-                }
-            f.fallbackUsable = usable;
+            for (int i = 0; i < 2; ++i) {
+                const std::string& fb = settings_.fallbackOutput[i];
+                bool usable = !fb.empty() && listed(fb) && !missing.empty();
+                for (const SysRoute& r : routes)
+                    if (fb == r.input) { // a virtual cable's two ends carry one name: DJAP would hear itself
+                        if (usable) fallbackNote = "; fallback " + std::to_string(i + 1) + " is this input's own device: not used";
+                        usable = false;
+                    }
+                f.fallbackUsable[i] = usable;
+            }
         }
     }
     onFallback_ = f.onFallback;
     const double now = static_cast<double>(GetTickCount64()) * 1e-3;
     const std::string gone = missing.empty() ? std::string("audio not running") : "the output \"" + missing + "\" is gone";
-    switch (recovery_.tick(now, f)) {
+    auto playing = [&](int n) {
+        return gone + ": playing on fallback " + std::to_string(n) + " \"" + settings_.fallbackOutput[n - 1] +
+               "\" until it is back";
+    };
+    auto startFallback = [&](int n) {
+        if (startChosen(n, outputs)) {
+            onFallback_ = n; // the countdown says so at once
+            setMessage(playing(n));
+            return true;
+        }
+        return false;
+    };
+    const DeviceRecovery::Action action = recovery_.tick(now, f);
+    switch (action) {
     case DeviceRecovery::Action::None:
         if (f.onFallback) {
-            const std::string text = gone + ": playing on \"" + settings_.fallbackOutput + "\" until it is back";
+            const std::string text = playing(f.onFallback);
             if (message_ != text) setMessage(text);
         }
         break;
     case DeviceRecovery::Action::Retry:
-        if (startChosen(false, outputs)) {
+        if (startChosen(0, outputs)) {
             setMessage("");
         } else {
-            const int left = static_cast<int>(std::ceil(recovery_.secondsLeft(now, f.retrySeconds)));
+            const double times[2] = {f.retrySeconds[0], f.retrySeconds[1]};
+            int next = 0;
+            const int left = static_cast<int>(std::ceil(recovery_.secondsLeft(now, times, &next)));
             std::string text = gone + ", trying again";
-            if (left > 0 && f.fallbackUsable)
+            if (left > 0 && next >= 1 && f.fallbackUsable[next - 1])
                 text += " for " + std::to_string(left / 60) + ":" + (left % 60 < 10 ? "0" : "") + std::to_string(left % 60) +
-                        ", then on \"" + settings_.fallbackOutput + "\"";
+                        ", then on fallback " + std::to_string(next) + " \"" + settings_.fallbackOutput[next - 1] + "\"";
             setMessage(text + ": " + startError_ + fallbackNote);
         }
         break;
-    case DeviceRecovery::Action::StartFallback:
-        if (startChosen(true, outputs)) {
-            onFallback_ = true; // the countdown says so at once
-            setMessage(gone + ": playing on \"" + settings_.fallbackOutput + "\" until it is back");
-        } else {
-            setMessage(gone + "; the fallback output did not start either: " + startError_);
+    case DeviceRecovery::Action::StartFallback1:
+    case DeviceRecovery::Action::StartFallback2: {
+        const int n = action == DeviceRecovery::Action::StartFallback1 ? 1 : 2;
+        if (!startFallback(n))
+            setMessage(gone + "; fallback " + std::to_string(n) + " did not start either: " + startError_);
+        break;
+    }
+    case DeviceRecovery::Action::StepUp: // on fallback 2, fallback 1 is there again
+        if (!startFallback(1)) { // listed, but it cannot be opened yet: fallback 2 goes on
+            recovery_.returnFailed(now);
+            startFallback(2);
         }
         break;
     case DeviceRecovery::Action::ReturnToChosen:
-        if (startChosen(false, outputs)) {
+        if (startChosen(0, outputs)) {
             setMessage("");
         } else { // listed, but it cannot be opened yet: the fallback goes on
             recovery_.returnFailed(now);
             for (const SysRoute& r : routes)
                 if (!r.output.empty()) outputs.erase(std::remove_if(outputs.begin(), outputs.end(), [&](const SysDevice& o) { return o.name == r.output; }), outputs.end());
-            startChosen(true, outputs);
+            startChosen(f.onFallback > 0 ? f.onFallback : 1, outputs);
         }
         break;
     case DeviceRecovery::Action::GiveUp:

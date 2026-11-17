@@ -160,11 +160,11 @@ private:
     bool testRun_ = false;
     DeviceRecovery recovery_; // a device that went away, or was not there at the start: try again, then the fallback
     std::string startError_;  // why the last start failed
-    bool onFallback_ = false; // at the last recoverAudio()
+    int onFallback_ = 0; // at the last recoverAudio(): what runs plays on fallback 1 or 2 (0: as chosen)
     bool programStart_ = false; // the next recoverAudio() is the program's start (startSavedAudio)
-    std::wstring retryStatus() const; // the Setup window's countdown
+    std::wstring retryStatus(int fallback) const; // the Setup window's countdown before fallback 1 or 2
     void recoverAudio();      // every 5 s
-    bool startChosen(bool useFallback, const std::vector<SysDevice>& outputs);
+    bool startChosen(int fallback, const std::vector<SysDevice>& outputs); // fallback 1 / 2 for the outputs gone; 0: none
     Updater updater_;
     ULONGLONG nextCheck_ = 0;   // GetTickCount64() of the next daily update check
     std::string notified_;      // the version the notification-area message was shown for

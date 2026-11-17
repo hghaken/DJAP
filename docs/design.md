@@ -1087,7 +1087,7 @@ output channel pair of each deck (with the driver's channel names once it is ope
 (the driver's own when it refuses the one asked for), buffer size (the driver's preferred, or the sizes its
 granularity allows), Start / Stop audio, beside them Audio properties and Sound settings (client, 2026-11-05: Windows'
 Sound window, `control.exe mmsys.cpl,,0`, and its settings page, `ms-settings:sound`), and a LED before each device list (client, 2026-11-05: "a LED that shows green or red
-whether the interface is online": deck A / B input and output, the fallback output; green = among the devices now, red
+whether the interface is online": deck A / B input and output, the two fallback outputs; green = among the devices now, red
 = not, grey = not known - an ASIO driver installed but not open; ASIO pairs follow the driver). The devices are read
 every 3 s while the window shows, on a thread of their own (`std::async`: a list of one API takes up to a few 100 ms,
 the window would stall). Choices are saved at once; while the audio runs, a new device, channel pair, sample rate, buffer size,
@@ -1107,9 +1107,18 @@ two ends carry one name, and DJAP would hear itself. Whether it runs on the fall
 (`SysStreamInfo::output` against the choice), no state to go stale after a Start in the Setup window. The main window's
 Out line and the message say so; in the Setup window the fallback row sits right under the device rows, with a
 countdown behind Try again for ("4:32", "On fallback", "Trying" - client, 2026-11-05; `MainWindow::retryStatus`, read
-every refresh). Stop audio stays enabled while it tries, and ends it. Start audio in the Setup window (client, 2026-11-05: "no countdown,
+every refresh). A second fallback (client, 2026-11-17: "can a 2nd fallback output be made?", then "Input - Output, Try
+again - Fallback 1 Output, Try again - Fallback 2 Output"): two rows under the device rows, each the time to try again
+on the left (with its countdown) and the fallback on the right, under the outputs (`FallbackOutput` / `RetryMinutes`
+as before, `FallbackOutput2` / `RetryMinutes2`, default 1 minute; `Settings::fallbackOutput[2]`, `retryMinutes[2]`).
+Fallback 2 comes when fallback 1 cannot play - not chosen, not there, or gone while it played: from that moment
+(`DeviceRecovery::since2_`; the main window asks every 5 s, so up to 5 s late) the second time, then fallback 2; fallback 1
+back meanwhile: to it at once. On fallback 2 the sound moves up to fallback 1 as soon as that is there
+(`Action::StepUp`; failed: fallback 2 again, the next step after 30 s, as a return), and back to the chosen output
+first when that returns. Which fallback runs is read from what runs, as before. Without a fallback 2 the rule is the
+old one; with ASIO there are none. `recovery_test` has the cases with a simulated clock. Stop audio stays enabled while it tries, and ends it. Start audio in the Setup window (client, 2026-11-05: "no countdown,
 and at the start it falls back on the headset that was off already"): a chosen output that is not among the devices
-goes to the fallback at once (`fallbackRoutes`, the same rule as the recovery's) - and so at the program's start (client,
+goes to the first fallback that is there at once (`fallbackRoutes`, the same rule as the recovery's) - and so at the program's start (client,
 2026-11-05: "an output not found at the start: jump to the fallback at once and start the audio"; `Facts::atStart`, set by
 `startSavedAudio`; a fallback not there yet just after logging on: the tries as ever), and a Start that fails (WASAPI /
 DirectSound / MME) no longer clears `StartAudio` nor shows a message box - the recovery takes over at once (the Setup

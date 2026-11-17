@@ -41,8 +41,9 @@ public:
     // Messages of the main window shown under the state too (a start that is retried, settings that could not be
     // saved) - the status bar shows only the Windows volume and the CPU use (client, 2026-10-27).
     void setNotes(const std::wstring& notes) { notes_ = notes; }
-    // The countdown after Try again for: "4:32" while trying, "On fallback", "Trying", or empty (client, 2026-11-05).
-    void setRetryStatus(std::function<std::wstring()> f) { retryStatus_ = std::move(f); }
+    // The countdown after each Try again for (the fallback's number, 1 or 2): "4:32" while trying, "On fallback",
+    // "Trying", or empty (client, 2026-11-05; the second row 2026-11-17).
+    void setRetryStatus(std::function<std::wstring(int)> f) { retryStatus_ = std::move(f); }
     // For the Health window: what runs (per deck: the route, the latency, the drift), with any message, and the counters.
     std::wstring healthState() const;
     std::wstring healthCounters() const;
@@ -71,11 +72,11 @@ private:
     AudioIO& audio_;
     Changed onChange_;
     HWND hwnd_ = nullptr, owner_ = nullptr;
-    HWND labels_[16] = {};
+    HWND labels_[18] = {};
     // a LED before each device list (client, 2026-11-05: "a LED that shows green or red whether the interface is
-    // online"): deck A input, output, deck B input, output, the fallback output - its state 0 none, 1 there, 2 not there,
-    // 3 not known (an ASIO driver that is installed but not open)
-    static constexpr int kLeds = 5;
+    // online"): deck A input, output, deck B input, output, fallback 1, fallback 2 - its state 0 none, 1 there, 2 not
+    // there, 3 not known (an ASIO driver that is installed but not open)
+    static constexpr int kLeds = 6;
     HWND led_[kLeds] = {};
     struct Listing {
         AudioApi api = AudioApi::Wasapi;
@@ -86,9 +87,12 @@ private:
     Listing listed_;
     bool haveListed_ = false;
     ULONGLONG listedAt_ = 0;
+    // WASAPI / DirectSound / MME: the fallback outputs, each with the time to try again before it and its countdown
+    // (client, 2026-11-17: "a second fallback output" - per row Try again for, then the fallback under the outputs)
     HWND fallback_ = nullptr, retry_ = nullptr, countdown_ = nullptr;
-    std::function<std::wstring()> retryStatus_; // the countdown's text (the main window's recovery)
-    std::wstring retryShown_; // WASAPI / DirectSound / MME: the fallback output, the time to try again
+    HWND fallback2_ = nullptr, retry2_ = nullptr, countdown2_ = nullptr;
+    std::function<std::wstring(int)> retryStatus_; // a countdown's text (the main window's recovery)
+    std::wstring retryShown_[2];
     HWND decks_ = nullptr, api_ = nullptr, exclusive_ = nullptr, drift_ = nullptr, link_ = nullptr, inputs_ = nullptr, follow_ = nullptr;
     HWND inPeriod_ = nullptr; // ASIO with WASAPI inputs: their period (in drift_'s place, which ASIO does not use)
     HWND driver_ = nullptr, open_ = nullptr, close_ = nullptr, panel_ = nullptr, info_ = nullptr;

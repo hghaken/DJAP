@@ -533,10 +533,9 @@ the audio again (a short fade-out and fade-in).
 | **Look-ahead** | The limiter's look-ahead: 0, 1.5 (default), 2, 3 or 5 ms, the same for both decks. Longer handles peaks more gently. Every choice above 0 limits the true peak; at 0 ms the limiter holds only the sample peak (true peaks can pass the ceiling) and adds no delay. Changed at once with a short fade. (The former 0.5 and 1.0 ms were too short for the true-peak detector and are now 1.5 ms.) |
 | **Oversampling** | 2x, 4x (default) or 8x, both decks: how many times the sample rate the soft clipper and the exciter work at. Their overtones above the audio band would fold back as harsh tones that do not belong to the music; 2x leaves a rest on hard-driven high tones (about 40 dB under a 15 kHz tone), 4x and 8x take it away (60 to more than 100 dB under) at a little more CPU. Adds no latency. Changed with a short fade of those two stages. |
 | **The LEDs** before the input, output and fallback lists | **Green**: the device is there (online). **Red**: it is not among the devices now - switched off, unplugged, out of reach. **Grey**: not known - an ASIO driver that is installed but not open. DJAP looks every 3 seconds while the Setup window is open. |
-| **Fallback output**, **Try again for** (WASAPI, DirectSound, MME) | When a device goes away while the audio runs - a Bluetooth headset switched off - DJAP tries the chosen devices again every 5 seconds, for the time chosen here (1, 2, 5 (default), 10 or 30 minutes). After it, the sound goes to the fallback output if a chosen output is still gone, and back by itself as soon as that output returns; the main window's route and the status say so. Behind *Try again for* a countdown shows the time left
-(*On fallback* while it plays there, *Trying* without a fallback). The row sits right under the input and output
-rows. *(none)*: no fallback, DJAP goes on trying. When the audio starts with DJAP and a chosen output is not there, or you press **Start audio** while it is not there
-(the headset is off), the sound goes to the fallback output at once, and to the
+| **Try again for**, **Fallback 1 output**, **Fallback 2 output** (WASAPI, DirectSound, MME) | Two rows right under the input and output rows, each with *Try again for* on the left and a fallback output on the right, under the outputs. When a device goes away while the audio runs - a Bluetooth headset switched off - DJAP tries the chosen devices again every 5 seconds, for the time of the first row (1, 2, 5 (default), 10 or 30 minutes). After it, the sound goes to **fallback 1** if a chosen output is still gone, and back by itself as soon as that output returns; the main window's route and the status say so. When fallback 1 cannot play either - not there, or gone too - DJAP tries again for the time of the second row (1 minute by default), counted from that moment, and then plays on **fallback 2**. While it plays on fallback 2, the sound moves up to fallback 1 as soon as that is there, and back to the chosen output as soon as that returns. Behind each *Try again for* a countdown shows the time left before its fallback
+(*On fallback* while it plays there, *Trying* when there is nothing to go to). *(none)*: no fallback in that row; with neither, DJAP goes on trying. When the audio starts with DJAP and a chosen output is not there, or you press **Start audio** while it is not there
+(the headset is off), the sound goes at once to the first fallback that is there, and to the
 chosen output as soon as it is there. A Start that fails (WASAPI, DirectSound, MME) shows why in the status and keeps
 trying, with the countdown. **Stop audio** ends the tries. Do not choose the virtual cable you use as an input: DJAP would hear itself, so it does not use such a fallback. With ASIO there is no fallback (the driver is the only output); a stopped input is tried again for 5 minutes. |
 
@@ -1486,7 +1485,7 @@ The About window shows which file is in use. DJAP saves it after every change. I
 
 | Section | Holds |
 |---|---|
-| `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume, oversampling |
+| `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), the fallback outputs and their times (`FallbackOutput`, `RetryMinutes`, `FallbackOutput2`, `RetryMinutes2`), follow the Windows volume, oversampling |
 | `[Decks]` | Each deck's sound (empty: none holds its two parts), loudness preset, EQ and processing switch, linked presets, the L and R Volume faders (`GainLA`, `GainRA`, ...: dB, or `off`), their Link and the Mono box (`MonoA`, `MonoB`) |
 | `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |
@@ -1510,7 +1509,7 @@ Edit it only while the DJ software is closed.
 
 | Problem | What to do |
 |---|---|
-| **The sound stops when a Bluetooth headset goes away** | Choose a **Fallback output** in the Setup window (5.1): after *Try again for* the sound goes there, and back when the headset returns. Windows' default output cannot be the fallback when that is the virtual cable DJAP listens to. |
+| **The sound stops when a Bluetooth headset goes away** | Choose a **Fallback 1 output** in the Setup window (5.1), and if you like a **Fallback 2 output** for when that one is not there either: after *Try again for* the sound goes there, and back when the headset returns. Windows' default output cannot be the fallback when that is the virtual cable DJAP listens to. |
 | **No sound** | Is the audio started (Setup window)? Are the right input and output pairs or devices chosen? Is a deck on *(none)*? Do the In bars move? If In moves and Out does not, check the output route and the amplifier. |
 | **"Open driver" fails** | Another program (DJ software) may hold the ASIO driver. Close it or use another interface. Check that the interface is connected and its driver installed. |
 | **A device shows "(not found)"** | The saved device is not connected, or it was chosen under another API (each API names devices differently). Choose it again. |

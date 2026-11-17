@@ -47,10 +47,11 @@ struct SysInputs {
 SysInputs sysInputsFrom(const Settings& s);
 AsioChannels asioChannelsFrom(const Settings& s);   // deck B's pairs 0 (unused) with one channel
 void sysRoutesFrom(const Settings& s, SysRoute routes[2]); // WASAPI / DirectSound / MME devices of each deck
-// The fallback output (Settings::fallbackOutput) in the place of each route's output that is not among `outputs`. False,
-// and the routes as they were, when there is nothing to use it for or it cannot be used: none chosen, not among the
-// outputs, or of an input's name (a virtual cable's two ends carry one name: DJAP would hear itself).
-bool fallbackRoutes(const Settings& s, const std::vector<SysDevice>& outputs, SysRoute routes[2]);
+// Fallback output `which` (1 or 2: Settings::fallbackOutput[which - 1]; 0: the first of the two that can be used) in the
+// place of each route's output that is not among `outputs`; returns the one used. 0, and the routes as they were, when
+// there is nothing to use it for or it cannot be used: none chosen, not among the outputs, or of an input's name (a
+// virtual cable's two ends carry one name: DJAP would hear itself).
+int fallbackRoutes(const Settings& s, const std::vector<SysDevice>& outputs, SysRoute routes[2], int which = 0);
 
 class AudioIO {
 public:

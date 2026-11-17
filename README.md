@@ -86,9 +86,9 @@ window its two parts are chosen and edited, and own sounds are saved, renamed an
   curve with four points to drag, the auto tone's corrections over the last minute), tooltips on every control (they can be switched off), windows that open where they were left, and
   the Setup window (audio API - ASIO, WASAPI shared or exclusive, DirectSound, MME -; for ASIO the driver and channel
   pairs, for the others each deck's input and output device; sample rate, buffer size, the option to give both
-  decks the same loudness preset, start / stop, a lamp per device that shows whether it is there, a fallback output
-  for a device that goes away - a Bluetooth headset switched off - after trying it again for a few minutes, and back
-  when it returns, buttons to Windows' sound settings), a Health window (latency, real-time health, how late the
+  decks the same loudness preset, start / stop, a lamp per device that shows whether it is there, two fallback
+  outputs for a device that goes away - a Bluetooth headset switched off - each after trying again for a few minutes,
+  and back when it returns, buttons to Windows' sound settings), a Health window (latency, real-time health, how late the
   audio and Windows wake up, and line graphs of the last hour). With ASIO a deck's input may also come from a
   WASAPI, DirectSound or MME device (for example a player sending into a virtual cable): the two clocks' drift is
   corrected by a slightly adjusted read speed (at most 0.2 %), at the cost of a buffer of about 8-23 ms, shown

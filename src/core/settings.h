@@ -133,10 +133,12 @@ public:
     int oversampling = 4;        // 2, 4 or 8: the soft clipper and the exciter (deck.h, kOversamplingDefault)
     int bufferSize = 0;          // driver buffer in frames; 0 = the driver's preferred size
     bool startAudio = false;     // start the audio at program start (the last Start, not stopped since)
-    // WASAPI / DirectSound / MME: a device that goes away is tried again for retryMinutes (1, 2, 5, 10 or 30), then the
-    // output plays on fallbackOutput (empty: none, go on trying) until the chosen one is back (recovery.h)
-    std::string fallbackOutput;
-    int retryMinutes = 5;
+    // WASAPI / DirectSound / MME: a device that goes away is tried again for retryMinutes[0] (1, 2, 5, 10 or 30), then
+    // the output plays on fallbackOutput[0] (empty: none) until the chosen one is back; when that cannot play either,
+    // tried again for retryMinutes[1] (from then), then fallbackOutput[1] (client, 2026-11-17: "a second fallback
+    // output"); nothing to fall back on: go on trying (recovery.h)
+    std::string fallbackOutput[2];
+    int retryMinutes[2] = {5, 1};
     // the outputs follow the volume (and mute) of Windows' default playback device - the volume keys; one choice
     // per mode, [0] one channel (on by default), [1] two decks (off: a DJ's outputs do not move with a key)
     bool followVolume[2] = {true, false};

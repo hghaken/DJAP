@@ -513,7 +513,9 @@ std::string Settings::toText() const {
     o << "LookAheadMs=" << compact(lookAheadMs) << "\n";
     o << "; A device that goes away is tried again for this many minutes (1, 2, 5, 10 or 30), then the output plays on\n"
          "; FallbackOutput (WASAPI / DirectSound / MME; empty = none) until the chosen one is back\nRetryMinutes="
-      << retryMinutes << "\nFallbackOutput=" << fallbackOutput << "\n";
+      << retryMinutes[0] << "\nFallbackOutput=" << fallbackOutput[0] << "\n";
+    o << "; When that cannot play either (not there, or gone too): tried again for RetryMinutes2, then FallbackOutput2\n"
+         "RetryMinutes2=" << retryMinutes[1] << "\nFallbackOutput2=" << fallbackOutput[1] << "\n";
     o << "; Oversampling of the soft clipper and the exciter (2, 4 or 8), both decks: more keeps their overtones from\n"
          "; folding back into the audio band, at more CPU\nOversampling=" << oversampling << "\n";
     o << "; Driver buffer size in frames (0 = the driver's preferred size)\nBufferSize=" << bufferSize << "\n";
@@ -705,10 +707,12 @@ void Settings::fromText(const std::string& text) {
     if (auto v = get("Audio", "InputB")) inputB = std::max(1, toInt(*v, inputB));
     if (auto v = get("Audio", "OutputA")) outputA = std::max(1, toInt(*v, outputA));
     if (auto v = get("Audio", "OutputB")) outputB = std::max(1, toInt(*v, outputB));
-    if (auto v = get("Audio", "FallbackOutput")) fallbackOutput = *v;
-    if (auto v = get("Audio", "RetryMinutes")) {
-        const int m = toInt(*v, 5);
-        retryMinutes = m == 1 || m == 2 || m == 5 || m == 10 || m == 30 ? m : 5;
+    for (int i = 0; i < 2; ++i) {
+        if (auto v = get("Audio", i == 0 ? "FallbackOutput" : "FallbackOutput2")) fallbackOutput[i] = *v;
+        if (auto v = get("Audio", i == 0 ? "RetryMinutes" : "RetryMinutes2")) {
+            const int def = i == 0 ? 5 : 1, m = toInt(*v, def);
+            retryMinutes[i] = m == 1 || m == 2 || m == 5 || m == 10 || m == 30 ? m : def;
+        }
     }
     if (auto v = get("Audio", "LookAheadMs")) {
         double d;

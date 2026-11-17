@@ -30,21 +30,22 @@ void sysRoutesFrom(const Settings& s, SysRoute routes[2]) {
         routes[d] = d == 1 && s.decks == 1 ? SysRoute() : SysRoute{s.inDevice[d], s.outDevice[d]};
 }
 
-bool fallbackRoutes(const Settings& s, const std::vector<SysDevice>& outputs, SysRoute routes[2]) {
+int fallbackRoutes(const Settings& s, const std::vector<SysDevice>& outputs, SysRoute routes[2], int which) {
     auto listed = [&](const std::string& name) {
         return std::any_of(outputs.begin(), outputs.end(), [&](const SysDevice& o) { return o.name == name; });
     };
-    const std::string& fb = s.fallbackOutput;
-    if (fb.empty() || !listed(fb)) return false;
     bool missing = false;
-    for (int d = 0; d < 2; ++d) {
-        if (routes[d].input == fb) return false;
-        missing = missing || (!routes[d].output.empty() && !listed(routes[d].output));
+    for (int d = 0; d < 2; ++d) missing = missing || (!routes[d].output.empty() && !listed(routes[d].output));
+    if (!missing) return 0;
+    const int first = which == 0 ? 1 : std::max(1, which), last = which == 0 ? 2 : std::min(2, which);
+    for (int n = first; n <= last; ++n) {
+        const std::string& fb = s.fallbackOutput[n - 1];
+        if (fb.empty() || !listed(fb) || routes[0].input == fb || routes[1].input == fb) continue;
+        for (int d = 0; d < 2; ++d)
+            if (!routes[d].output.empty() && !listed(routes[d].output)) routes[d].output = fb;
+        return n;
     }
-    if (!missing) return false;
-    for (int d = 0; d < 2; ++d)
-        if (!routes[d].output.empty() && !listed(routes[d].output)) routes[d].output = fb;
-    return true;
+    return 0;
 }
 
 AudioIO::AudioIO() = default;
