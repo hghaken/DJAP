@@ -1039,6 +1039,9 @@ Each area has its own test program (`tests/`, run all with `tools\run_tests.ps1 
 | Compressor | static curve; step response | exact; 63 % in about 14 ms |
 | Limiter | +12 dBFS single samples at several look-aheads; +6 dBFS sine; fs/4 square; +9.5 dBFS noise bursts | sample peak <= ceiling; true peak (16x reference) <= ceiling + 0.1 dB |
 | Bypass | processing off | the input delayed by the look-ahead, bit-exact |
+| Mono | a deck in mono; bypassed | left = right in every sample; the input |
+| Volume faders | one channel at -6 dB and one off; the scale both ways; the linked move; the Windows volume a 2 % press at a time; a change while playing | exact ratio, silence, the other channel bit-exact; every step back; every press down, at most 4 dB; the 40 ms glide as calculated |
+| Device recovery | a simulated clock through every case of the two fallbacks | the action of every 5 s look as the rule says |
 | MB Compressor | band-sum flatness for every band count 1..7 | 0.01 dB |
 | Noise reduction | band sum while open; pink noise under the threshold; a tone with hiss under it (4 bands and 1); hold / release / attack; every value changed on a tone it turns down; the split rule | 0.001 dB (one band bit-exact); the depth within 0.3 dB; the tone within 0.05 dB, the hiss down by about the depth; the times; no click; rising, 1.25x apart |
 | Band count | 3 -> 7 -> 1 bands on a sine while playing | no step larger than the signal's own |
