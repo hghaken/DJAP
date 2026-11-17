@@ -174,7 +174,7 @@ void MainWindow::presetsChanged(bool listChanged, bool saveNow) {
 void MainWindow::setDeckGain(int d, double left, double right, bool keep) {
     settings_.deck[d].gainL = clampVolume(left);
     settings_.deck[d].gainR = clampVolume(right);
-    applyDeck(d); // heard at once (a 5 ms ramp in the deck)
+    applyDeck(d); // heard at once (a 40 ms glide in the deck: kFaderGlideS)
     if (keep) save();
 }
 
@@ -1136,7 +1136,8 @@ void MainWindow::trayMenu(int x, int y) {
 
 // The outputs follow Windows' volume (the volume keys) when chosen - through the decks' Volume faders (client,
 // 2026-11-17: "the Windows volume changes the DJAP volume fader"; until then a volume of its own after the chain that
-// the faders and the meters did not show): a change of the Windows volume, and its first look (at the start, or when
+// the faders and the meters did not show; its slider's position as the faders' position: windowsVolume - every press of
+// a volume key moves them as far): a change of the Windows volume, and its first look (at the start, or when
 // the choice is switched on), moves the faders of both decks (masterVolume: the louder one to it, the other one as
 // far); by hand they move as before, until the next change. Its mute silences the outputs after the chain
 // (DeckProcessor::setVolume) and leaves the faders as they are. A deck whose input is the default playback device
@@ -1147,8 +1148,7 @@ void MainWindow::updateVolume() {
     winVolume_.poll(); // also when the outputs do not follow it: the status bar shows it (client, 2026-10-27)
     const bool on = follow && winVolume_.valid();
     if (on) {
-        const double level = winVolume_.level(); // without the mute
-        const double db = clampVolume(level > 0.0 ? 20.0 * std::log10(level) : kVolumeOffDb);
+        const double db = windowsVolume(winVolume_.percent() / 100.0); // the slider's position, without the mute
         if (db != fadersAt_) { // (NaN: the first look)
             fadersAt_ = db;
             bool moved = false;
@@ -1156,7 +1156,7 @@ void MainWindow::updateVolume() {
                 double l = settings_.deck[d].gainL, r = settings_.deck[d].gainR;
                 masterVolume(db, l, r);
                 if (l != settings_.deck[d].gainL || r != settings_.deck[d].gainR) {
-                    setDeckGain(d, l, r, false); // heard at once (the deck's 5 ms glide), drawn at the next meters
+                    setDeckGain(d, l, r, false); // heard at once (the deck's glide), drawn at the next meters
                     moved = true;
                 }
             }

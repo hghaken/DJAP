@@ -68,7 +68,7 @@ same look-ahead, bit-exact.
 
 **Changes while playing never click** (measured by `deck_test`, every parameter on a tone in the stage's own band):
 gains, make-up (the automatic make-up moves with threshold, ratio and knee), width, bass width, bass amount and
-clipper drive follow a 5 ms one-pole; a new density band count or new density splits, and a new width split, run in
+clipper drive follow a 5 ms one-pole (the output gain with the Volume faders 40 ms, `kFaderGlideS`); a new density band count or new density splits, and a new width split, run in
 a spare filter set that first warms up 20 ms unheard (a filter started cold on running audio starts with a
 transient) and then crossfades in over 20 ms with a raised cosine (a linear fade's corner showed on a 120 Hz tone);
 a new bass enhancer frequency fades the enhancer out (20 ms), takes the new filters and fades it back in.
@@ -510,8 +510,8 @@ Linked, the other cap moves as far along its slot, each held at the ends (`linke
 end; both drawn down are off - a rule that kept the dB difference stopped the louder one above off); a drag, a click
 in a slot (the cap jumps there), the mouse wheel (a step per notch), a double-click (0 dB; linked: both). The deck's own volume
 (`DeckSettings::gainL` / `gainR` / `gainLink`, `[Decks] GainLA=` ...; `DeckControl::gainL` / `gainR`): the preset's
-output gain times `volumeFactor` (0 when off) after the limiter, one factor per channel with the output gain's 5 ms
-glide, only down; another
+output gain times `volumeFactor` (0 when off) after the limiter, one factor per channel with a 40 ms one-pole
+(`kFaderGlideS`; 5 ms until the Windows volume keys moved them - each press was heard as a step), only down; another
 sound leaves it; bypass leaves it out (the deck stays bit-exact). Followed, the Windows volume moves them (client,
 2026-11-17: "the Windows volume changes the DJAP volume fader"; 8, Windows volume). Heard while dragging (`kMeterGainMoved`), saved when
 let go (`kMeterGainSet`). A first version (the same day) was one fader on the preset's Output gain: it moved with the
@@ -995,8 +995,15 @@ When on, the GUI reads the default playback device's level (in dB, as Windows or
 0 dB) and mute every 15 ms (`src/app/winvolume.*`, a timer of its own; 20 times a second until 2026-11-12; the default
 device is looked up again every second; one read costs about 35 microseconds - `winvolume_test`). The level moves
 the decks' Volume faders (client, 2026-11-17: "the Windows volume changes the DJAP volume fader"): a change of it -
-and its first look, at the start or when the switch is turned on - sets each deck's louder fader to it (in the
-faders' steps; under -60 dB off) and the other one as far along its slot (`masterVolume`, the Link's rule:
+and its first look, at the start or when the switch is turned on - sets each deck's louder fader to it and the other
+one as far along its slot. What "it" is (the same day: "the volume knob on my keyboard jumps from -35 to off, and it is
+jerky - make it more even"): first Windows' own dB, whose bottom is coarse (2 % = -34 dB, the next press silence; a
+press near the top 0.2 dB); since 0.1.422 the slider's position (`GetMasterVolumeLevelScalar`, what the keys change by
+2 %) as the faders' position from the last law point to the top (`windowsVolume`): 100 % = 0 dB, 50 % = -17.5, 20 % =
+-33, 2 % = -56, then off - at most 4 dB a press, six presses from -40 dB to off; the same Windows position is quieter
+than before (14 % was -19 dB, now -38). With that the faders glide 40 ms instead of 5 (`kFaderGlideS`): a held key
+(about 30 presses a second) is one ramp, not a staircase (deck_test: the factor after 40 ms is the one-pole's, the
+click test of the faders 1.00). (`masterVolume`, the Link's rule:
 `linkedVolumes`), so a balance between L and R stays; by hand they move as before, until the next change; saved once
 the volume has rested for a second (`MainWindow::updateVolume`). The faders are after the limiter (only down, so the
 ceiling holds), and the Out bars show them. Until then each deck multiplied its output by the level after the clip

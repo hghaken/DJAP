@@ -239,6 +239,12 @@ void linkedVolumes(const double from[2], int k, double db, double out[2]) {
     out[o] = delta == 0.0 ? from[o] : volumeAtPosition(std::min(1.0, std::max(0.0, volumePosition(from[o]) + delta)));
 }
 
+double windowsVolume(double share) {
+    if (!(share > 0.0)) return kVolumeOffDb; // (NaN too)
+    const double low = kVolumeLaw[kVolumeLawPoints - 1].pos;
+    return volumeAtPosition(low + (1.0 - low) * std::min(1.0, share));
+}
+
 void masterVolume(double db, double& left, double& right) {
     const double from[2] = {clampVolume(left), clampVolume(right)};
     double out[2];

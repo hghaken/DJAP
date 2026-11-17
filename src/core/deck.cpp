@@ -147,6 +147,7 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.outputGainR = dbToLin(v[pOutputGain]) * volumeFactor(ctl.gainR);
     c.switchStep = 1.0 / (0.020 * fs); // 20 ms switch ramps
     c.gainSmooth = onePoleCoeff(0.005, fs);
+    c.faderSmooth = onePoleCoeff(kFaderGlideS, fs);
     const double ctrlRate = fs / kControlBlock;
 
     // leveller
@@ -1150,8 +1151,8 @@ void DeckProcessor::process(float* left, float* right, int frames) {
             }
             masterMix_ = moveToward(masterMix_, c.processing ? 1.0 : 0.0, c.switchStep);
             inGain_ = toward(inGain_, c.inputGain, c.gainSmooth);
-            outGainL_ = toward(outGainL_, c.outputGainL, c.gainSmooth);
-            outGainR_ = toward(outGainR_, c.outputGainR, c.gainSmooth);
+            outGainL_ = toward(outGainL_, c.outputGainL, c.faderSmooth);
+            outGainR_ = toward(outGainR_, c.outputGainR, c.faderSmooth);
             settled_ = done && running_[sLeveller] == c.on[sLeveller] && masterMix_ == (c.processing ? 1.0 : 0.0) &&
                        inGain_ == c.inputGain && outGainL_ == c.outputGainL && outGainR_ == c.outputGainR;
         }

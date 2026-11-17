@@ -284,9 +284,10 @@ void AudioWindow::createControls() {
     tips_.add(link_, L"On: deck B always uses deck A's loudness preset and EQ - the main window then shows one set of "
                      L"controls (deck A's), and its Bypass counts for both decks.");
     tips_.add(follow_, L"On: the volume of Windows' default playback device - what the keyboard's volume keys and the "
-                       L"taskbar change - moves the main window's Volume faders of every deck: the louder of a deck's "
-                       L"two goes to that volume, the other one as far, as with their Link (by hand they move as "
-                       L"before, until the next change of the Windows volume). Its mute silences the outputs after "
+                       L"taskbar change - moves the main window's Volume faders of every deck: Windows' slider is "
+                       L"their travel (100 % the top, 0 % off, every key press as far); the louder of a deck's two goes "
+                       L"there, the other one as far, as with their Link (by hand they move as before, until the next "
+                       L"change of the Windows volume). Its mute silences the outputs after "
                        L"the processing. Never up: the ceiling holds. When the default playback device is the virtual "
                        L"cable the program reads and Windows itself turns that cable down, the program undoes that at "
                        L"its input, so the processing still sees the music's own level.\nOne choice per mode: on by "

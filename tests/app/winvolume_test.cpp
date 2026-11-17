@@ -33,7 +33,7 @@ int main() {
             CHECK(volume.muted() ? volume.gain() == 0.0 : volume.gain() == volume.level());
             CHECK(!volume.device().empty());
             // what the main window makes of it (MainWindow::updateVolume): the faders' value in its step
-            const double db = clampVolume(volume.level() > 0.0 ? 20.0 * std::log10(volume.level()) : kVolumeOffDb);
+            const double db = windowsVolume(volume.percent() / 100.0);
             char fader[32] = "off";
             if (!volumeOff(db)) std::snprintf(fader, sizeof fader, "%.1f dB", db);
             std::printf("-- the Windows volume now: %.0f %% (%.2f dB)%s%s; the Volume faders follow it to %s\n",

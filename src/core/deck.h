@@ -25,6 +25,10 @@ enum Stage : int { sLeveller, sNoise, sCompressor, sDensity, sBass, sExciter, sD
 constexpr double kMaxLookMs = 5.0;
 constexpr double kMaxInputVolume = 100.0; // largest input factor of setVolume (+40 dB)
 constexpr double kVolumeGlideS = 0.020;   // setVolume's values glide with this one-pole
+// The output gain with the deck's L / R volume faders glides with this one-pole (5 ms until 2026-11-17: the Windows
+// volume keys move the faders a step per press, about 30 a second while held, and each step was heard as a step - the
+// client: "it is jerky"; 40 ms makes the steps one smooth ramp and is still heard at once).
+constexpr double kFaderGlideS = 0.040;
 // For this long after setVolume's input factor was raised, the compressor, the MB compressor and the de-esser keep
 // the gain they have, and the leveller's detectors leave the blocks out. The factor undoes a volume Windows applied
 // to the deck's input, but it cannot move at the very moment the music with the new volume arrives: that music is
@@ -102,7 +106,7 @@ struct DeckConfig {
     bool processing = true, freeze = false;
     bool on[kStageCount] = {};
     double inputGain = 1.0, outputGainL = 1.0, outputGainR = 1.0; // the preset's output gain with the deck's L / R
-    double switchStep = 0.0, gainSmooth = 0.0;
+    double switchStep = 0.0, gainSmooth = 0.0, faderSmooth = 0.0; // faderSmooth: the output gain's (kFaderGlideS)
     // leveller (control rate)
     double aim = -14.0, levRange = 12.0, levStep = 0.0, levFastStep = 0.0, levFastUpStep = 0.0, holdLufs = -24.0,
            catchStep = 0.0, quietWait = 3.0;

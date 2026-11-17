@@ -157,6 +157,12 @@ void linkedVolumes(const double from[2], int k, double db, double out[2]);
 // The Windows volume moves a deck's faders (client, 2026-11-17: "the Windows volume changes the DJAP volume fader"):
 // the louder one goes to db, the other one as far (linkedVolumes); equal faders both go to db.
 void masterVolume(double db, double& left, double& right);
+// The Windows volume as the faders' value (MainWindow::updateVolume): its slider's position, 0..1 - what the volume keys
+// change, 2 % a press - as the fader's position from the last law point (-60 dB) to the top, so that every press moves
+// the caps as far and the steps are even on the faders' mixer scale; 0: off (client, 2026-11-17: "the volume knob on my
+// keyboard jumps from -35 to off, and it is jerky - make it more even": on Windows' own dB scale 2 % was -34 dB, the
+// next press silence, and a press near the top 0.2 dB).
+double windowsVolume(double share);
 
 // A parameter as positions 0 .. paramPositions(p) - the GUI's sliders and the plug-in's host steps: linear in the
 // parameter's steps; a log scale for times and frequencies that span a factor of 8 or more (density splits 20 Hz -

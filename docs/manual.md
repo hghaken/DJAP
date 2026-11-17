@@ -419,8 +419,11 @@ example to even out a louder speaker on one side. The faders are the deck's own:
 where they are, and they are saved with the deck (13). They are grey while the deck is bypassed: nothing is applied
 then. They are not the loudness preset's **Output gain** (6.3), which goes with the preset; the two add up.
 With **"The outputs follow the Windows volume"** on (5.2) the Windows volume moves them - the keyboard's volume keys,
-the taskbar slider: the louder fader of each deck goes to the Windows volume, the other one as far, as with Link, so
-a difference between left and right stays. By hand they move as before, until the Windows volume changes again.
+the taskbar slider. Windows' slider is the faders' travel: 100 % is the top, 0 % is off, about 50 % is -17 dB and 20 %
+-33 dB, and every press of a volume key (2 %) moves the faders as far - a small step near the top, larger ones low
+down, -56 dB at 2 % and only then off. The louder fader of each deck goes there, the other one as far, as with Link,
+so a difference between left and right stays. By hand they move as before, until the Windows volume changes again.
+A change of the faders - by hand, by a key - glides in over about 40 ms, so a held key is a smooth ramp.
 
 **Mono.** The box under Link, off (stereo) by default. On: the deck's left and right are mixed, (L + R) / 2, and both
 of its outputs carry that one sound - for a mono sound system, or a speaker on one side only (with the other fader
@@ -543,9 +546,9 @@ trying, with the countdown. **Stop audio** ends the tries. Do not choose the vir
 
 - **Deck A and deck B use the same loudness preset and EQ** - linked presets (4.5).
 - **The outputs follow the Windows volume (volume keys, taskbar) and mute.** The volume of Windows' default playback
-  device moves the Volume faders of the main window (4.3): the louder fader of each deck goes to it, the other one as
-  far, so a difference between left and right stays; by hand they move as before, until the Windows volume changes
-  again. Switched on, the faders take the Windows volume at once. The mute silences the outputs after the processing
+  device moves the Volume faders of the main window (4.3): Windows' slider is their travel (100 % the top, 0 % off,
+  every press of a volume key as far); the louder fader of each deck goes there, the other one as far, so a
+  difference between left and right stays; by hand they move as before, until the Windows volume changes again. Switched on, the faders take the Windows volume at once. The mute silences the outputs after the processing
   and leaves the faders where they are. Never up: the ceiling holds. If the default playback device is the virtual
   cable DJAP reads, and Windows turns that cable down in software, DJAP undoes that at its input, so the processing
   still sees the music's own level. One choice per mode: on by default with one channel, off with two decks (a key on

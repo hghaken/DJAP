@@ -749,6 +749,44 @@ void channelGains() {
         masterVolume(-6.0, gl, gr);
         CHECK(gl == -6.0 && gr == -6.0);
     }
+    // the Windows volume as the faders' value (client, 2026-11-17: "the volume knob jumps from -35 to off, and it is
+    // jerky - make it more even"): its slider's position on the faders' travel - 100 % the top, 0 % off, and every
+    // press of a volume key (2 %) a step down on the way, none of them large; the last one before off far below -35
+    {
+        CHECK(windowsVolume(1.0) == 0.0 && volumeOff(windowsVolume(0.0)) && volumeOff(windowsVolume(std::nan(""))));
+        double prev = 0.0, largest = 0.0;
+        bool falls = true;
+        int fromForty = 0;
+        for (int pct = 98; pct >= 2; pct -= 2) {
+            const double db = windowsVolume(pct / 100.0);
+            falls = falls && db < prev && !volumeOff(db);
+            largest = std::max(largest, prev - db);
+            fromForty += db < -40.0;
+            prev = db;
+        }
+        std::printf("   the Windows volume a press (2 %%) at a time: every press down, at most %.1f dB; 50 %% = %.1f dB, "
+                    "20 %% = %.1f dB, 2 %% = %.0f dB, then off - %d presses from -40 dB to it\n",
+                    largest, windowsVolume(0.5), windowsVolume(0.2), windowsVolume(0.02), fromForty + 1);
+        CHECK(falls && largest <= 4.0 && windowsVolume(0.02) <= -54.0 && fromForty + 1 >= 5);
+    }
+    // the faders glide (kFaderGlideS, 40 ms; 5 ms until 2026-11-17 - each press of a volume key was heard as a step):
+    // L from 0 to -12 dB at 1 s, its factor against the unchanged run after 5, 40 and 300 ms
+    {
+        DeckControl lower;
+        lower.gainL = -12.0;
+        const Stereo m = runLive(v, DeckControl(), l, r, {{frames(1.0), v, lower}});
+        auto factorAt = [&](double sec) { // the nearest frame with a clear sample
+            for (size_t k = 0; k < 400; ++k)
+                for (const size_t i : {frames(sec) + k, frames(sec) - k})
+                    if (std::fabs(s.l[i]) > 0.02) return static_cast<double>(m.l[i] / s.l[i]);
+            return -1.0;
+        };
+        const double target = dbToLin(-12.0), tau = std::exp(-1.0);
+        const double f5 = factorAt(1.005), f40 = factorAt(1.040), f300 = factorAt(1.300);
+        std::printf("   L 0 -> -12 dB: factor %.3f after 5 ms, %.3f after 40 ms (one-pole: %.3f), %.4f after 300 ms "
+                    "(%.4f)\n", f5, f40, target + (1.0 - target) * tau, f300, target);
+        CHECK(f5 > 0.85 && std::fabs(f40 - (target + (1.0 - target) * tau)) < 0.03 && std::fabs(f300 - target) < 0.003);
+    }
     // bypassed: the input, unchanged, delayed by the look-ahead
     c.processing = false;
     const Stereo b = runLive(v, c, l, r, {});
