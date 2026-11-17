@@ -662,10 +662,9 @@ void AudioWindow::fillAll() {
         devices(fallback2_, sysOutputs_, listedOut, settings_.fallbackOutput[1], L"(none)");
         for (int k = 0; k < 2; ++k) {
             HWND list = k == 0 ? retry_ : retry2_;
-            const int def = k == 0 ? 5 : 1; // (Settings::retryMinutes)
             SendMessageW(list, CB_RESETCONTENT, 0, 0);
             for (const int minutes : {1, 2, 5, 10, 30})
-                addItem(list, std::to_wstring(minutes) + (minutes == 1 ? L" minute" : L" minutes") + (minutes == def ? L" (default)" : L""), minutes);
+                addItem(list, std::to_wstring(minutes) + (minutes == 1 ? L" minute (default)" : L" minutes"), minutes); // (Settings::retryMinutes)
             selectData(list, settings_.retryMinutes[k]);
         }
         bufferSizes_.assign(std::begin(kPeriods), std::end(kPeriods));

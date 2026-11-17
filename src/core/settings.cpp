@@ -710,8 +710,8 @@ void Settings::fromText(const std::string& text) {
     for (int i = 0; i < 2; ++i) {
         if (auto v = get("Audio", i == 0 ? "FallbackOutput" : "FallbackOutput2")) fallbackOutput[i] = *v;
         if (auto v = get("Audio", i == 0 ? "RetryMinutes" : "RetryMinutes2")) {
-            const int def = i == 0 ? 5 : 1, m = toInt(*v, def);
-            retryMinutes[i] = m == 1 || m == 2 || m == 5 || m == 10 || m == 30 ? m : def;
+            const int m = toInt(*v, 1);
+            retryMinutes[i] = m == 1 || m == 2 || m == 5 || m == 10 || m == 30 ? m : 1; // (the default: 1 minute)
         }
     }
     if (auto v = get("Audio", "LookAheadMs")) {

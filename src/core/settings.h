@@ -138,7 +138,7 @@ public:
     // tried again for retryMinutes[1] (from then), then fallbackOutput[1] (client, 2026-11-17: "a second fallback
     // output"); nothing to fall back on: go on trying (recovery.h)
     std::string fallbackOutput[2];
-    int retryMinutes[2] = {5, 1};
+    int retryMinutes[2] = {1, 1}; // (client, 2026-11-17: "make the first Try again 1 minute by default too"; was 5)
     // the outputs follow the volume (and mute) of Windows' default playback device - the volume keys; one choice
     // per mode, [0] one channel (on by default), [1] two decks (off: a DJ's outputs do not move with a key)
     bool followVolume[2] = {true, false};

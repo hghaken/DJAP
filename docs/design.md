@@ -1098,7 +1098,7 @@ processing must start with the interfaces used last"); a failed start there, and
 audio runs, are handled by one rule (client, 2026-11-05: "a default output device I can choose: first try again for a
 certain time, 5 minutes for example, then fall back on it"; a device that went away used to stop the audio until the next
 Start). `DeviceRecovery` (`src/core/recovery.*`, `recovery_test`; the main window asks it every 5 s while `StartAudio`
-is 1): try the chosen devices for `RetryMinutes` (1, 2, 5, 10, 30; `StartAudio` stays 1), then, with WASAPI / DirectSound /
+is 1): try the chosen devices for `RetryMinutes` (1, 2, 5, 10, 30; default 1 since 2026-11-17 - client: "make the first Try again 1 minute by default too" -, 5 before, a saved 5 stays; `StartAudio` stays 1), then, with WASAPI / DirectSound /
 MME and a chosen output that is not among the devices, start with `FallbackOutput` in the place of the outputs that are
 gone; every 5 s look whether they are back, and start the chosen devices again (a return that fails: the fallback again,
 a next try after 30 s). No fallback chosen: go on trying. ASIO: stop trying after the time - each try opens a driver,

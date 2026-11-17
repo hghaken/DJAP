@@ -173,15 +173,19 @@ void defaults() {
     }
     // first start: no device chosen (the program opens the Audio window); a driver, or a device of another API
     CHECK(!s.audioConfigured() && !s.trayHintShown);
-    CHECK(s.fallbackOutput[0].empty() && s.fallbackOutput[1].empty() && s.retryMinutes[0] == 5 && s.retryMinutes[1] == 1);
+    CHECK(s.fallbackOutput[0].empty() && s.fallbackOutput[1].empty() && s.retryMinutes[0] == 1 && s.retryMinutes[1] == 1);
     {
-        // the second fallback (client, 2026-11-17): its own keys; an odd time is the default
+        // the second fallback (client, 2026-11-17): its own keys; an odd time is the default (1 minute, both); a 5 saved
+        // by an earlier version - its default then - stays 5
         Settings odd;
         odd.fromText("[Audio]\nFallbackOutput=A\nRetryMinutes=7\nFallbackOutput2=B (2- USB)\nRetryMinutes2=10\n");
-        CHECK(odd.fallbackOutput[0] == "A" && odd.retryMinutes[0] == 5 && odd.fallbackOutput[1] == "B (2- USB)" &&
+        CHECK(odd.fallbackOutput[0] == "A" && odd.retryMinutes[0] == 1 && odd.fallbackOutput[1] == "B (2- USB)" &&
               odd.retryMinutes[1] == 10);
         odd.fromText("[Audio]\nRetryMinutes2=x\n");
         CHECK(odd.retryMinutes[1] == 1);
+        Settings earlier;
+        earlier.fromText("[Audio]\nRetryMinutes=5\n");
+        CHECK(earlier.retryMinutes[0] == 5 && earlier.retryMinutes[1] == 1);
     }
     CHECK(s.checkUpdates && s.updateUrl.empty()); // the daily update check is on unless switched off
     Settings a = s;

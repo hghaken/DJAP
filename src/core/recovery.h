@@ -32,7 +32,7 @@ public:
         bool keepTrying = true;          // nothing to fall back on and the time is over: go on trying (false: ASIO -
                                          // each try opens a driver, which may take the interface from another program)
         // how long to try again before fallback 1, and - from the moment fallback 1 cannot play - before fallback 2
-        double retrySeconds[2] = {300.0, 60.0};
+        double retrySeconds[2] = {60.0, 60.0};
         // the program's start: a chosen output that is not there goes to a fallback at once (the first that can play),
         // as a Start in the Setup window does (client, 2026-11-05) - no time to try first
         bool atStart = false;
