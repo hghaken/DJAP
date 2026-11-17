@@ -54,6 +54,9 @@ struct DeckSettings {
     // box"; the deck's, not the sound's)
     double gainL = 0.0, gainR = 0.0;
     bool gainLink = true;
+    // left and right mixed, (L + R) / 2, from the input on (DeckControl::mono; client, 2026-10-29: a mono sound system;
+    // 2026-11-17: a box under the deck's Link box, no longer one switch in the Setup window for both decks)
+    bool mono = false;
 };
 
 
@@ -128,7 +131,6 @@ public:
     std::string asioInputDevice[2];  // ... each deck's device then; empty = its ASIO input pair
     double lookAheadMs = 1.5;    // limiter look-ahead, both decks
     int oversampling = 4;        // 2, 4 or 8: the soft clipper and the exciter (deck.h, kOversamplingDefault)
-    bool mono = false;           // both decks' outputs mono: (L + R) / 2 (Setup window; DeckControl::mono)
     int bufferSize = 0;          // driver buffer in frames; 0 = the driver's preferred size
     bool startAudio = false;     // start the audio at program start (the last Start, not stopped since)
     // WASAPI / DirectSound / MME: a device that goes away is tried again for retryMinutes (1, 2, 5, 10 or 30), then the

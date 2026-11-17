@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The plug-in's Setup window (client, 2026-10-29: "a right-click with the Setup window and About", as in the
-// program): what applies to a plug-in - the limiter's look-ahead, the oversampling and Mono (its parameters, stored
-// with the project), and the two switches it shares with the program through the settings file: Show tooltips and
+// program): what applies to a plug-in - the limiter's look-ahead and the oversampling (its parameters, stored with the
+// project; Mono, also one, is a box in the plug-in's window since 2026-11-17), the link of the plug-ins in one process,
+// and the two switches it shares with the program through the settings file: Show tooltips and
 // the daily update check (Settings::saveMerged merges them). No devices: the DJ software chooses the plug-in's input
 // and output.
 // On the brushed metal; one modeless window, owned by the host's window.
@@ -36,7 +37,7 @@ private:
     int px(int v) const { return MulDiv(v, static_cast<int>(dpi_), 96); }
 
     Plugin*& plugin_; // the plug-in window's (nullptr after it ended)
-    HWND hwnd_ = nullptr, look_ = nullptr, oversampling_ = nullptr, mono_ = nullptr, link_ = nullptr,
+    HWND hwnd_ = nullptr, look_ = nullptr, oversampling_ = nullptr, link_ = nullptr,
          tooltips_ = nullptr, updates_ = nullptr, close_ = nullptr;
     HFONT font_ = nullptr;
     UINT dpi_ = 96;

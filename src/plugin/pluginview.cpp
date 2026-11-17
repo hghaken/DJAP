@@ -521,6 +521,7 @@ void PluginView::meters() {
     data.gainL = plugin_->faderL();
     data.gainR = plugin_->faderR();
     data.gainLink = plugin_->faderLink();
+    data.mono = plugin_->plainOf(kMonoId) >= 0.5;
     if (data.m.bands == 0) data.m.bands = static_cast<int>(v[pDensBands]);
     for (int k = 0; k < kStageCount; ++k) data.stageOn[k] = v[kStageParam[k]] >= 0.5;
     data.processing = processing;
@@ -596,6 +597,8 @@ void PluginView::command(int id, int code) {
         plugin_->setFaders(left, right, code == kMeterGainSet);
     } else if (id == idMeter && code == kMeterGainLink) { // their Link box
         plugin_->setFaderLink(meterViewLink(meter_));
+    } else if (id == idMeter && code == kMeterMono) { // the Mono box under it (was in the Setup window until 0.1.410)
+        plugin_->edit(kMonoId, meterViewMono(meter_) ? 1.0 : 0.0);
     }
 }
 

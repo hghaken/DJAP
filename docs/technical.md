@@ -62,7 +62,7 @@ input (stereo)
  -> look-ahead true-peak limiter: the only look-ahead         (13)
  -> output gain with the deck's L / R volume (only down) -> bypass crossfade -> clip guard -> fades
  -> [output meter: K-weighted energy, true peak]
- -> Windows volume (only when followed)                      (14)
+ -> Windows mute (only when followed; its volume moves the deck's L / R volume)   (14)
 output
 ```
 
@@ -696,7 +696,8 @@ The moving-average accumulator is re-summed exactly every 8192 samples to stop f
 
 The output gain (-15..0 dB) only turns down, so the ceiling holds. The deck's own volume - the main window's L and R
 Volume faders, 0 dB down to -60 dB or off (a factor of 0) per channel - multiplies it, one factor per channel with the
-same 5 ms glide; it too only turns down, and bypass leaves it out. A clip guard then replaces non-finite values with
+same 5 ms glide; it too only turns down, and bypass leaves it out. When DJAP follows the Windows volume, that volume
+moves these faders (14.4). A clip guard then replaces non-finite values with
 0 and clamps to [-1, 1]; it never acts on a valid signal, and it is skipped in full bypass so bypass stays bit-exact.
 
 ### 14.1a Dither
@@ -734,8 +735,12 @@ DJAP follows that volume itself, when the option is on:
 
 - The program reads the default playback device's volume (in dB, as Windows or the driver applies it, at most 0 dB)
   and mute every 15 ms.
-- Each deck multiplies its output by it after the clip guard (only down, so the ceiling holds; volume 1 is
-  bit-exact), with a 20 ms glide. The meters show the level before it.
+- A change of the volume moves the decks' Volume faders (14.1): the louder of a deck's two goes to the Windows volume
+  (in the faders' steps; under -60 dB off) and the other one as far along its slot, so a difference between left and
+  right stays. The Out meters show the result. Until version 0.1.410 the volume was a factor of its own after the
+  output meters, which the faders did not show.
+- The mute silences each deck's output after the clip guard (with a 20 ms glide; unmuted, the output is
+  bit-exact); the faders stay where they are.
 - When the default playback device is the deck's own input (a virtual cable) and Windows applies the volume in
   software, the deck's input is multiplied by the inverse (at most +40 dB), so the processing sees the music's own
   level and the volume counts once.

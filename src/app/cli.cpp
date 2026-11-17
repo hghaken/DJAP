@@ -45,7 +45,7 @@ const char* const kUsage =
     "        --look <ms>        limiter look-ahead 0..5 ms (above 0 at least 66 samples, the true-peak\n"
     "                           minimum); default: the settings (1.5 ms)\n"
     "        --oversampling <n> the soft clipper's and the exciter's: 2, 4 or 8; default: the settings (4)\n"
-    "        --mono             both channels (L + R) / 2 through the chain; default: the settings (stereo)\n"
+    "        --mono             both channels (L + R) / 2 through the chain; default: each deck's Mono in the settings\n"
     "        --keep-delay       keep the look-ahead delay in the output, like a live device (default: removed)\n"
     "        --pcm24            write 24-bit PCM (default: 32-bit float, lossless)\n"
     "        --trace <file.csv> deck A every 100 ms: loudness in / out (momentary, short-term), the leveller's gain\n"
@@ -305,7 +305,7 @@ bool chooseDeck(const Settings& s, int d, const std::string& choice, const std::
     out = RenderDeck();
     out.control.lookMs = lookMs;
     out.control.oversampling = s.oversampling;
-    out.control.mono = s.mono;
+    out.control.mono = s.deck[d].mono;
     std::string name = choice;
     if (name.empty()) {
         if (!s.deck[d].processing) {
@@ -577,7 +577,7 @@ int run(int argc, wchar_t** argv) {
     const bool lookGiven = lookMs >= 0.0;
     if (!lookGiven) lookMs = s.lookAheadMs;
     if (oversampling) s.oversampling = oversampling; // this run only: the command line never writes the settings
-    if (mono) s.mono = true;
+    if (mono) s.deck[0].mono = s.deck[1].mono = true;
 
     if (command == "--render") {
         if (files.size() != 2) return usageError("--render needs an input and an output file");

@@ -41,6 +41,9 @@ struct MeterViewData {
     bool gainFaders = false;
     double gainL = 0.0, gainR = 0.0;
     bool gainLink = true;
+    // the deck's Mono, a box under Link (client, 2026-11-17: "take the Mono check box out of the Setup and put it
+    // under the Link check box"); drawn with the faders
+    bool mono = false;
 };
 
 // A click on a stage row or a LED bar (client, 2026-10-25: "open its settings") tells the parent with WM_COMMAND:
@@ -54,11 +57,13 @@ const char* meterStage(int target); // the preset window's tab of a target ("Lev
 
 // The Volume faders tell the parent with WM_COMMAND (its control id): kMeterGainMoved while one is dragged (heard at
 // once, not saved yet), kMeterGainSet for values to keep (the drag's end, a click in a slot, the mouse wheel, a
-// double-click: 0 dB), kMeterGainLink when the Link box was clicked. meterViewGain reads the values of that message
-// (dB, clampVolume; linked, a fader moves the other's cap as far), meterViewLink the box.
-constexpr int kMeterGainMoved = 30, kMeterGainSet = 31, kMeterGainLink = 32;
+// double-click: 0 dB), kMeterGainLink when the Link box was clicked, kMeterMono the Mono box. meterViewGain reads the
+// values of that message (dB, clampVolume; linked, a fader moves the other's cap as far: linkedVolumes), meterViewLink
+// and meterViewMono the boxes.
+constexpr int kMeterGainMoved = 30, kMeterGainSet = 31, kMeterGainLink = 32, kMeterMono = 33;
 void meterViewGain(HWND view, double& left, double& right);
 bool meterViewLink(HWND view);
+bool meterViewMono(HWND view);
 
 void registerMeterView(HINSTANCE instance);
 void unregisterMeterView(); // a plug-in DLL, before it is unloaded (the class would point into freed code)

@@ -57,9 +57,9 @@ deck input (stereo, pre-fader preferred - see 7)
                                     the +9 dB range end)
  -> soft clipper                     zero latency; 2x / 4x / 8x oversampling with IIR halfbands (user's choice)
  -> look-ahead true-peak limiter     the only delay (default 1.5 ms)
- -> output gain (only down)
+ -> output gain (only down)          x the deck's L / R Volume faders (followed, the Windows volume moves them: 8)
  -> clip guard                       non-finite -> 0, clamp [-1, 1]
- -> [Windows volume]                 only when followed (8): 0..1, glides 20 ms; meters measure before it
+ -> [Windows mute]                   only when followed (8): 0 or 1, glides 20 ms; meters measure before it
 deck output
 ```
 
@@ -121,7 +121,7 @@ analysis.
 | Exciter | frequency / amount | Hz / % | 3500 / 15 | 1500..8000 / 0..100 | 10.7 |
 | De-esser | frequency / threshold / max | Hz / LU re T / dB | 5500 / -10 / 6 | 3000..10000 / -30..0 / 0..12 | 10.8 |
 | Stereo width | width / bass width / bass split | % / % / Hz | 100 / 100 / 150 | 0..200 / 0..100 / 40..400 | 10.5 |
-| | mono | switch | off | - | client, 2026-10-29: "a check box Mono (off by default) in both Setup windows: the sound mono instead of stereo" - (L + R) / 2 on both channels from the deck's input on (after the dry path and the input meters), so the leveller, the limiter and the meters work on what is heard; Bypass stays the stereo input; a 20 ms ramp. Not part of a preset: `[Audio] Mono` (both decks) in the program, the parameter `Mono` (id 6, state version 3) in the plug-in, `DeckControl::mono`; `DJAPCmd --mono` |
+| | mono | switch | off | - | client, 2026-10-29: "a check box Mono (off by default) in both Setup windows: the sound mono instead of stereo"; 2026-11-17: "take the Mono check box out of the Setup and put it under the Link check box" - a box under the Volume faders' Link box of each deck (the meter panel; the plug-in's window too), the deck's own. (L + R) / 2 on both channels from the deck's input on (after the dry path and the input meters), so the leveller, the limiter and the meters work on what is heard; Bypass stays the stereo input; a 20 ms ramp. Not part of a preset: `DeckSettings::mono`, `[Decks] MonoA` / `MonoB` in the program (the one `[Audio] Mono` of both decks up to 0.1.410 counts for both until a deck has its own), the parameter `Mono` (id 6, state version 3) in the plug-in, `DeckControl::mono`; `DJAPCmd --mono` (both decks; else each deck's) |
 | | oversampling | x | 4 | 2, 4, 8 | the soft clipper and the exciter's saturation (client, 2026-10-27: "CPU is not a problem, make the oversampling a user's choice"); 2x left about -40 dBc on hard-driven 15 kHz tones, 4x / 8x over 100 dB down; Setup and the plug-in, `[Audio] Oversampling`, `DeckControl::oversampling`; a change fades the two stages out and in |
 | Soft clipper | drive | dB | 2 | 0..9 | 10.9; runs at 2x the rate (polyphase IIR halfbands, about 2.6 frames of phase delay, no latency) - its aliases were -16..-44 dBc on 10-15 kHz tones (outside review, client 2026-10-26); the exciter's saturation too |
 | Limiter | ceiling | dBTP | -1.0 | -6..0 | R 128 / AES |
@@ -500,18 +500,20 @@ slider that fits the main page", then "split the fader into a left (L) and a rig
 move them independently or not"; asked whether they belong with the deck or with the loudness preset: "with the
 deck"; then "Volume, and volume must go from max to min - no audio"): in the meter panel between the Out bars' LUFS
 scale and the stage rows, two custom-drawn faders titled "Volume" - dark slots, caps of brushed metal with their
-letter, the values above - and under them the panel's own Link check box (on by default). The range: 0 dB (the top,
+letter, the values above - and under them the panel's own Link check box (on by default) and the deck's Mono box
+(the mono row in 3; 2026-11-17, from the Setup window). The range: 0 dB (the top,
 the most) down to -60 dB, then off (silence: the bottom 4 % of the travel; `kVolumeOffDb`, written "off"). The scale
-is a mixer fader's, piecewise linear in position (`kLaw` in `meterview.cpp`): 0 at the top, -5 at 85 %, -10 at 70 %,
+is a mixer fader's, piecewise linear in position (`kVolumeLaw`, `volumePosition` / `volumeAtPosition` in params.h): 0 at the top, -5 at 85 %, -10 at 70 %,
 -20 at 48 %, -30 at 30 %, -40 at 18 %, -60 at 8 % - a linear dB scale down to -60 left the usable top a few pixels;
 values in steps of 0.5 dB down to -20, 1 dB to -40, 2 dB below (`clampVolume`, `volumeUp` / `volumeDown`, params.h).
-Linked, the other cap moves as far along its slot, each held at the ends (a difference stays until one reaches an
+Linked, the other cap moves as far along its slot, each held at the ends (`linkedVolumes`; a difference stays until one reaches an
 end; both drawn down are off - a rule that kept the dB difference stopped the louder one above off); a drag, a click
 in a slot (the cap jumps there), the mouse wheel (a step per notch), a double-click (0 dB; linked: both). The deck's own volume
 (`DeckSettings::gainL` / `gainR` / `gainLink`, `[Decks] GainLA=` ...; `DeckControl::gainL` / `gainR`): the preset's
 output gain times `volumeFactor` (0 when off) after the limiter, one factor per channel with the output gain's 5 ms
 glide, only down; another
-sound leaves it; bypass leaves it out (the deck stays bit-exact). Heard while dragging (`kMeterGainMoved`), saved when
+sound leaves it; bypass leaves it out (the deck stays bit-exact). Followed, the Windows volume moves them (client,
+2026-11-17: "the Windows volume changes the DJAP volume fader"; 8, Windows volume). Heard while dragging (`kMeterGainMoved`), saved when
 let go (`kMeterGainSet`). A first version (the same day) was one fader on the preset's Output gain: it moved with the
 sound and changed shipped presets - the client chose the deck. The plug-in's window has the same faders: the
 instance's own (`Plugin::setFaders`, `PluginSlot::gainL` ... in `[Plugin]`, as its other choices; not host parameters,
@@ -991,9 +993,16 @@ the Audio window, "The outputs follow the Windows volume", one choice per mode (
 default on; `FollowWindowsVolumeTwoDecks`, default off - a key on the keyboard should not move a DJ's outputs).
 When on, the GUI reads the default playback device's level (in dB, as Windows or the driver applies it, at most
 0 dB) and mute every 15 ms (`src/app/winvolume.*`, a timer of its own; 20 times a second until 2026-11-12; the default
-device is looked up again every second; one read costs about 35 microseconds - `winvolume_test`) and
-each deck multiplies its output by it after the clip guard (`DeckProcessor::setVolume`, 20 ms one-pole; only down,
-so the ceiling holds; volume 1 = bit-exact). The meters and graphs show the processing before it. When the default
+device is looked up again every second; one read costs about 35 microseconds - `winvolume_test`). The level moves
+the decks' Volume faders (client, 2026-11-17: "the Windows volume changes the DJAP volume fader"): a change of it -
+and its first look, at the start or when the switch is turned on - sets each deck's louder fader to it (in the
+faders' steps; under -60 dB off) and the other one as far along its slot (`masterVolume`, the Link's rule:
+`linkedVolumes`), so a balance between L and R stays; by hand they move as before, until the next change; saved once
+the volume has rested for a second (`MainWindow::updateVolume`). The faders are after the limiter (only down, so the
+ceiling holds), and the Out bars show them. Until then each deck multiplied its output by the level after the clip
+guard, a volume of its own that the faders and the meters did not show; that place now carries only the mute
+(`DeckProcessor::setVolume`'s output: 0 or 1, 20 ms one-pole; 1 = bit-exact), and the faders stay where they are
+during it. When the default
 playback device is the deck's own input (same device name - a virtual cable whose two ends share a name) and
 Windows applies its volume in software (the driver reports no volume of its own), the deck's input is multiplied
 by the inverse (at most +40 dB), so the processing sees the music's own level and the volume counts once; a cable

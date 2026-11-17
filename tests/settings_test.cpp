@@ -48,7 +48,7 @@ void checkSame(const Settings& a, const Settings& b) {
     CHECK(a.inputA == b.inputA && a.inputB == b.inputB && a.outputA == b.outputA && a.outputB == b.outputB);
     CHECK_NEAR(a.lookAheadMs, b.lookAheadMs, 1e-12);
     CHECK(a.oversampling == b.oversampling);
-    CHECK(a.mono == b.mono);
+    CHECK(a.deck[0].mono == b.deck[0].mono && a.deck[1].mono == b.deck[1].mono);
     CHECK(a.bufferSize == b.bufferSize && a.startAudio == b.startAudio);
     CHECK(a.api == b.api && a.exclusive == b.exclusive && a.driftCorrection == b.driftCorrection);
     CHECK(a.inputPeriodMs == b.inputPeriodMs);
@@ -155,6 +155,22 @@ void defaults() {
         CHECK(odd.deck[0].gainL == kVolumeOffDb && odd.deck[0].gainR == 0.0 && odd.deck[1].gainL == 0.0 &&
               odd.deck[1].gainR == -33.0);
     }
+    // Mono per deck (client, 2026-11-17: a box under each deck's Link box): stereo by default, read back per deck; the
+    // one [Audio] Mono of the versions up to 0.1.410 counts for both decks until a deck has its own
+    {
+        CHECK(!s.deck[0].mono && !s.deck[1].mono);
+        Settings m = s;
+        m.deck[1].mono = true;
+        const std::string monoText = m.toText();
+        Settings back;
+        back.fromText(monoText);
+        CHECK(!back.deck[0].mono && back.deck[1].mono);
+        CHECK(monoText.find("MonoB=1") != std::string::npos && monoText.find("\nMono=") == std::string::npos);
+        Settings old, mixed;
+        old.fromText("[Audio]\nMono=1\n");
+        mixed.fromText("[Audio]\nMono=1\n[Decks]\nMonoA=0\n");
+        CHECK(old.deck[0].mono && old.deck[1].mono && !mixed.deck[0].mono && mixed.deck[1].mono);
+    }
     // first start: no device chosen (the program opens the Audio window); a driver, or a device of another API
     CHECK(!s.audioConfigured() && !s.trayHintShown);
     CHECK(s.fallbackOutput.empty() && s.retryMinutes == 5);
@@ -194,7 +210,7 @@ Settings busy() {
     s.outputB = 1;
     s.lookAheadMs = 2.25;
     s.oversampling = 8;
-    s.mono = true; // (stereo by default)
+    s.deck[1].mono = true; // (stereo by default; deck A stays so)
     s.bufferSize = 192;
     s.startAudio = true;
     s.followVolume[0] = false; // both the other way round than the defaults

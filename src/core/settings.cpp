@@ -516,8 +516,6 @@ std::string Settings::toText() const {
       << retryMinutes << "\nFallbackOutput=" << fallbackOutput << "\n";
     o << "; Oversampling of the soft clipper and the exciter (2, 4 or 8), both decks: more keeps their overtones from\n"
          "; folding back into the audio band, at more CPU\nOversampling=" << oversampling << "\n";
-    o << "; 1 = mono: every deck's left and right mixed, (L + R) / 2, on both outputs (a mono sound system)\nMono="
-      << (mono ? 1 : 0) << "\n";
     o << "; Driver buffer size in frames (0 = the driver's preferred size)\nBufferSize=" << bufferSize << "\n";
     o << "; Start the audio when the program starts (1 = it was started last and not stopped since)\nStartAudio="
       << (startAudio ? 1 : 0) << "\n";
@@ -545,6 +543,8 @@ std::string Settings::toText() const {
         o << "GainL" << x << "=" << volumeText(deck[d].gainL) << "\nGainR" << x << "=" << volumeText(deck[d].gainR)
           << "\nGainLink" << x << "=" << (deck[d].gainLink ? 1 : 0) << "\n";
     }
+    o << "; 1 = mono: the deck's left and right mixed, (L + R) / 2, on both of its outputs (a mono sound system)\n";
+    o << "MonoA=" << (deck[0].mono ? 1 : 0) << "\nMonoB=" << (deck[1].mono ? 1 : 0) << "\n";
     o << "\n";
     o << "[Window]\n; Where each window was last: x, y, width, height (screen pixels), 1 = maximised; a window without a\n"
          "; line opens centred on the screen\n";
@@ -720,7 +720,8 @@ void Settings::fromText(const std::string& text) {
         const int f = toInt(*v, 4);
         oversampling = f >= 6 ? 8 : f >= 3 ? 4 : 2; // 2, 4 or 8
     }
-    if (auto v = get("Audio", "Mono")) mono = toInt(*v, 0) != 0;
+    // the one Mono of both decks up to 0.1.410: where a deck has no Mono of its own yet, it takes that one
+    if (auto v = get("Audio", "Mono")) deck[0].mono = deck[1].mono = toInt(*v, 0) != 0;
     if (auto v = get("Audio", "BufferSize")) bufferSize = std::min(8192, std::max(0, toInt(*v, 0)));
     if (auto v = get("Audio", "StartAudio")) startAudio = toInt(*v, 0) != 0;
     if (auto v = get("Audio", "FollowWindowsVolumeOneChannel")) followVolume[0] = toInt(*v, 1) != 0;
@@ -890,6 +891,7 @@ void Settings::fromText(const std::string& text) {
         if (auto v = get("Decks", d == 0 ? "GainRA" : "GainRB"))
             if (parseVolume(*v, g)) deck[d].gainR = g;
         if (auto v = get("Decks", d == 0 ? "GainLinkA" : "GainLinkB")) deck[d].gainLink = toInt(*v, 1) != 0;
+        if (auto v = get("Decks", d == 0 ? "MonoA" : "MonoB")) deck[d].mono = toInt(*v, 0) != 0;
     }
     // the sounds: a shipped one's parts as the file has them, an own one as it was saved
     const std::string soundPrefix = kSoundPrefix;

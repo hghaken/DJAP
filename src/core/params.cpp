@@ -212,6 +212,41 @@ double volumeDown(double db) {
     return down < v ? down : clampVolume(v - 2.0 * volumeStep(v - 1e-9));
 }
 
+double volumePosition(double db) {
+    const double v = clampVolume(db);
+    if (volumeOff(v)) return 0.0;
+    for (int i = 1; i < kVolumeLawPoints; ++i) {
+        const VolumeLawPoint &a = kVolumeLaw[i - 1], &b = kVolumeLaw[i];
+        if (v >= b.db) return b.pos + (a.pos - b.pos) * (v - b.db) / (a.db - b.db);
+    }
+    return kVolumeLaw[kVolumeLawPoints - 1].pos;
+}
+
+double volumeAtPosition(double pos) {
+    if (!(pos >= kVolumeOffBelow)) return kVolumeOffDb; // (NaN too)
+    for (int i = 1; i < kVolumeLawPoints; ++i) {
+        const VolumeLawPoint &a = kVolumeLaw[i - 1], &b = kVolumeLaw[i];
+        if (pos >= b.pos) return clampVolume(b.db + (a.db - b.db) * (std::min(1.0, pos) - b.pos) / (a.pos - b.pos));
+    }
+    return kVolumeMinDb;
+}
+
+void linkedVolumes(const double from[2], int k, double db, double out[2]) {
+    k = k == 1 ? 1 : 0;
+    const int o = 1 - k;
+    out[k] = clampVolume(db);
+    const double delta = volumePosition(out[k]) - volumePosition(from[k]);
+    out[o] = delta == 0.0 ? from[o] : volumeAtPosition(std::min(1.0, std::max(0.0, volumePosition(from[o]) + delta)));
+}
+
+void masterVolume(double db, double& left, double& right) {
+    const double from[2] = {clampVolume(left), clampVolume(right)};
+    double out[2];
+    linkedVolumes(from, from[1] > from[0] ? 1 : 0, db, out);
+    left = out[0];
+    right = out[1];
+}
+
 PresetValues defaultValues() {
     PresetValues v{};
     for (int i = 0; i < kParamCount; ++i) v[static_cast<size_t>(i)] = kInfo[i].def;

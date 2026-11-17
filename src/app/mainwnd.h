@@ -24,6 +24,8 @@
 #include "updater.h"
 #include "winvolume.h"
 
+#include <limits>
+
 #include <windows.h>
 
 #include <filesystem>
@@ -77,7 +79,7 @@ private:
     void applyDeck(int d);
     void refreshStrip(int d);
     void updateMeters();
-    void updateVolume(); // the outputs follow Windows' volume (Audio window switch)
+    void updateVolume(); // the Volume faders follow Windows' volume, the outputs its mute (the Setup window's switch)
     void updateStatus();
     void updateTrayTip();
     void toTray();       // hide the window (and its own windows); the icon stays
@@ -140,6 +142,10 @@ private:
     int ticks_ = 0;
     WindowsVolume winVolume_;
     double shownVolume_ = -3.0; // the volume in the status bar (-2 unknown, -1 muted)
+    // the Windows volume the Volume faders were last moved to (dB, in its step; NaN: not yet - updateVolume), and when
+    // that is saved (GetTickCount64; 0: nothing to save) - once the volume has rested for a second, not at every look
+    double fadersAt_ = std::numeric_limits<double>::quiet_NaN();
+    unsigned long long fadersSaveAt_ = 0;
     // the program's CPU use, as Task Manager shows it (% of the whole computer), measured over about a second
     double cpuPercent_ = -1.0;
     unsigned long long cpuLastBusy_ = 0, cpuLastWall_ = 0;

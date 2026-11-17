@@ -2,13 +2,16 @@
 // winvolume_test: the volume of Windows' default playback device is read - never changed - as the main window does,
 // and one read is cheap enough for its 15 ms timer. A computer without a playback device passes (nothing to read).
 #include "check.h"
+#include "params.h"
 #include "winvolume.h"
 
 #include <windows.h>
 #include <objbase.h>
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
+#include <string>
 
 using namespace ap;
 
@@ -29,6 +32,13 @@ int main() {
             CHECK(volume.level() >= volume.gain() && volume.level() <= 1.0);
             CHECK(volume.muted() ? volume.gain() == 0.0 : volume.gain() == volume.level());
             CHECK(!volume.device().empty());
+            // what the main window makes of it (MainWindow::updateVolume): the faders' value in its step
+            const double db = clampVolume(volume.level() > 0.0 ? 20.0 * std::log10(volume.level()) : kVolumeOffDb);
+            char fader[32] = "off";
+            if (!volumeOff(db)) std::snprintf(fader, sizeof fader, "%.1f dB", db);
+            std::printf("-- the Windows volume now: %.0f %% (%.2f dB)%s%s; the Volume faders follow it to %s\n",
+                        volume.percent(), volume.level() > 0.0 ? 20.0 * std::log10(volume.level()) : -999.0,
+                        volume.muted() ? ", muted" : "", volume.software() ? ", applied by Windows" : "", fader);
             // 300 reads, a look-up of the default device among them (the first, and after a second)
             const int reads = 300;
             double worstUs = 0.0;

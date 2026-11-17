@@ -139,6 +139,24 @@ double clampVolume(double db);  // NaN or above 0: 0; under kVolumeMinDb: off; e
 double volumeFactor(double db); // the factor of a volume: 0 when off
 double volumeUp(double db);     // one step up (the mouse wheel): off -> kVolumeMinDb -> ... -> 0
 double volumeDown(double db);   // one step down: ... -> kVolumeMinDb -> off
+// The faders' scale, as a mixer's: fine near the top, where a volume is set, coarser below; the bottom 4 % of the
+// travel is off. Position 1 = the top. One rule for the faders' drawing and drag (meterview.cpp) and for the Windows
+// volume that moves them (MainWindow::updateVolume).
+struct VolumeLawPoint {
+    double pos, db;
+};
+inline constexpr VolumeLawPoint kVolumeLaw[] = {{1.0, 0.0},    {0.85, -5.0},  {0.70, -10.0}, {0.48, -20.0},
+                                                {0.30, -30.0}, {0.18, -40.0}, {0.08, kVolumeMinDb}};
+inline constexpr int kVolumeLawPoints = static_cast<int>(sizeof kVolumeLaw / sizeof kVolumeLaw[0]);
+inline constexpr double kVolumeOffBelow = 0.04; // a position under it is off; up to the last law point: kVolumeMinDb
+double volumePosition(double db);    // 0 (off) .. 1 (0 dB)
+double volumeAtPosition(double pos); // the volume at a position, in its step (clampVolume)
+// Fader k of `from` (0 L, 1 R) goes to db and the other one moves as far along its slot, each held at the ends - two
+// faders under one hand (the Link box, and the Windows volume): a difference stays until one reaches an end.
+void linkedVolumes(const double from[2], int k, double db, double out[2]);
+// The Windows volume moves a deck's faders (client, 2026-11-17: "the Windows volume changes the DJAP volume fader"):
+// the louder one goes to db, the other one as far (linkedVolumes); equal faders both go to db.
+void masterVolume(double db, double& left, double& right);
 
 // A parameter as positions 0 .. paramPositions(p) - the GUI's sliders and the plug-in's host steps: linear in the
 // parameter's steps; a log scale for times and frequencies that span a factor of 8 or more (density splits 20 Hz -

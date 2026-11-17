@@ -74,7 +74,7 @@ window its two parts are chosen and edited, and own sounds are saved, renamed an
 
 - `DJAP.exe` - the GUI: two deck strips (the sound, with the Sound window for its loudness preset and EQ - one choice
   when both decks share them -, processing /
-  bypass, an L and an R volume fader (0 dB down to off) with a Link box, meters for input and output loudness, true peak, the gain of
+  bypass, an L and an R volume fader (0 dB down to off) with a Link box and a Mono box, meters for input and output loudness, true peak, the gain of
   every stage and the spectrum of input and output), a spectrum window (a click on a deck's spectrum: the EQ as a curve with points to drag, the
   MB Compressor bands with their gains, the deck's loudness preset and EQ, the four bass sliders - bass level,
   enhancer, width and frequency - and how long the spectrum is averaged), an analysis window (compressor curve, loudness and gain over the last minute,
@@ -93,7 +93,7 @@ window its two parts are chosen and edited, and own sounds are saved, renamed an
   WASAPI, DirectSound or MME device (for example a player sending into a virtual cable): the two clocks' drift is
   corrected by a slightly adjusted read speed (at most 0.2 %), at the cost of a buffer of about 8-23 ms, shown
   with the measured drift. The outputs can follow the Windows volume and mute (the keyboard's volume keys; on by
-  default with one channel), applied after the processing.
+  default with one channel): the volume moves the decks' volume faders, the mute silences the outputs.
   The program lives in the notification area (system tray): closing or minimising the window hides it there while
   the audio goes on; a click on the icon brings it back, its menu has Shutdown. At the first start the Setup window
   opens, to choose the audio device. A second start shows the running program.
@@ -116,7 +116,7 @@ window its two parts are chosen and edited, and own sounds are saved, renamed an
 - `DJAP.vst3` - the plug-in for DJ software: one deck (stereo in, stereo out) with the same chain, the same sounds,
   loudness presets and EQs (read from the program's settings file) and a window like a deck strip of the program: the
   sound (with the Sound window), look-ahead, Bypass, the four bass sliders and the meter panel with its L and R
-  faders. Every value is a parameter the host can
+  faders and Mono. Every value is a parameter the host can
   show and automate; a project stores the values themselves. The host is told the latency (the look-ahead).
 
 ## Building

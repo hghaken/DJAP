@@ -187,9 +187,9 @@ To process everything Windows plays (browser, music player, video):
    device and as **Output** your speakers or headphones.
 4. Press **Start audio**.
 
-With one channel, the outputs follow the Windows volume by default (the keyboard's volume keys and the taskbar
-slider), after the processing - see 5.2. Without this, the volume keys would turn down the cable and the leveller
-would turn it back up.
+With one channel, DJAP follows the Windows volume by default: the keyboard's volume keys and the taskbar slider move
+the Volume faders (4.3, 5.2). Without this, the volume keys would turn down the cable and the leveller would turn it
+back up.
 
 You can also keep an ASIO interface as the output and take the input from a WASAPI device: choose **Audio API: ASIO**
 and **Input from: WASAPI devices** (see 5.1, "Deck inputs"). The two devices run on separate clocks; DJAP corrects
@@ -356,7 +356,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 
 ## 4. The main window
 
-![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), its L and R volume faders linked at -3.5 and -10 dB; deck B on Groningen (Very Loud with Bass+) without input yet, its faders unlinked, R off](images/main.jpg)
+![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), its L and R volume faders linked at -3.5 and -10 dB; deck B on Groningen (Very Loud with Bass+) without input yet, its faders unlinked with R off and Mono on: the whole sound on the left speaker](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
 no menu bar: **right-click anywhere in it** for *Setup...*, *Health...* (what runs, the counters and their graphs:
@@ -418,6 +418,15 @@ one reaches the top or the bottom; drawn all the way down, both are off. Without
 example to even out a louder speaker on one side. The faders are the deck's own: choosing another sound leaves them
 where they are, and they are saved with the deck (13). They are grey while the deck is bypassed: nothing is applied
 then. They are not the loudness preset's **Output gain** (6.3), which goes with the preset; the two add up.
+With **"The outputs follow the Windows volume"** on (5.2) the Windows volume moves them - the keyboard's volume keys,
+the taskbar slider: the louder fader of each deck goes to the Windows volume, the other one as far, as with Link, so
+a difference between left and right stays. By hand they move as before, until the Windows volume changes again.
+
+**Mono.** The box under Link, off (stereo) by default. On: the deck's left and right are mixed, (L + R) / 2, and both
+of its outputs carry that one sound - for a mono sound system, or a speaker on one side only (with the other fader
+off, as deck B in the picture). It works from the deck's input on, so the leveller keeps the loudness on target (a
+mono mix of wide music is a little quieter before it) and the limiter its ceiling. Switching glides in over 20 ms.
+Bypass stays the unchanged (stereo) input. Each deck has its own; it is saved with the deck (13).
 
 **Stage rows, right.** What each stage does now:
 
@@ -535,14 +544,13 @@ trying, with the countdown. **Stop audio** ends the tries. Do not choose the vir
 
 - **Deck A and deck B use the same loudness preset and EQ** - linked presets (4.5).
 - **The outputs follow the Windows volume (volume keys, taskbar) and mute.** The volume of Windows' default playback
-  device turns DJAP's outputs down after the processing (never up: the ceiling holds). The meters show the level
-  before this volume. If the default playback device is the virtual cable DJAP reads, and Windows turns that cable
-  down in software, DJAP undoes that at its input, so the processing still sees the music's own level. One choice per
-  mode: on by default with one channel, off with two decks (a key on the keyboard should not move a DJ's outputs).
-- **Mono** - off (stereo) by default. On: every deck's left and right are mixed, (L + R) / 2, and both outputs carry
-  that one sound - for a mono sound system, or a speaker on one side only. It works from the deck's input on, so the
-  leveller keeps the loudness on target (a mono mix of wide music is a little quieter before it) and the limiter its
-  ceiling. Switching glides in over 20 ms. Bypass stays the unchanged (stereo) input.
+  device moves the Volume faders of the main window (4.3): the louder fader of each deck goes to it, the other one as
+  far, so a difference between left and right stays; by hand they move as before, until the Windows volume changes
+  again. Switched on, the faders take the Windows volume at once. The mute silences the outputs after the processing
+  and leaves the faders where they are. Never up: the ceiling holds. If the default playback device is the virtual
+  cable DJAP reads, and Windows turns that cable down in software, DJAP undoes that at its input, so the processing
+  still sees the music's own level. One choice per mode: on by default with one channel, off with two decks (a key on
+  the keyboard should not move a DJ's outputs).
 - **Start DJAP when Windows starts** (2.5). Stored in Windows' list of startup programs, not in the settings file.
 - **Show tooltips** - on (the default): every control explains itself when the mouse rests on it. Off: no tooltips
   in any window. The plug-in follows the setting the next time it is loaded.
@@ -1253,8 +1261,10 @@ The window is one deck strip of the program:
 - **Sound** - the plug-in's sounds (see 9.3 and 4.6) with its **Edit...** button: the same Sound window as in the
   program, with the loudness preset and EQ lists and their Edit buttons (the loudness and EQ windows, chapters 6 and
   7, with every value, Save as, Rename, Delete and Reset). Beside it the sound's two parts.
-- **The meter panel** - LED bars, the L and R Volume faders with their Link box, the gain of each stage and the spectrum with the MB Compressor bands and the EQ curve, as in the main
-  window (4.3); the faders are this plug-in's own volume and are remembered for it, as its other choices. Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
+- **The meter panel** - LED bars, the L and R Volume faders with their Link and Mono boxes, the gain of each stage and the spectrum with the MB Compressor bands and the EQ curve, as in the main
+  window (4.3); the faders are this plug-in's own volume and are remembered for it, as its other choices. **Mono**
+  mixes this channel's left and right, the same sound on both outputs (as in the program, 4.3) - a parameter stored
+  with the project, off by default. Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
   program; clicking the spectrum opens the spectrum window (8.2) for this channel, with the four bass sliders and
   the EQ's points. What you drag there changes the plug-in's own values (the project keeps them; the loudness
   presets and EQs in the lists stay as they are); Reset loudness / Reset EQ set the values of the chosen
@@ -1263,8 +1273,7 @@ The window is one deck strip of the program:
   - The plug-in's **Setup** window holds what applies to a plug-in: **Look-ahead** - the limiter's look-ahead, 0, 1.5,
     2, 3 or 5 ms (see 5.1), a list of these five in the DJ software too; the DJ software is told the new delay (an old
     project's 0.5 or 1.0 ms runs as 1.5 ms); **Oversampling** - 2x, 4x (default) or 8x, stored with the DJ software's
-    project; **Mono** - this channel's left and right mixed, the same sound on both outputs (as in the program, 5.2),
-    a parameter stored with the project, off by default; **Deck 1 and deck 2 keep the same settings** - the plug-ins
+    project; **Deck 1 and deck 2 keep the same settings** - the plug-ins
     open in the DJ software (deck 1 is the first one opened) keep the same loudness preset, EQ, every value,
     look-ahead, oversampling and Mono: switched on, deck 2 takes deck 1's, and after that a change in either plug-in
     sets both (as "Deck A and deck B use the same loudness preset and EQ" in the program, 5.2); Bypass stays each
@@ -1444,7 +1453,7 @@ DJAPCmd --version | --help
   RF64, the 64-bit form of WAV. The file is written under a temporary name first, so a failed render leaves no half
   file. A render holds the whole input and output in memory (about 3 times the size of a 24-bit file): fine for songs
   and sets, but a file of several GB needs that much free memory. `--oversampling` sets the clipper's and exciter's oversampling for this render (default: the settings'); `--mono`
-  renders it mono (default: the settings' Mono). After
+  renders it mono (default: each deck's Mono in the settings). After
   rendering it prints a report of input and output loudness.
   `--trace <file.csv>` also writes deck A every 100 ms: loudness in and out (momentary and short-term), the
   leveller's gain and whether it holds, and what the compressor, MB Compressor bands, de-esser, clipper and limiter do -
@@ -1477,8 +1486,8 @@ The About window shows which file is in use. DJAP saves it after every change. I
 
 | Section | Holds |
 |---|---|
-| `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume, oversampling, `Mono` |
-| `[Decks]` | Each deck's sound (empty: none holds its two parts), loudness preset, EQ and processing switch, linked presets, the L and R Volume faders (`GainLA`, `GainRA`, ...: dB, or `off`) and their Link |
+| `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume, oversampling |
+| `[Decks]` | Each deck's sound (empty: none holds its two parts), loudness preset, EQ and processing switch, linked presets, the L and R Volume faders (`GainLA`, `GainRA`, ...: dB, or `off`), their Link and the Mono box (`MonoA`, `MonoB`) |
 | `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |
 | `[Preset <name>]` | The values of a loudness preset that differ from its shipped values (own loudness presets: all values, and `<key>.Saved` for a value that was changed since the preset was saved - its reset value) |
@@ -1507,7 +1516,7 @@ Edit it only while the DJ software is closed.
 | **A device shows "(not found)"** | The saved device is not connected, or it was chosen under another API (each API names devices differently). Choose it again. |
 | **"The settings file could not be read"** at the start | Another program held `DJAP.ini` (a virus scanner, a sync tool) for more than two seconds. DJAP runs with its default settings and saves nothing, so your file stays as it is; close that program and start DJAP again. |
 | **Dropouts, crackles** | Look at Health: late periods? Raise the buffer size; close heavy programs; set Windows' power plan to high performance; use fewer MB Compressor bands. With an input on another clock, underruns in the Setup window mean the input fell behind: its buffer grows by itself, and shrinks again after a few calm minutes. |
-| **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window. |
+| **The volume keys do nothing** | Switch on "The outputs follow the Windows volume" in the Setup window: the keys then move the Volume faders. |
 | **The sound pumps or breathes** | In a loudness preset of your own, set the compressor's Side-chain high-pass to 150 Hz (the shipped presets have it; at 80 Hz the kick pulls the whole mix down with every beat). Then lower the MB Compressor amount or the compressor ratio, lengthen their release, or choose a gentler loudness preset. |
 | **The volume drifts up and down within a song** | Widen the leveller's Window (Leveller tab): inside it the gain rests. |
 | **A loud song starts too loud after a quiet intro** | That is the leveller's 3 s memory; "Attack" (Leveller tab) brings it down within about a second. Shorten it if needed - or lengthen Release or Quiet wait, so the soft intro is turned up less. |

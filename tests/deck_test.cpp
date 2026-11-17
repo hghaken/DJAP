@@ -707,6 +707,48 @@ void channelGains() {
     CHECK(volumeDown(-60.0) == kVolumeOffDb && volumeUp(kVolumeOffDb) == -60.0 && volumeUp(-0.5) == 0.0);
     CHECK(volumeDown(-20.0) == -21.0 && volumeUp(-21.0) == -20.0 && volumeDown(0.0) == -0.5);
     CHECK(volumeFactor(kVolumeOffDb) == 0.0 && volumeFactor(0.0) == 1.0);
+    // the faders' scale (their drawing, their drag and the Windows volume use it): the law's points both ways, every
+    // step back from its position, off at the bottom
+    for (int i = 0; i < kVolumeLawPoints; ++i) {
+        CHECK_NEAR(volumePosition(kVolumeLaw[i].db), kVolumeLaw[i].pos, 1e-12);
+        CHECK(volumeAtPosition(kVolumeLaw[i].pos) == kVolumeLaw[i].db);
+    }
+    int steps = 0, back = 0;
+    for (double db = 0.0; !volumeOff(db); db = volumeDown(db), ++steps) back += volumeAtPosition(volumePosition(db)) == db;
+    std::printf("   the scale: %d of %d steps back from their position\n", back, steps);
+    CHECK(back == steps && steps > 0);
+    CHECK(volumePosition(kVolumeOffDb) == 0.0 && volumeAtPosition(0.03) == kVolumeOffDb &&
+          volumeAtPosition(0.05) == kVolumeMinDb && volumeAtPosition(std::nan("")) == kVolumeOffDb);
+    // linked (the Link box, the Windows volume): the other fader moves as far along its slot, each held at the ends
+    {
+        const double from[2] = {-10.0, -20.0}; // at 0.70 and 0.48 of the travel
+        double lUp[2], lDown[2], lOff[2];
+        linkedVolumes(from, 0, 0.0, lUp);          // L to the top: R up by 0.30 too, to 0.78
+        linkedVolumes(lUp, 0, -10.0, lDown);        // and back
+        linkedVolumes(from, 1, kVolumeOffDb, lOff); // R to the bottom: L down by 0.48, to 0.22
+        std::printf("   linked: L -10 / R -20, L to 0: R %.1f; back: R %.1f; R off: L %.1f\n", lUp[1], lDown[1], lOff[0]);
+        CHECK(lUp[0] == 0.0 && lUp[1] == -7.5 && lDown[0] == -10.0 && lDown[1] == -20.0);
+        CHECK(volumeOff(lOff[1]) && lOff[0] == -37.0);
+    }
+    // the Windows volume moves a deck's faders (client, 2026-11-17): equal ones both to it, else the louder one to it
+    // and the other as far; all the way down both are off, and from there both come back together
+    {
+        double gl = 0.0, gr = 0.0;
+        masterVolume(-12.3, gl, gr);
+        CHECK(gl == -12.5 && gr == -12.5);
+        gl = -3.0, gr = -10.0;
+        masterVolume(-6.0, gl, gr);
+        double gl2 = -10.0, gr2 = -3.0;
+        masterVolume(-6.0, gl2, gr2);
+        std::printf("   the Windows volume to -6 dB: L -3 / R -10 -> %.1f / %.1f, mirrored %.1f / %.1f\n", gl, gr, gl2, gr2);
+        CHECK(gl == -6.0 && gr == -14.0 && gl2 == -14.0 && gr2 == -6.0);
+        masterVolume(-3.0, gl, gr);
+        CHECK(gl == -3.0 && gr == -10.0); // the difference back as it was
+        masterVolume(kVolumeOffDb, gl, gr);
+        CHECK(volumeOff(gl) && volumeOff(gr));
+        masterVolume(-6.0, gl, gr);
+        CHECK(gl == -6.0 && gr == -6.0);
+    }
     // bypassed: the input, unchanged, delayed by the look-ahead
     c.processing = false;
     const Stereo b = runLive(v, c, l, r, {});

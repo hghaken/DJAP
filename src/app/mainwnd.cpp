@@ -740,6 +740,10 @@ void MainWindow::command(int id, int code) {
     } else if (item == iMeter && code == kMeterGainLink) { // their Link box
         settings_.deck[d].gainLink = meterViewLink(s.meter);
         save();
+    } else if (item == iMeter && code == kMeterMono) { // the Mono box under it: heard at once (a 20 ms ramp)
+        settings_.deck[d].mono = meterViewMono(s.meter);
+        save();
+        applyDeck(d);
     } else if (item == iEdit && code == BN_CLICKED) { // the Sound window
         soundWindow_.show(hwnd_, settings_.deck[d].sound, d);
     }
@@ -769,7 +773,7 @@ void MainWindow::applyDeck(int d) {
     DeckControl c;
     c.lookMs = settings_.lookAheadMs;
     c.oversampling = settings_.oversampling;
-    c.mono = settings_.mono;
+    c.mono = settings_.deck[d].mono;
     c.processing = settings_.deck[d].processing;
     c.gainL = settings_.deck[d].gainL; // the deck's L and R faders
     c.gainR = settings_.deck[d].gainR;
@@ -835,6 +839,7 @@ void MainWindow::updateMeters() {
         data.gainL = settings_.deck[d].gainL;
         data.gainR = settings_.deck[d].gainR;
         data.gainLink = settings_.deck[d].gainLink;
+        data.mono = settings_.deck[d].mono;
         if (data.m.bands == 0) data.m.bands = static_cast<int>(v[pDensBands]); // before the first meter record
         for (int k = 0; k < kStageCount; ++k) data.stageOn[k] = v[kStageParam[k]] >= 0.5;
         data.processing = settings_.deck[d].processing;
@@ -1103,19 +1108,47 @@ void MainWindow::trayMenu(int x, int y) {
     DestroyMenu(m);
 }
 
-// The outputs follow Windows' volume (the volume keys) when chosen. A deck whose input is the default playback
-// device itself - a virtual cable that Windows turns down in software - gets that volume undone at its input, so the
+// The outputs follow Windows' volume (the volume keys) when chosen - through the decks' Volume faders (client,
+// 2026-11-17: "the Windows volume changes the DJAP volume fader"; until then a volume of its own after the chain that
+// the faders and the meters did not show): a change of the Windows volume, and its first look (at the start, or when
+// the choice is switched on), moves the faders of both decks (masterVolume: the louder one to it, the other one as
+// far); by hand they move as before, until the next change. Its mute silences the outputs after the chain
+// (DeckProcessor::setVolume) and leaves the faders as they are. A deck whose input is the default playback device
+// itself - a virtual cable that Windows turns down in software - gets that volume undone at its input, so the
 // processing sees the music's own level and the volume counts once.
 void MainWindow::updateVolume() {
     const bool follow = settings_.followsVolume();
     winVolume_.poll(); // also when the outputs do not follow it: the status bar shows it (client, 2026-10-27)
     const bool on = follow && winVolume_.valid();
+    if (on) {
+        const double level = winVolume_.level(); // without the mute
+        const double db = clampVolume(level > 0.0 ? 20.0 * std::log10(level) : kVolumeOffDb);
+        if (db != fadersAt_) { // (NaN: the first look)
+            fadersAt_ = db;
+            bool moved = false;
+            for (int d = 0; d < 2; ++d) {
+                double l = settings_.deck[d].gainL, r = settings_.deck[d].gainR;
+                masterVolume(db, l, r);
+                if (l != settings_.deck[d].gainL || r != settings_.deck[d].gainR) {
+                    setDeckGain(d, l, r, false); // heard at once (the deck's 5 ms glide), drawn at the next meters
+                    moved = true;
+                }
+            }
+            if (moved) fadersSaveAt_ = GetTickCount64() + 1000;
+        }
+    } else {
+        fadersAt_ = std::numeric_limits<double>::quiet_NaN(); // switched on again: the faders take the volume at once
+    }
+    if (fadersSaveAt_ != 0 && GetTickCount64() >= fadersSaveAt_) { // (and in WM_DESTROY's save)
+        fadersSaveAt_ = 0;
+        save();
+    }
     const SysInputs sysIn = sysInputsFrom(settings_);
     for (int d = 0; d < 2; ++d) {
         double out = 1.0, in = 1.0;
         bool inputMuted = false;
         if (on) {
-            out = winVolume_.gain();
+            out = winVolume_.muted() ? 0.0 : 1.0; // the volume itself is in the faders
             const std::string& input = settings_.api == "ASIO" ? sysIn.device[d] : settings_.inDevice[d];
             if (winVolume_.software() && !input.empty() && input == winVolume_.device()) {
                 // the volume the device is set to, also while it is muted: the factor stays what the music needs when
@@ -1123,7 +1156,7 @@ void MainWindow::updateVolume() {
                 // input is silent because of the mute - not because the music stopped (DeckProcessor::setVolume)
                 const double level = winVolume_.level();
                 if (level > 0.0) in = std::min(kMaxInputVolume, 1.0 / level);
-                inputMuted = out <= 0.0;
+                inputMuted = winVolume_.gain() <= 0.0; // muted, or at 0 %
             }
         }
         audio_.setVolume(d, out, in, inputMuted);
