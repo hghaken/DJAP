@@ -356,7 +356,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 
 ## 4. The main window
 
-![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), its L and R faders linked at -1.5 and -4.5 dB; deck B on Groningen (Very Loud with Bass+) without input yet, its faders unlinked at 0 dB](images/main.jpg)
+![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), its L and R volume faders linked at -3.5 and -10 dB; deck B on Groningen (Very Loud with Bass+) without input yet, its faders unlinked, R off](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
 no menu bar: **right-click anywhere in it** for *Setup...*, *Health...* (what runs, the counters and their graphs:
@@ -406,17 +406,18 @@ line the target loudness. Across *In* a **blue** line shows the loudness preset'
 also written under the **Limiter** row. The scale on the left is in dB, the one on the right in LUFS; they share one
 axis, so the white line can be compared with the bars and with the target directly.
 
-**Gain faders.** Beside the Out bars: the deck's volume, an **L** fader for the left channel and an **R** fader for
-the right one, each from **0 dB** (top) down to **-15 dB**, with their values above them. They turn the output down
-after the limiter - only down, so the ceiling holds - and the Out bars and their loudness line show the result at
-once, without a click. Drag a fader, click in its slot to move it there, or turn the mouse wheel over it (0.5 dB a
-step); a double-click sets it back to 0 dB. With **Link** (the check box under them, on at first) the two move
-together: a fader moves the other one by as much, so a difference between them stays - a blue line joins the two
-caps. Without Link each moves on its own, for example to even out a louder speaker on one side. The faders are the
-deck's own: choosing another sound leaves them where they are, and they are saved with the deck (13). They are grey
-while the deck is bypassed: nothing is applied then. Use them to match the loudness of the two decks or of another
-source without changing the sound; the loudness preset's own **Output gain** (6.3) works the same way, but goes with
-the preset.
+**Volume faders.** Beside the Out bars: the deck's volume, an **L** fader for the left channel and an **R** fader for
+the right one, with their values above them. At the top, **0 dB**, is the most - the level the processing makes; at
+the bottom is **off**: no audio. The scale is a mixer's: fine near the top (0, -5, -10, -20 dB), where a volume is
+set, coarser further down (-30, -40, -60 dB), then off. The faders turn the output down after the limiter - only
+down, so the ceiling holds - and the Out bars and their loudness line show the result at once, without a click. Drag
+a fader, click in its slot to move it there, or turn the mouse wheel over it (0.5 dB a step near the top, larger
+steps lower down); a double-click sets it back to 0 dB. With **Link** (the check box under them, on at first) the two
+move together, as two faders under one hand: a difference between them stays - a blue line joins the two caps - until
+one reaches the top or the bottom; drawn all the way down, both are off. Without Link each moves on its own, for
+example to even out a louder speaker on one side. The faders are the deck's own: choosing another sound leaves them
+where they are, and they are saved with the deck (13). They are grey while the deck is bypassed: nothing is applied
+then. They are not the loudness preset's **Output gain** (6.3), which goes with the preset; the two add up.
 
 **Stage rows, right.** What each stage does now:
 
@@ -482,7 +483,7 @@ loudness preset's target (6.1); the EQ changes the tone, not the loudness (7.1):
 
 Two decks on sounds of different output play at different loudness: from Zwolle (-14 LUFS) to Groningen (-10 LUFS)
 the mix jumps 4 dB. For a mix from deck to deck, give both decks sounds of the same output, or turn the louder
-deck down with its Gain faders (4.3).
+deck down with its Volume faders (4.3).
 
 Your own sounds follow in the list. A deck's **Edit...** button opens the Sound window on its sound:
 
@@ -652,7 +653,7 @@ Defaults below are those of Medium.
 |---|---|---|---|---|
 | Target loudness | LUFS | -24 .. -8 | -14 | The loudness every song is brought to (at input gain 0). Higher sounds louder and denser; lower keeps more dynamics. |
 | Input gain | dB | -15 .. +18 | 0 | Drives the compressor, clipper and limiter harder: more punch and density; the output gets louder by the same amount. High values squash the sound. |
-| Output gain | dB | -15 .. 0 | 0 | A last trim after the limiter, only down, so the ceiling holds. To match another source without changing the sound. (The main window's L and R faders, 4.3, are the deck's own volume on top of it.) |
+| Output gain | dB | -15 .. 0 | 0 | A last trim after the limiter, only down, so the ceiling holds. To match another source without changing the sound. (The main window's L and R Volume faders, 4.3, are the deck's own volume on top of it.) |
 
 **Leveller** - the slow hand on the volume.
 
@@ -1252,7 +1253,7 @@ The window is one deck strip of the program:
 - **Sound** - the plug-in's sounds (see 9.3 and 4.6) with its **Edit...** button: the same Sound window as in the
   program, with the loudness preset and EQ lists and their Edit buttons (the loudness and EQ windows, chapters 6 and
   7, with every value, Save as, Rename, Delete and Reset). Beside it the sound's two parts.
-- **The meter panel** - LED bars, the L and R Gain faders with their Link box, the gain of each stage and the spectrum with the MB Compressor bands and the EQ curve, as in the main
+- **The meter panel** - LED bars, the L and R Volume faders with their Link box, the gain of each stage and the spectrum with the MB Compressor bands and the EQ curve, as in the main
   window (4.3); the faders are this plug-in's own volume and are remembered for it, as its other choices. Clicking a stage's row or a column of bars opens the loudness window on that stage's tab, as in the
   program; clicking the spectrum opens the spectrum window (8.2) for this channel, with the four bass sliders and
   the EQ's points. What you drag there changes the plug-in's own values (the project keeps them; the loudness
@@ -1477,7 +1478,7 @@ The About window shows which file is in use. DJAP saves it after every change. I
 | Section | Holds |
 |---|---|
 | `[Audio]` | Processing (`Decks`), API, driver, devices, channel pairs, rate, buffer, look-ahead, `StartAudio` (start the audio at program start), follow the Windows volume, oversampling, `Mono` |
-| `[Decks]` | Each deck's sound (empty: none holds its two parts), loudness preset, EQ and processing switch, linked presets, the L and R faders (`GainLA`, `GainRA`, ...) and their Link |
+| `[Decks]` | Each deck's sound (empty: none holds its two parts), loudness preset, EQ and processing switch, linked presets, the L and R Volume faders (`GainLA`, `GainRA`, ...: dB, or `off`) and their Link |
 | `[Window]` | Where each window was last - position, size, maximised (a window opens there; without a line it opens in the middle of the screen) - and the window options |
 | `[Updates]` | `CheckUpdates` (1 = the daily check is on) |
 | `[Preset <name>]` | The values of a loudness preset that differ from its shipped values (own loudness presets: all values, and `<key>.Saved` for a value that was changed since the preset was saved - its reset value) |

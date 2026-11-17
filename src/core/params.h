@@ -129,6 +129,17 @@ struct ParamInfo {
 
 const ParamInfo& paramInfo(int p);
 
+// The deck's volume faders (DeckControl::gainL / gainR; client, 2026-11-17: "volume must go from max to min - no
+// audio"): 0 dB at the top down to kVolumeMinDb, then off - silence - at the bottom (kVolumeOffDb and below). Values
+// are kept in steps of 0.5 dB down to -20 dB, 1 dB down to -40, 2 dB below.
+constexpr double kVolumeOffDb = -100.0, kVolumeMinDb = -60.0;
+inline double volumeStep(double db) { return db >= -20.0 ? 0.5 : db >= -40.0 ? 1.0 : 2.0; }
+inline bool volumeOff(double db) { return db <= kVolumeOffDb; }
+double clampVolume(double db);  // NaN or above 0: 0; under kVolumeMinDb: off; else in its step
+double volumeFactor(double db); // the factor of a volume: 0 when off
+double volumeUp(double db);     // one step up (the mouse wheel): off -> kVolumeMinDb -> ... -> 0
+double volumeDown(double db);   // one step down: ... -> kVolumeMinDb -> off
+
 // A parameter as positions 0 .. paramPositions(p) - the GUI's sliders and the plug-in's host steps: linear in the
 // parameter's steps; a log scale for times and frequencies that span a factor of 8 or more (density splits 20 Hz -
 // 16 kHz, releases: 300 positions); position 0 is "auto" for the compressor make-up and "off" for its side-chain

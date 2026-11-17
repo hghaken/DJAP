@@ -690,6 +690,23 @@ void channelGains() {
     for (size_t i = 0; i < s.l.size(); ++i) sameUp += u.l[i] == s.l[i] && u.r[i] == s.r[i];
     std::printf("   +6 dB asked: %zu of %zu frames as at 0 dB\n", sameUp, s.l.size());
     CHECK(sameUp == s.l.size());
+    // the bottom of the fader (client: "from max to min - no audio"): off is silence, the other channel as it was
+    DeckControl off;
+    off.gainR = kVolumeOffDb;
+    const Stereo o = runLive(v, off, l, r, {});
+    size_t silent = 0, sameL = 0;
+    for (size_t i = 0; i < s.l.size(); ++i) {
+        silent += o.r[i] == 0.0f;
+        sameL += o.l[i] == s.l[i];
+    }
+    std::printf("   R off: %zu of %zu frames silent, L %zu the same\n", silent, s.r.size(), sameL);
+    CHECK(silent == s.r.size() && sameL == s.l.size());
+    // the volume's steps and ends (params.h)
+    CHECK(clampVolume(-4.3) == -4.5 && clampVolume(-25.4) == -25.0 && clampVolume(-43.0) == -44.0);
+    CHECK(clampVolume(-61.0) == kVolumeOffDb && clampVolume(3.0) == 0.0 && clampVolume(std::nan("")) == 0.0);
+    CHECK(volumeDown(-60.0) == kVolumeOffDb && volumeUp(kVolumeOffDb) == -60.0 && volumeUp(-0.5) == 0.0);
+    CHECK(volumeDown(-20.0) == -21.0 && volumeUp(-21.0) == -20.0 && volumeDown(0.0) == -0.5);
+    CHECK(volumeFactor(kVolumeOffDb) == 0.0 && volumeFactor(0.0) == 1.0);
     // bypassed: the input, unchanged, delayed by the look-ahead
     c.processing = false;
     const Stereo b = runLive(v, c, l, r, {});
@@ -937,12 +954,12 @@ void clicks() {
     std::printf("   mono on -> off: %.2f\n", ratio);
     CHECK(ratio < 1.5);
 
-    // the L and R faders: L to -15 dB and R to -6, then both back (a 5 ms ramp, as the output gain)
+    // the L and R faders: L off and R to -6 dB, then both back (a 5 ms ramp, as the output gain)
     DeckControl faders = ctl;
-    faders.gainL = -15.0;
+    faders.gainL = kVolumeOffDb;
     faders.gainR = -6.0;
     ratio = clickRatio(base, ctl, {{frames(3.0), base, faders}, {frames(3.5), base, ctl}}, 3.0, 4.0, l, r);
-    std::printf("   faders L -15, R -6 dB -> 0: %.2f\n", ratio);
+    std::printf("   faders L off, R -6 dB -> 0: %.2f\n", ratio);
     CHECK(ratio < 1.5);
 
     // oversampling 4x -> 8x -> back to 4x within the fade: the change is called off and the stages fade straight back

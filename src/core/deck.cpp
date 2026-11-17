@@ -143,9 +143,8 @@ DeckConfig makeDeckConfig(const PresetValues& in, const DeckControl& ctl, double
     c.on[sClipper] = on(pClipOn);
     c.on[sLimiter] = on(pLimOn);
     c.inputGain = dbToLin(v[pInputGain]);
-    auto down = [](double db) { return db < 0.0 ? std::max(-60.0, db) : 0.0; }; // (NaN: 0)
-    c.outputGainL = dbToLin(v[pOutputGain] + down(ctl.gainL));
-    c.outputGainR = dbToLin(v[pOutputGain] + down(ctl.gainR));
+    c.outputGainL = dbToLin(v[pOutputGain]) * volumeFactor(ctl.gainL); // the faders: 0 = off
+    c.outputGainR = dbToLin(v[pOutputGain]) * volumeFactor(ctl.gainR);
     c.switchStep = 1.0 / (0.020 * fs); // 20 ms switch ramps
     c.gainSmooth = onePoleCoeff(0.005, fs);
     const double ctrlRate = fs / kControlBlock;

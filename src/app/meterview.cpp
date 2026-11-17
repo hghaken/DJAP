@@ -28,7 +28,7 @@ constexpr double kSpecTop = 0.0, kSpecBottom = -90.0; // spectrum scale (dB)
 constexpr double kTop = 3.0, kBottom = -40.0; // vertical bar scale (LUFS / dBTP)
 constexpr int kShownRows = kMeterRows - 1;     // stage rows drawn: the density row's place went to the spectrum
 
-// Tooltip parts: the four bars, the seven stage rows, the spectrum, the Gain fader.
+// Tooltip parts: the four bars, the seven stage rows, the spectrum, the Volume fader.
 enum TipPart { tInL, tInR, tOutL, tOutR, tRow0, tSpectrum = tRow0 + kMeterRows, tGain, kTipParts };
 const wchar_t* const kTips[kTipParts] = {
     L"Input, left channel, after the loudness preset's input gain (what enters the processing): its sample peak (dBFS, held, "
@@ -63,11 +63,12 @@ const wchar_t* const kTips[kTipParts] = {
     L"line lies above the orange one the processing lifts that range. Purple: the MB Compressor's bands (dashed: "
     L"their splits, with the band numbers) and a line per band at its gain now, +-12 dB over the height - blue = "
     L"lifted, red = turned down.",
-    L"Gain: the deck's volume, the left (L) and the right (R) channel, 0 to -15 dB after the limiter (only down, so "
-    L"the ceiling holds; the Out bars show the result). Drag a fader, click in its slot, or turn the mouse wheel over "
-    L"it (0.5 dB a step); double-click: back to 0 dB. Link on: the two move together, each by as much (a difference "
-    L"between them stays); off: each on its own. The deck's own setting - another sound leaves it as it is. Grey: the "
-    L"deck is bypassed, and nothing is applied.",
+    L"Volume: the deck's volume after the limiter, the left (L) and the right (R) channel - from 0 dB at the top (the "
+    L"most: only down, so the ceiling holds) to off at the bottom (no audio); fine near the top, coarser below, as a "
+    L"mixer's fader. The Out bars show the result. Drag a fader, click in its slot, or turn the mouse wheel over it "
+    L"(0.5 dB a step near the top); double-click: back to 0 dB. Link on: the two move together, as two faders held "
+    L"by one hand (a difference between them stays until one reaches an end); off: each on its own. The deck's own "
+    L"setting - another sound leaves it as it is. Grey: the deck is bypassed, and nothing is applied.",
 };
 
 void line(HDC dc, int x0, int y0, int x1, int y1, COLORREF c, int style = PS_SOLID, int width = 1) {
@@ -87,7 +88,7 @@ struct View {
     RECT tipRect[kTipParts] = {};
     double hold[4] = {kFloorDb, kFloorDb, kFloorDb, kFloorDb}; // peak-hold LED of each vertical bar
     ULONGLONG holdAt[4] = {};                                  // when it was set (GetTickCount64)
-    // the Gain faders as last painted: each one's column (empty: not drawn) and cap, the Link box, the y of the
+    // the Volume faders as last painted: each one's column (empty: not drawn) and cap, the Link box, the y of the
     // range's top (0 dB) and bottom - a cap's centre; a drag's state
     RECT fader[2] = {}, cap[2] = {}, link = {};
     int gainTop = 0, gainBottom = 1;
@@ -157,6 +158,34 @@ void ensureFonts(HWND hwnd, View& v) {
     v.fontDpi = dpi;
 }
 
+// The faders' scale, as a mixer's (client, 2026-11-17: "volume from max to min - no audio"): fine near the top, where
+// a volume is set, coarser below; the bottom 4 % of the travel is off. Position 1 = the top.
+struct LawPoint {
+    double pos, db;
+};
+constexpr LawPoint kLaw[] = {{1.0, 0.0},    {0.85, -5.0},  {0.70, -10.0}, {0.48, -20.0},
+                             {0.30, -30.0}, {0.18, -40.0}, {0.08, kVolumeMinDb}};
+constexpr int kLawPoints = static_cast<int>(sizeof kLaw / sizeof kLaw[0]);
+constexpr double kOffBelow = 0.04; // a position under it is off; up to the last law point: kVolumeMinDb
+
+double positionOf(double db) {
+    const double v = clampVolume(db);
+    if (volumeOff(v)) return 0.0;
+    for (int i = 1; i < kLawPoints; ++i)
+        if (v >= kLaw[i].db)
+            return kLaw[i].pos + (kLaw[i - 1].pos - kLaw[i].pos) * (v - kLaw[i].db) / (kLaw[i - 1].db - kLaw[i].db);
+    return kLaw[kLawPoints - 1].pos;
+}
+
+double volumeAt(double pos) {
+    if (pos < kOffBelow) return kVolumeOffDb;
+    for (int i = 1; i < kLawPoints; ++i)
+        if (pos >= kLaw[i].pos)
+            return clampVolume(kLaw[i].db +
+                               (kLaw[i - 1].db - kLaw[i].db) * (pos - kLaw[i].pos) / (kLaw[i - 1].pos - kLaw[i].pos));
+    return kVolumeMinDb;
+}
+
 // A fader cap of brushed metal (as the window's background): light at the top, darker below, its channel's letter
 // above and grip ridges under the dark centre line that the scale is read at; rounded, with a dark frame and a shadow.
 void paintCap(HDC dc, const RECT& c, bool on, double s, const char* letter, int th) {
@@ -187,9 +216,9 @@ void paintCap(HDC dc, const RECT& c, bool on, double s, const char* letter, int 
     DeleteObject(rgn);
 }
 
-// The Gain faders in the column l .. l + w: the name over both and each one's value in the two header rows, two dark
-// slots with a tick every 3 dB (the labels right of the R one), the caps at the values - joined by a blue line while
-// they are linked - and under them the Link box.
+// The Volume faders in the column l .. l + w: the name over both and each one's value in the two header rows, two dark
+// slots with a tick at each point of the scale (the labels right of the R one, "off" at the bottom), the caps at the
+// values - joined by a blue line while they are linked - and under them the Link box.
 void paintFaders(HWND hwnd, HDC dc, View& v, int l, int w, int margin, int top, int bottom, int th, double s) {
     auto px = [s](double x) { return static_cast<int>(x * s + 0.5); };
     const MeterViewData& d = v.d;
@@ -204,28 +233,30 @@ void paintFaders(HWND hwnd, HDC dc, View& v, int l, int w, int margin, int top, 
     v.gainTop = top + capH / 2;
     v.gainBottom = std::max(v.gainTop + 1, slotBottom - capH / 2);
     auto yOf = [&](double db) {
-        const double t = -std::min(0.0, std::max(kGainFloorDb, db)) / -kGainFloorDb;
-        return v.gainTop + static_cast<int>(t * (v.gainBottom - v.gainTop) + 0.5);
+        return v.gainTop + static_cast<int>((1.0 - positionOf(db)) * (v.gainBottom - v.gainTop) + 0.5);
     };
     const double value[2] = {v.dragging >= 0 ? v.gain[0] : d.gainL, v.dragging >= 0 ? v.gain[1] : d.gainR};
     SelectObject(dc, v.font);
-    text(dc, (cx[0] + cx[1]) / 2, margin, "Gain", on ? kText : kDim, TA_CENTER);
+    text(dc, (cx[0] + cx[1]) / 2, margin, "Volume", on ? kText : kDim, TA_CENTER);
     SelectObject(dc, v.small);
     char b[24];
     const int slotW = std::max(4, px(6));
     for (int k = 0; k < 2; ++k) {
-        std::snprintf(b, sizeof b, "%.1f", value[k]);
+        if (volumeOff(value[k])) std::snprintf(b, sizeof b, "off");
+        else std::snprintf(b, sizeof b, "%.1f", value[k]);
         text(dc, cx[k], margin + th, b, on ? kText : kDim, TA_CENTER);
         const int sl = cx[k] - slotW / 2;
         fill(dc, sl, top, sl + slotW, slotBottom, RGB(8, 9, 10));
         fill(dc, sl + slotW - 1, top, sl + slotW, slotBottom, RGB(66, 70, 76)); // the lit right edge
     }
-    for (double db = 0.0; db >= kGainFloorDb - 1e-9; db -= 3.0) { // a tick every 3 dB beside each slot
+    for (int i = 0; i <= kLawPoints; ++i) { // a tick at each point of the scale beside each slot; off at the bottom
+        const double db = i < kLawPoints ? kLaw[i].db : kVolumeOffDb;
         const int y = yOf(db);
         fill(dc, cx[0] - capW / 2 + px(2), y, cx[0] - slotW / 2 - px(2), y + 1, kDim);
         fill(dc, cx[0] + slotW / 2 + px(3), y, cx[1] - slotW / 2 - px(2), y + 1, kDim);
         fill(dc, cx[1] + slotW / 2 + px(3), y, cx[1] + capW / 2 - px(2), y + 1, kDim);
-        std::snprintf(b, sizeof b, "%g", db);
+        if (i < kLawPoints) std::snprintf(b, sizeof b, "%g", db);
+        else std::snprintf(b, sizeof b, "off");
         text(dc, cx[1] + capW / 2 + px(3), y - sth / 2, b, db == 0.0 ? kText : kDim);
     }
     const char* const letters[2] = {"L", "R"};
@@ -376,7 +407,7 @@ void paint(HWND hwnd, HDC target, View& v) {
         }
     }
 
-    // ---- the Gain faders beside the Out bars (their LUFS scale between them) ----
+    // ---- the Volume faders beside the Out bars (their LUFS scale between them) ----
     const int faderL = barsRight + scaleW + px(4), faderW = px(82);
     const bool fader = d.gainFaders && bottom - top > px(140);
     if (fader) {
@@ -533,9 +564,10 @@ int clickTarget(const View& v, POINT pt) {
     return -1;
 }
 
-// The Gain faders: which one pt is on (0 L, 1 R, -1 none), the value at a cap centre's y (in steps), both values
-// when fader k goes to db (linked: the other by as much, as far as both stay in the range), and values told to the
-// parent - which keeps them and sends them back with the next setMeterView; until then these are drawn.
+// The Volume faders: which one pt is on (0 L, 1 R, -1 none), the value at a cap centre's y (in steps), both values
+// when fader k goes to db (linked: the other's cap moves as far along its slot, each held at the ends - as two faders
+// moved by one hand), and values told to the parent - which keeps them and sends them back with the next
+// setMeterView; until then these are drawn.
 int faderAt(const View& v, POINT pt) {
     if (!v.d.gainFaders) return -1;
     for (int k = 0; k < 2; ++k)
@@ -545,24 +577,19 @@ int faderAt(const View& v, POINT pt) {
 
 bool onLink(const View& v, POINT pt) { return v.d.gainFaders && PtInRect(&v.link, pt); }
 
-double snapGain(double db) { return clampGain(std::round(db / kGainStepDb) * kGainStepDb); }
-
 double gainAt(const View& v, int y) {
     const double t = static_cast<double>(y - v.gainTop) / std::max(1, v.gainBottom - v.gainTop);
-    return snapGain(t * kGainFloorDb);
+    return volumeAt(1.0 - std::min(1.0, std::max(0.0, t)));
 }
 
 void moved(const View& v, const double from[2], int k, double db, double out[2]) {
     out[0] = from[0];
     out[1] = from[1];
-    if (!v.d.gainLink) {
-        out[k] = snapGain(db);
-        return;
-    }
-    const double lo = kGainFloorDb - std::min(from[0], from[1]), hi = -std::max(from[0], from[1]);
-    const double delta = std::min(hi, std::max(lo, db - from[k]));
-    out[0] = snapGain(from[0] + delta);
-    out[1] = snapGain(from[1] + delta);
+    out[k] = clampVolume(db);
+    if (!v.d.gainLink) return;
+    const double delta = positionOf(out[k]) - positionOf(from[k]);
+    const int o = 1 - k;
+    out[o] = delta == 0.0 ? from[o] : volumeAt(std::min(1.0, std::max(0.0, positionOf(from[o]) + delta)));
 }
 
 void tellGain(HWND hwnd, View& v, const double g[2], int code) {
@@ -628,7 +655,7 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             }
         }
         return 0;
-    case WM_SETCURSOR: // a hand over the stage rows, the LED bars and the Link box; up / down on the Gain faders
+    case WM_SETCURSOR: // a hand over the stage rows, the LED bars and the Link box; up / down on the Volume faders
         if (v && LOWORD(lp) == HTCLIENT) {
             POINT pt;
             GetCursorPos(&pt);
@@ -689,7 +716,9 @@ LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 if (steps != 0) {
                     const double now[2] = {v->d.gainL, v->d.gainR};
                     double g[2];
-                    moved(*v, now, k, now[k] + steps * kGainStepDb, g);
+                    double db = now[k];
+                    for (int i = 0; i < std::abs(steps); ++i) db = steps > 0 ? volumeUp(db) : volumeDown(db);
+                    moved(*v, now, k, db, g);
                     if (g[0] != now[0] || g[1] != now[1]) tellGain(hwnd, *v, g, kMeterGainSet);
                 }
                 return 0;
@@ -761,7 +790,7 @@ static HINSTANCE g_instance = nullptr; // the module the class is registered for
 void registerMeterView(HINSTANCE instance) {
     g_instance = instance;
     WNDCLASSW wc{};
-    wc.style = CS_DBLCLKS; // the Gain fader's double-click
+    wc.style = CS_DBLCLKS; // the Volume fader's double-click
     wc.lpfnWndProc = proc;
     wc.hInstance = instance;
     wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);

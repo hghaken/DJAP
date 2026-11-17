@@ -33,10 +33,11 @@ struct MeterViewData {
     PresetValues colourValues{};
     double autoDb[4] = {};
     double fs = 48000.0;
-    // the Gain faders beside the Out bars (client, 2026-11-17: "an output gain volume control on the main page, a
+    // the Volume faders beside the Out bars (client, 2026-11-17: "an output gain volume control on the main page, a
     // graphically nice slider that fits the main page", then "split the fader into a left (L) and a right (R) one,
-    // and a link check box to move them independently or not"): the deck's volume per channel, kGainFloorDb .. 0 dB,
-    // and whether they move together; drawn when the parent handles their messages
+    // and a link check box to move them independently or not", "Volume", "from max to min - no audio"): the deck's
+    // volume per channel, 0 dB down to off (params.h: kVolumeOffDb), and whether they move together; drawn when the
+    // parent handles their messages
     bool gainFaders = false;
     double gainL = 0.0, gainR = 0.0;
     bool gainLink = true;
@@ -51,10 +52,10 @@ constexpr int kMeterOpenRow = 10;
 constexpr int kMeterRows = 7, kMeterTargets = 10, kMeterSpectrum = 9;
 const char* meterStage(int target); // the preset window's tab of a target ("Leveller", ...)
 
-// The Gain faders tell the parent with WM_COMMAND (its control id): kMeterGainMoved while one is dragged (heard at
+// The Volume faders tell the parent with WM_COMMAND (its control id): kMeterGainMoved while one is dragged (heard at
 // once, not saved yet), kMeterGainSet for values to keep (the drag's end, a click in a slot, the mouse wheel, a
 // double-click: 0 dB), kMeterGainLink when the Link box was clicked. meterViewGain reads the values of that message
-// (dB, in kGainStepDb steps; linked, a fader moves the other by as much), meterViewLink the box.
+// (dB, clampVolume; linked, a fader moves the other's cap as far), meterViewLink the box.
 constexpr int kMeterGainMoved = 30, kMeterGainSet = 31, kMeterGainLink = 32;
 void meterViewGain(HWND view, double& left, double& right);
 bool meterViewLink(HWND view);

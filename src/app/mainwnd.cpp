@@ -172,8 +172,8 @@ void MainWindow::presetsChanged(bool listChanged, bool saveNow) {
 }
 
 void MainWindow::setDeckGain(int d, double left, double right, bool keep) {
-    settings_.deck[d].gainL = clampGain(left);
-    settings_.deck[d].gainR = clampGain(right);
+    settings_.deck[d].gainL = clampVolume(left);
+    settings_.deck[d].gainR = clampVolume(right);
     applyDeck(d); // heard at once (a 5 ms ramp in the deck)
     if (keep) save();
 }

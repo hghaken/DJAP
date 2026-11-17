@@ -57,6 +57,17 @@ bool parseDouble(const std::string& s, double& out) {
     }
 }
 
+// A deck's volume (a fader) in the file: its dB, or "off".
+std::string volumeText(double db) { return volumeOff(clampVolume(db)) ? std::string("off") : compact(clampVolume(db)); }
+
+bool parseVolume(const std::string& s, double& out) {
+    double d = 0;
+    if (s == "off") d = kVolumeOffDb;
+    else if (!parseDouble(s, d)) return false;
+    out = clampVolume(d);
+    return true;
+}
+
 int toInt(const std::string& s, int fallback) {
     double d;
     if (!parseDouble(s, d) || std::fabs(d) > 1e9) return fallback;
@@ -527,11 +538,11 @@ std::string Settings::toText() const {
       << "\nColourB=" << deck[1].colour << "\n";
     o << "; 1 = both decks use the same loudness preset and EQ (deck B follows deck A)\nLinkPresets=" << (linkPresets ? 1 : 0)
       << "\n";
-    o << "; Volume of each deck after the limiter, per channel (dB, -15 .. 0: the main window's L and R faders), and\n"
-         "; 1 = the two faders move together\n";
+    o << "; Volume of each deck after the limiter, per channel (dB, 0 down to -60, or off: the main window's L and R\n"
+         "; faders), and 1 = the two faders move together\n";
     for (int d = 0; d < 2; ++d) {
         const char x = d == 0 ? 'A' : 'B';
-        o << "GainL" << x << "=" << compact(deck[d].gainL) << "\nGainR" << x << "=" << compact(deck[d].gainR)
+        o << "GainL" << x << "=" << volumeText(deck[d].gainL) << "\nGainR" << x << "=" << volumeText(deck[d].gainR)
           << "\nGainLink" << x << "=" << (deck[d].gainLink ? 1 : 0) << "\n";
     }
     o << "\n";
@@ -563,8 +574,8 @@ std::string Settings::toText() const {
             o << "Sound" << n << "=" << c.sound << "\nLoudness" << n << "=" << c.preset << "\nColour" << n << "=" << c.colour
               << "\nLookAhead" << n << "="
               << compact(c.lookAheadMs) << "\nOversampling" << n << "=" << c.oversampling << "\nMono" << n << "="
-              << (c.mono ? 1 : 0) << "\nGainL" << n << "=" << compact(c.gainL) << "\nGainR" << n << "="
-              << compact(c.gainR) << "\nGainLink" << n << "=" << (c.gainLink ? 1 : 0) << "\n";
+              << (c.mono ? 1 : 0) << "\nGainL" << n << "=" << volumeText(c.gainL) << "\nGainR" << n << "="
+              << volumeText(c.gainR) << "\nGainLink" << n << "=" << (c.gainLink ? 1 : 0) << "\n";
     }
 
     for (const Preset& p : presets) {
@@ -770,8 +781,8 @@ void Settings::fromText(const std::string& text) {
         else if (what == "LookAhead" && parseDouble(value, d)) c.lookAheadMs = std::min(5.0, std::max(0.0, d));
         else if (what == "Oversampling") c.oversampling = toInt(value, 4) >= 6 ? 8 : toInt(value, 4) >= 3 ? 4 : 2;
         else if (what == "Mono") c.mono = toInt(value, 0) != 0;
-        else if (what == "GainL" && parseDouble(value, d)) c.gainL = clampGain(d);
-        else if (what == "GainR" && parseDouble(value, d)) c.gainR = clampGain(d);
+        else if (what == "GainL" && parseVolume(value, d)) c.gainL = d;
+        else if (what == "GainR" && parseVolume(value, d)) c.gainR = d;
         else if (what == "GainLink") c.gainLink = toInt(value, 1) != 0;
     }
 
@@ -875,9 +886,9 @@ void Settings::fromText(const std::string& text) {
             if (find(*v, PresetKind::Colour)) deck[d].colour = *v;
         double g = 0;
         if (auto v = get("Decks", d == 0 ? "GainLA" : "GainLB"))
-            if (parseDouble(*v, g)) deck[d].gainL = clampGain(g);
+            if (parseVolume(*v, g)) deck[d].gainL = g;
         if (auto v = get("Decks", d == 0 ? "GainRA" : "GainRB"))
-            if (parseDouble(*v, g)) deck[d].gainR = clampGain(g);
+            if (parseVolume(*v, g)) deck[d].gainR = g;
         if (auto v = get("Decks", d == 0 ? "GainLinkA" : "GainLinkB")) deck[d].gainLink = toInt(*v, 1) != 0;
     }
     // the sounds: a shipped one's parts as the file has them, an own one as it was saved

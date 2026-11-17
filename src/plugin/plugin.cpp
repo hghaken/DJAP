@@ -664,8 +664,8 @@ int Plugin::soundIndex() const {
 }
 
 void Plugin::setFaders(double left, double right, bool keep) {
-    faderL_ = clampGain(left);
-    faderR_ = clampGain(right);
+    faderL_ = clampVolume(left);
+    faderR_ = clampVolume(right);
     publishToProcessor(); // heard at once (a 5 ms ramp in the deck)
     if (keep) rememberChoice(true);
 }

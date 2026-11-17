@@ -495,16 +495,22 @@ colour or the preset, so every deck using it: Bass level (-12..+12 dB, the colou
 width stage on), Bass frequency (40..250 Hz: sets the colour's bass corner and, within their ranges, the preset's
 enhancer frequency and width split together). Heard while dragging, saved when let go. The stage switches (ten since the noise reduction) are in
 the preset window (client, 2026-10-25; they were on the strips).
-**The L and R faders** (client, 2026-11-17: "make an output gain volume control on the main page, a graphically nice
+**The Volume faders** (client, 2026-11-17: "make an output gain volume control on the main page, a graphically nice
 slider that fits the main page", then "split the fader into a left (L) and a right (R) slider, and a link check box to
 move them independently or not"; asked whether they belong with the deck or with the loudness preset: "with the
-deck"): in the meter panel between the Out bars' LUFS scale and the stage rows, two custom-drawn faders - dark slots
-with a tick every 3 dB, caps of brushed metal with their letter, the values above, -15..0 dB in 0.5 dB steps - and
-under them the panel's own Link check box (on by default). Linked, a fader moves the other by as much, as far as both
-stay in the range (a difference stays; a blue line joins the caps); a drag, a click in a slot (the cap jumps there),
-the mouse wheel (a step per notch), a double-click (0 dB; linked: both). The deck's own volume
-(`DeckSettings::gainL` / `gainR` / `gainLink`, `[Decks] GainLA=` ...; `DeckControl::gainL` / `gainR`): added to the
-preset's output gain after the limiter, one factor per channel with the output gain's 5 ms glide, only down; another
+deck"; then "Volume, and volume must go from max to min - no audio"): in the meter panel between the Out bars' LUFS
+scale and the stage rows, two custom-drawn faders titled "Volume" - dark slots, caps of brushed metal with their
+letter, the values above - and under them the panel's own Link check box (on by default). The range: 0 dB (the top,
+the most) down to -60 dB, then off (silence: the bottom 4 % of the travel; `kVolumeOffDb`, written "off"). The scale
+is a mixer fader's, piecewise linear in position (`kLaw` in `meterview.cpp`): 0 at the top, -5 at 85 %, -10 at 70 %,
+-20 at 48 %, -30 at 30 %, -40 at 18 %, -60 at 8 % - a linear dB scale down to -60 left the usable top a few pixels;
+values in steps of 0.5 dB down to -20, 1 dB to -40, 2 dB below (`clampVolume`, `volumeUp` / `volumeDown`, params.h).
+Linked, the other cap moves as far along its slot, each held at the ends (a difference stays until one reaches an
+end; both drawn down are off - a rule that kept the dB difference stopped the louder one above off); a drag, a click
+in a slot (the cap jumps there), the mouse wheel (a step per notch), a double-click (0 dB; linked: both). The deck's own volume
+(`DeckSettings::gainL` / `gainR` / `gainLink`, `[Decks] GainLA=` ...; `DeckControl::gainL` / `gainR`): the preset's
+output gain times `volumeFactor` (0 when off) after the limiter, one factor per channel with the output gain's 5 ms
+glide, only down; another
 sound leaves it; bypass leaves it out (the deck stays bit-exact). Heard while dragging (`kMeterGainMoved`), saved when
 let go (`kMeterGainSet`). A first version (the same day) was one fader on the preset's Output gain: it moved with the
 sound and changed shipped presets - the client chose the deck. The plug-in's window has the same faders: the

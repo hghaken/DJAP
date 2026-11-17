@@ -87,8 +87,8 @@ struct DeckControl {
     bool processing = true;  // false = bypass (input delayed by the look-ahead, bit-exact)
     bool freeze = false;     // leveller holds its gain
     // the deck's volume of each channel, dB, after the limiter and the preset's output gain - only down, so the
-    // ceiling holds (client, 2026-11-17: "an L and an R fader on the main page, with a link check box"); the deck's
-    // own, not the preset's (client: "with the deck")
+    // ceiling holds; kVolumeOffDb: silence (client, 2026-11-17: "an L and an R fader on the main page, with a link
+    // check box", "from max to min - no audio"); the deck's own, not the preset's (client: "with the deck")
     double gainL = 0.0, gainR = 0.0;
 };
 

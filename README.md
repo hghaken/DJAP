@@ -74,7 +74,7 @@ window its two parts are chosen and edited, and own sounds are saved, renamed an
 
 - `DJAP.exe` - the GUI: two deck strips (the sound, with the Sound window for its loudness preset and EQ - one choice
   when both decks share them -, processing /
-  bypass, an L and an R volume fader with a Link box, meters for input and output loudness, true peak, the gain of
+  bypass, an L and an R volume fader (0 dB down to off) with a Link box, meters for input and output loudness, true peak, the gain of
   every stage and the spectrum of input and output), a spectrum window (a click on a deck's spectrum: the EQ as a curve with points to drag, the
   MB Compressor bands with their gains, the deck's loudness preset and EQ, the four bass sliders - bass level,
   enhancer, width and frequency - and how long the spectrum is averaged), an analysis window (compressor curve, loudness and gain over the last minute,

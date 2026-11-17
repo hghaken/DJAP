@@ -102,8 +102,8 @@ public:
     std::string soundName() const; // "" for "(other)"
     // The window chose a sound: its preset and its colour, as two choices of the lists.
     void chooseSound(int index);
-    // The window's L and R faders (client, 2026-11-17): this instance's volume per channel after the limiter (dB,
-    // kGainFloorDb .. 0) and whether they move together - its own (not the sound's, not shared with linked
+    // The window's L and R faders (client, 2026-11-17): this instance's volume per channel after the limiter (dB, 0
+    // down to kVolumeMinDb, or off - params.h) and whether they move together - its own (not the sound's, not shared with linked
     // instances: as Bypass), kept in [Plugin] of its settings file (Settings::pluginSlots), not host parameters.
     double faderL() const { return faderL_; }
     double faderR() const { return faderR_; }

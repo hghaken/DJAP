@@ -187,6 +187,31 @@ constexpr double kSplitMin = 20.0, kSplitMax = 16000.0, kSplitRatio = 1.25;
 
 const ParamInfo& paramInfo(int p) { return kInfo[p]; }
 
+double clampVolume(double db) {
+    if (!(db < 0.0)) return 0.0; // NaN, 0 and above
+    if (db < kVolumeMinDb - 1e-9) return kVolumeOffDb;
+    const double step = volumeStep(db);
+    return std::max(kVolumeMinDb, std::round(db / step) * step);
+}
+
+double volumeFactor(double db) {
+    const double v = clampVolume(db);
+    return volumeOff(v) ? 0.0 : std::pow(10.0, v / 20.0);
+}
+
+double volumeUp(double db) {
+    const double v = clampVolume(db);
+    if (volumeOff(v)) return kVolumeMinDb;
+    return std::min(0.0, clampVolume(v + volumeStep(v)));
+}
+
+double volumeDown(double db) {
+    const double v = clampVolume(db);
+    if (volumeOff(v) || v <= kVolumeMinDb) return kVolumeOffDb;
+    const double down = clampVolume(v - volumeStep(v - 1e-9));
+    return down < v ? down : clampVolume(v - 2.0 * volumeStep(v - 1e-9));
+}
+
 PresetValues defaultValues() {
     PresetValues v{};
     for (int i = 0; i < kParamCount; ++i) v[static_cast<size_t>(i)] = kInfo[i].def;
