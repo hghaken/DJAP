@@ -41,6 +41,7 @@ struct MeterViewData {
     bool gainFaders = false;
     double gainL = 0.0, gainR = 0.0;
     bool gainLink = true;
+    // (gainLink: drawn as one narrow fader for both - client, 2026-11-19: "with Link checked show one narrow fader")
     // the deck's Mono, a box under Link (client, 2026-11-17: "take the Mono check box out of the Setup and put it
     // under the Link check box"); drawn with the faders
     bool mono = false;

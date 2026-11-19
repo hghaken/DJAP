@@ -66,9 +66,10 @@ const wchar_t* const kTips[kTipParts] = {
     L"Volume: the deck's volume after the limiter, the left (L) and the right (R) channel - from 0 dB at the top (the "
     L"most: only down, so the ceiling holds) to off at the bottom (no audio); fine near the top, coarser below, as a "
     L"mixer's fader. The Out bars show the result. Drag a fader, click in its slot, or turn the mouse wheel over it "
-    L"(0.5 dB a step near the top); double-click: back to 0 dB. Link on: the two move together, as two faders held "
-    L"by one hand (a difference between them stays until one reaches an end); off: each on its own. The deck's own "
-    L"setting - another sound leaves it as it is. Grey: the deck is bypassed, and nothing is applied.",
+    L"(0.5 dB a step near the top); double-click: back to 0 dB. Link on: one fader for both channels - its cap is the "
+    L"louder one, the other moves as far (a difference between them stays, a blue mark at the other's place, until "
+    L"one reaches an end); off: an L and an R fader, each on its own. The deck's own setting - another sound leaves "
+    L"it as it is. Grey: the deck is bypassed, and nothing is applied.",
     L"Mono: this deck's left and right are mixed, (L + R) / 2, and both of its outputs carry that one sound - for a "
     L"mono sound system, or a speaker on one side only. From the deck's input on, so the leveller keeps the loudness "
     L"on target (a mono mix of wide music is a little quieter) and the limiter its ceiling; a switch glides in over "
@@ -95,6 +96,7 @@ struct View {
     // the Volume faders as last painted: each one's column (empty: not drawn) and cap, the Link and Mono boxes, the
     // y of the range's top (0 dB) and bottom - a cap's centre; a drag's state
     RECT fader[2] = {}, cap[2] = {}, link = {}, monoBox = {};
+    bool single = false;        // linked: one fader for both (its column fader[0], its cap both cap[0] and cap[1])
     int gainTop = 0, gainBottom = 1;
     int dragging = -1;          // the fader being dragged (0 L, 1 R), -1 none
     int grab = 0;               // the cap's centre minus the mouse's y where the drag began (0: the slot was clicked)
@@ -192,15 +194,19 @@ void paintCap(HDC dc, const RECT& c, bool on, double s, const char* letter, int 
     DeleteObject(rgn);
 }
 
-// The Volume faders in the column l .. l + w: the name over both and each one's value in the two header rows, two dark
-// slots with a tick at each point of the scale (the labels right of the R one, "off" at the bottom), the caps at the
-// values - joined by a blue line while they are linked - and under them the Link box and the Mono box (client,
-// 2026-11-17: "take the Mono check box out of the Setup and put it under the Link check box").
+// The Volume faders in the column l .. l + w: the name and the values in the two header rows, the dark slots with a
+// tick at each point of the scale (the labels right of the last one, "off" at the bottom), the caps at the values,
+// and under them the Link box and the Mono box (client, 2026-11-17: "take the Mono check box out of the Setup and put
+// it under the Link check box"). Two faders, L and R; linked one narrow fader for both (client, 2026-11-19: "with
+// Link checked show one narrow fader"): its cap at the louder channel, a difference between them as a blue mark at
+// the other's place.
 void paintFaders(HWND hwnd, HDC dc, View& v, int l, int w, int margin, int top, int bottom, int th, double s) {
     auto px = [s](double x) { return static_cast<int>(x * s + 0.5); };
     const MeterViewData& d = v.d;
-    const bool on = d.processing;
+    const bool on = d.processing, one = d.gainLink;
+    v.single = one;
     const int capW = px(24), capH = px(34), cx[2] = {l + px(15), l + px(45)};
+    const int faders = one ? 1 : 2, last = cx[faders - 1], mid = one ? l + w / 2 : (cx[0] + cx[1]) / 2;
     // the rows of the Link and Mono boxes under the slots
     SelectObject(dc, v.small);
     TEXTMETRICW stm;
@@ -213,15 +219,17 @@ void paintFaders(HWND hwnd, HDC dc, View& v, int l, int w, int margin, int top, 
         return v.gainTop + static_cast<int>((1.0 - volumePosition(db)) * (v.gainBottom - v.gainTop) + 0.5);
     };
     const double value[2] = {v.dragging >= 0 ? v.gain[0] : d.gainL, v.dragging >= 0 ? v.gain[1] : d.gainR};
+    const int lead = value[1] > value[0] ? 1 : 0; // the louder channel: the one fader's cap while linked
     SelectObject(dc, v.font);
-    text(dc, (cx[0] + cx[1]) / 2, margin, "Volume", on ? kText : kDim, TA_CENTER);
+    text(dc, mid, margin, "Volume", on ? kText : kDim, TA_CENTER);
     SelectObject(dc, v.small);
     char b[24];
     const int slotW = std::max(4, px(6));
-    for (int k = 0; k < 2; ++k) {
-        if (volumeOff(value[k])) std::snprintf(b, sizeof b, "off");
-        else std::snprintf(b, sizeof b, "%.1f", value[k]);
-        text(dc, cx[k], margin + th, b, on ? kText : kDim, TA_CENTER);
+    for (int k = 0; k < faders; ++k) {
+        const double shown = one ? value[lead] : value[k];
+        if (volumeOff(shown)) std::snprintf(b, sizeof b, "off");
+        else std::snprintf(b, sizeof b, "%.1f", shown);
+        text(dc, one ? mid : cx[k], margin + th, b, on ? kText : kDim, TA_CENTER);
         const int sl = cx[k] - slotW / 2;
         fill(dc, sl, top, sl + slotW, slotBottom, RGB(8, 9, 10));
         fill(dc, sl + slotW - 1, top, sl + slotW, slotBottom, RGB(66, 70, 76)); // the lit right edge
@@ -230,31 +238,31 @@ void paintFaders(HWND hwnd, HDC dc, View& v, int l, int w, int margin, int top, 
         const double db = i < kVolumeLawPoints ? kVolumeLaw[i].db : kVolumeOffDb;
         const int y = yOf(db);
         fill(dc, cx[0] - capW / 2 + px(2), y, cx[0] - slotW / 2 - px(2), y + 1, kDim);
-        fill(dc, cx[0] + slotW / 2 + px(3), y, cx[1] - slotW / 2 - px(2), y + 1, kDim);
-        fill(dc, cx[1] + slotW / 2 + px(3), y, cx[1] + capW / 2 - px(2), y + 1, kDim);
+        if (!one) fill(dc, cx[0] + slotW / 2 + px(3), y, cx[1] - slotW / 2 - px(2), y + 1, kDim);
+        fill(dc, last + slotW / 2 + px(3), y, last + capW / 2 - px(2), y + 1, kDim);
         if (i < kVolumeLawPoints) std::snprintf(b, sizeof b, "%g", db);
         else std::snprintf(b, sizeof b, "off");
-        text(dc, cx[1] + capW / 2 + px(3), y - sth / 2, b, db == 0.0 ? kText : kDim);
+        text(dc, last + capW / 2 + px(3), y - sth / 2, b, db == 0.0 ? kText : kDim);
     }
-    const char* const letters[2] = {"L", "R"};
     for (int k = 0; k < 2; ++k) {
-        const int yc = yOf(value[k]);
-        v.cap[k] = RECT{cx[k] - capW / 2, yc - capH / 2, cx[k] - capW / 2 + capW, yc - capH / 2 + capH};
+        const int x = one ? cx[0] : cx[k], yc = yOf(one ? value[lead] : value[k]);
+        v.cap[k] = RECT{x - capW / 2, yc - capH / 2, x - capW / 2 + capW, yc - capH / 2 + capH};
     }
-    if (d.gainLink) { // the two caps' centre lines joined
-        HPEN pen = CreatePen(PS_SOLID, std::max(2, px(2)), on ? kGainLine : kDim);
-        HGDIOBJ old = SelectObject(dc, pen);
-        MoveToEx(dc, v.cap[0].right, (v.cap[0].top + v.cap[0].bottom) / 2, nullptr);
-        LineTo(dc, v.cap[1].left, (v.cap[1].top + v.cap[1].bottom) / 2);
-        SelectObject(dc, old);
-        DeleteObject(pen);
+    if (one) {
+        if (value[0] != value[1]) { // the quieter channel's place: a blue mark across the slot
+            const int y = yOf(value[1 - lead]);
+            fill(dc, cx[0] - slotW / 2 - px(4), y - px(1), cx[0] + slotW / 2 + px(4), y + px(1) + 1, on ? kGainLine : kDim);
+        }
+        paintCap(dc, v.cap[0], on, s, "LR", sth);
+    } else {
+        const char* const letters[2] = {"L", "R"};
+        for (int k = 0; k < 2; ++k) paintCap(dc, v.cap[k], on, s, letters[k], sth);
     }
-    for (int k = 0; k < 2; ++k) paintCap(dc, v.cap[k], on, s, letters[k], sth);
     // the Link and Mono boxes, one under the other: check boxes of the panel's own, blue with a white tick when on
     SIZE ts[2] = {};
     GetTextExtentPoint32W(dc, L"Link", 4, &ts[0]);
     GetTextExtentPoint32W(dc, L"Mono", 4, &ts[1]);
-    const int lx = (cx[0] + cx[1]) / 2 - (box + px(5) + std::max(ts[0].cx, ts[1].cx)) / 2;
+    const int lx = mid - (box + px(5) + std::max(ts[0].cx, ts[1].cx)) / 2;
     auto checkBox = [&](int ty, bool checked, const char* name, LONG textW) {
         const int ly = ty + (sth - box) / 2;
         fill(dc, lx, ly, lx + box, ly + box, kDim);
@@ -274,9 +282,13 @@ void paintFaders(HWND hwnd, HDC dc, View& v, int l, int w, int margin, int top, 
     const int linkY = slotBottom + px(6), monoY = linkY + rowH;
     v.link = checkBox(linkY, d.gainLink, "Link", ts[0].cx);
     v.monoBox = checkBox(monoY, d.mono, "Mono", ts[1].cx);
-    const int mid = (cx[0] + cx[1]) / 2;
-    v.fader[0] = RECT{l, top - px(4), mid, slotBottom + px(2)};
-    v.fader[1] = RECT{mid, top - px(4), l + w, slotBottom + px(2)};
+    if (one) { // one column for the one fader
+        v.fader[0] = RECT{l, top - px(4), l + w, slotBottom + px(2)};
+        v.fader[1] = RECT{};
+    } else {
+        v.fader[0] = RECT{l, top - px(4), mid, slotBottom + px(2)};
+        v.fader[1] = RECT{mid, top - px(4), l + w, slotBottom + px(2)};
+    }
     placeTip(hwnd, v, tGain, l, margin, l + w, monoY - px(1));
     placeTip(hwnd, v, tMono, l, monoY - px(1), l + w, bottom);
 }
@@ -393,7 +405,7 @@ void paint(HWND hwnd, HDC target, View& v) {
     }
 
     // ---- the Volume faders beside the Out bars (their LUFS scale between them) ----
-    const int faderL = barsRight + scaleW + px(4), faderW = px(82);
+    const int faderL = barsRight + scaleW + px(4), faderW = d.gainLink ? px(56) : px(82); // linked: one, narrow
     const bool fader = d.gainFaders && bottom - top > px(140);
     if (fader) {
         paintFaders(hwnd, dc, v, faderL, faderW, margin, top, bottom, th, s);
@@ -556,6 +568,7 @@ int clickTarget(const View& v, POINT pt) {
 // setMeterView; until then these are drawn.
 int faderAt(const View& v, POINT pt) {
     if (!v.d.gainFaders) return -1;
+    if (v.single) return PtInRect(&v.fader[0], pt) ? (v.d.gainR > v.d.gainL ? 1 : 0) : -1; // the louder one leads
     for (int k = 0; k < 2; ++k)
         if (PtInRect(&v.fader[k], pt)) return k;
     return -1;

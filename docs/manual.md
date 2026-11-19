@@ -356,7 +356,7 @@ recording device and its output the speakers; *Drift correction* on *Auto* (3.3)
 
 ## 4. The main window
 
-![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), its L and R volume faders linked at -3.5 and -10 dB; deck B on Groningen (Very Loud with Bass+) without input yet, its faders unlinked with R off and Mono on: the whole sound on the left speaker](images/main.jpg)
+![The main window with two decks: deck A playing the sound Zwolle (Medium with Auto), its volume linked - one fader for both channels at -3.5 dB, the blue mark the right channel's -10 dB; deck B on Groningen (Very Loud with Bass+) without input yet, two faders, unlinked, R off and Mono on: the whole sound on the left speaker](images/main.jpg)
 
 The main window shows one strip per deck (one strip, "Channel", over the whole width with one channel). The window has
 no menu bar: **right-click anywhere in it** for *Setup...*, *Health...* (what runs, the counters and their graphs:
@@ -412,10 +412,11 @@ the bottom is **off**: no audio. The scale is a mixer's: fine near the top (0, -
 set, coarser further down (-30, -40, -60 dB), then off. The faders turn the output down after the limiter - only
 down, so the ceiling holds - and the Out bars and their loudness line show the result at once, without a click. Drag
 a fader, click in its slot to move it there, or turn the mouse wheel over it (0.5 dB a step near the top, larger
-steps lower down); a double-click sets it back to 0 dB. With **Link** (the check box under them, on at first) the two
-move together, as two faders under one hand: a difference between them stays - a blue line joins the two caps - until
-one reaches the top or the bottom; drawn all the way down, both are off. Without Link each moves on its own, for
-example to even out a louder speaker on one side. The faders are the deck's own: choosing another sound leaves them
+steps lower down); a double-click sets it back to 0 dB. With **Link** (the check box under them, on at first) the
+panel shows one narrow fader for both channels, its cap marked **LR**: it moves both, as two faders under one hand. A
+difference between them stays - the cap stands at the louder channel, and a blue mark in the slot shows where the
+other one is - until one reaches the top or the bottom; drawn all the way down, both are off. Without Link there are
+two faders, **L** and **R**, each moving on its own, for example to even out a louder speaker on one side. The faders are the deck's own: choosing another sound leaves them
 where they are, and they are saved with the deck (13). They are grey while the deck is bypassed: nothing is applied
 then. They are not the loudness preset's **Output gain** (6.3), which goes with the preset; the two add up.
 With **"The outputs follow the Windows volume"** on (5.2) the Windows volume moves them - the keyboard's volume keys,

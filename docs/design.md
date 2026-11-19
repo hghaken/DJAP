@@ -501,7 +501,11 @@ move them independently or not"; asked whether they belong with the deck or with
 deck"; then "Volume, and volume must go from max to min - no audio"): in the meter panel between the Out bars' LUFS
 scale and the stage rows, two custom-drawn faders titled "Volume" - dark slots, caps of brushed metal with their
 letter, the values above - and under them the panel's own Link check box (on by default) and the deck's Mono box
-(the mono row in 3; 2026-11-17, from the Setup window). The range: 0 dB (the top,
+(the mono row in 3; 2026-11-17, from the Setup window). Linked, one narrow fader for both (client, 2026-11-19:
+"with Link checked show one narrow fader"; the column 56 px instead of 82, the stage rows move up to it): one slot, a
+cap marked "LR" at the louder channel, the value of that one above, and - when the two differ - a blue mark across
+the slot at the other's place; a drag, the wheel and a double-click act on the louder one and move the other as far
+(`faderAt` hands the louder index; `View::single`). The range: 0 dB (the top,
 the most) down to -60 dB, then off (silence: the bottom 4 % of the travel; `kVolumeOffDb`, written "off"). The scale
 is a mixer fader's, piecewise linear in position (`kVolumeLaw`, `volumePosition` / `volumeAtPosition` in params.h): 0 at the top, -5 at 85 %, -10 at 70 %,
 -20 at 48 %, -30 at 30 %, -40 at 18 %, -60 at 8 % - a linear dB scale down to -60 left the usable top a few pixels;
